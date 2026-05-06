@@ -6,7 +6,7 @@ The Bitcoin Multicast project is a high-throughput, horizontally-scalable transa
 
 This document provides a comprehensive design overview of the entire multicast ecosystem, encompassing all repositories and their interactions.
 
-**Conceptual Attribution:** The IPv6 multicast transaction broadcast architecture from which this software draws inspiration was articulated by Dr. Craig S. Wright in [Multicast within Multicast: Anycast](https://singulargrit.substack.com/p/multicast-within-multicast-anycast).
+**Conceptual Attribution:** The IPv6 multicast transaction broadcast architecture from which this software draws inspiration was articulated by Dr. Craig S. Wright in [Multicast Within Multicast: Anycast, Sharded Resends, and Hierarchical Distribution for Transaction and Block Propagation](https://singulargrit.substack.com/p/multicast-within-multicast-anycast).
 
 ---
 
