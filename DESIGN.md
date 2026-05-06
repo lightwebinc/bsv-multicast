@@ -366,7 +366,7 @@ TCP Listener (1 goroutine)
 
 ### bitcoin-shard-listener (Subscriber)
 
-**Purpose:** Multicast subscriber; filters by shard/subtree, forwards to unicast consumers, performs NACK-based gap recovery.
+**Purpose:** Multicast subscriber; filters by shard/subtree, forwards to unicast and/or multicast consumers, performs NACK-based gap recovery.
 
 **Key Characteristics:**
 
@@ -375,6 +375,7 @@ TCP Listener (1 goroutine)
 - NORM-inspired gap tracking per group via PrevSeq/CurSeq hash chain
 - NACK dispatch to configurable retry endpoints
 - Egress via UDP or TCP (optional strip-header mode)
+- Multicast egress for domain bridging (re-emit filtered frames to a separate multicast address space)
 
 **Architecture:**
 
@@ -387,9 +388,9 @@ Receive Workers (NUM_WORKERS goroutines, SO_REUSEPORT)
   │ Worker 1│──│     • frame.Decode
   └─────────┘  │     • shard.Engine.GroupIndex
   ...          │     • filter.Allow
-  ┌─────────┐  │     • egress.Send
-  │ Worker N│──│     • nack.Tracker.Observe
-  └─────────┘  │
+  ┌─────────┐  │     • egress.Send (unicast)
+  │ Worker N│──│     • mcastEgr.Send (multicast, optional)
+  └─────────┘  │     • nack.Tracker.Observe
                │
 
 NACK Queue (background goroutines)
