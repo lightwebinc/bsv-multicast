@@ -570,7 +570,7 @@ Group address assignments for beacons and the control channel are defined in:
 
 ### Subtree Model
 
-A _subtree_ is an ordered set of related transactions sharing a common batch context. The 32-byte `SubtreeID` field allows downstream subscribers to associate frames with a named batch.
+A _subtree_ is an ordered set of related transactions sharing a common batch context. The 32-byte `SubtreeID` field allows downstream subscribers to associate frames with a named batch. In Teranode, this is currently used to batch transactions for processing and to link ordered sets of validated transactions from block templates. This may be extended to support transaction specialization, and some sort of dynamic announcement and hashing mechanism may be required later.
 
 **Use Cases:**
 
