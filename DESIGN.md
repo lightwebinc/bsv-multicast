@@ -89,8 +89,8 @@ The project is organized into multiple repositories, each with a specific respon
 
 ### Shared Libraries
 
-| Repository                                                                  | Purpose                                    | Packages                     |
-| --------------------------------------------------------------------------- | ------------------------------------------ | ---------------------------- |
+| Repository                                                                  | Purpose                                    | Packages                                |
+| --------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------- |
 | [bitcoin-shard-common](https://github.com/lightwebinc/bitcoin-shard-common) | Protocol primitives shared across services | `frame`, `shard`, `seqhash`, `sequence` |
 
 ### Infrastructure Automation

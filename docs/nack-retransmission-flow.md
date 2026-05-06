@@ -8,13 +8,13 @@ System-level design document describing the end-to-end NACK retransmission pipel
 
 ```text
                           multicast fabric (FF05::<shard>)
-                         ┌────────────────────────────────────────────────┐
-                         │                                                │
+                         ┌──────────────────────────────────────────────────┐
+                         │                                                  │
 BSV Source ──► bitcoin-shard-proxy ──┬──► listener-1 ──► downstream consumer
               (stamps PrevSeq/CurSeq)│
-                                    ├──► listener-2 ──► downstream consumer
-                                    │
-                                    └──► bitcoin-retry-endpoint (caches all frames)
+                                     ├──► listener-2 ──► downstream consumer
+                                     │
+                                     └──► bitcoin-retry-endpoint (caches all frames)
 ```
 
 - **Proxy** receives transactions, stamps `PrevSeq`/`CurSeq` (XXH64 hash chain per sender+group), derives shard group from TxID, multicasts to `FF05::<shard>`.
@@ -65,12 +65,12 @@ The NACK carries a `LookupType` (by `PrevSeq` or by `CurSeq`) and the correspond
 
 Tiers represent proximity to the transaction source. Lower tier = closer to source.
 
-| Tier | Meaning | Example |
-|------|---------|---------|
-| 0    | Same AS as proxy | Data-center-local retry endpoint |
-| 1    | One AS hop | Regional PoP |
-| 2    | Two AS hops | Remote continent |
-| 0xFF | Static seed | Bootstrap `-retry-endpoints` (lowest priority) |
+| Tier | Meaning          | Example                                        |
+| ---- | ---------------- | ---------------------------------------------- |
+| 0    | Same AS as proxy | Data-center-local retry endpoint               |
+| 1    | One AS hop       | Regional PoP                                   |
+| 2    | Two AS hops      | Remote continent                               |
+| 0xFF | Static seed      | Bootstrap `-retry-endpoints` (lowest priority) |
 
 ```text
 [BSV Source]
@@ -107,6 +107,7 @@ Tier 1:
 ```
 
 **Use cases:**
+
 - Direct traffic to higher-capacity nodes (higher Preference).
 - Prefer endpoints on better-connected paths.
 - Graceful migration: set old endpoint to Preference 0 before draining.
@@ -170,19 +171,19 @@ Fallback: `-retry-endpoints host1:9300,host2:9300`
 
 ```text
 AS 100 (Source)                    AS 200 (Remote)
-┌──────────────────┐              ┌──────────────────┐
+┌──────────────────┐              ┌───────────────────┐
 │ Proxy            │              │                   │
 │   │              │              │                   │
 │   ▼              │  MP-BGP      │                   │
-│ Tier-0 Endpoint  │◄─multicast──►│ Tier-1 Endpoint  │
-│ beacons on       │  MVPN/MSDP   │ (HasParent)      │
+│ Tier-0 Endpoint  │◄─multicast──►│ Tier-1 Endpoint   │
+│ beacons on       │  MVPN/MSDP   │ (HasParent)       │
 │ FF0E::FF:FFFD    │              │                   │
 │                  │              │ Listeners         │
 └──────────────────┘              │ join both beacon  │
                                   │ groups; discover  │
                                   │ Tier-0 via global │
                                   │ beacon            │
-                                  └──────────────────┘
+                                  └───────────────────┘
 
 NACK escalation path:
   Listener (AS 200) ──NACK──► Tier-1 (AS 200)
@@ -198,11 +199,11 @@ No protocol changes required. Network team extends multicast fabric via MP-BGP.
 
 ## 8. Flood Prevention
 
-| Mechanism | Layer | Effect |
-|-----------|-------|--------|
-| Redis `SET NX` (60 s) | Retry endpoint | Only one endpoint retransmits per frame per site |
-| `SequenceIDRetransmit` marker | Retry endpoint → ingress | Retransmit frames dropped from recaching |
-| `Tracker.Fill()` | Listener | Multicast repair cancels pending NACKs for all listeners |
-| Jitter hold-off | Listener | Randomised delay before first NACK suppresses duplicates |
-| Exponential backoff | Listener | Reduces NACK rate on persistent gaps |
-| `MaxRetries` + `GapTTL` | Listener | Gap entries evicted after retry exhaustion or absolute deadline |
+| Mechanism                     | Layer                    | Effect                                                          |
+| ----------------------------- | ------------------------ | --------------------------------------------------------------- |
+| Redis `SET NX` (60 s)         | Retry endpoint           | Only one endpoint retransmits per frame per site                |
+| `SequenceIDRetransmit` marker | Retry endpoint → ingress | Retransmit frames dropped from recaching                        |
+| `Tracker.Fill()`              | Listener                 | Multicast repair cancels pending NACKs for all listeners        |
+| Jitter hold-off               | Listener                 | Randomised delay before first NACK suppresses duplicates        |
+| Exponential backoff           | Listener                 | Reduces NACK rate on persistent gaps                            |
+| `MaxRetries` + `GapTTL`       | Listener                 | Gap entries evicted after retry exhaustion or absolute deadline |
