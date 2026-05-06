@@ -147,8 +147,8 @@ The project is organized into multiple repositories, each with a specific respon
   │  (direct) │         │  (direct) │   │  Node A   │   │  Node B   │       │ Endpoint  │
   └───────────┘         └───────────┘   └─────┬─────┘   └─────┬─────┘       └─────┬─────┘
                                               │               │                   │
-                                              │ Unicast       │ Unicast           │ NACK (UDP)
-                                              │ UDP/TCP       │ UDP/TCP           │ port 9300
+                                              │ Unicast       │ Multicast         │ NACK (UDP)
+                                              │ UDP/TCP       │ UDP               │ port 9300
                                               ▼               ▼                   │
                                     ┌──────────────┐ ┌──────────────┐             │
                                     │ Consumer A   │ │ Consumer B   │             │
