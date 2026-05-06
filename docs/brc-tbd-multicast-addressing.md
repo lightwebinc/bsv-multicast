@@ -54,21 +54,21 @@ When middle bytes are configured (via `-mc-base-addr`), the same 11 bytes are in
 
 ## Beacon Groups
 
-Three beacon groups are defined to support intra-site, organisation-wide, and inter-AS endpoint discovery (see [BRC-TBD-retransmission](brc-tbd-retransmission-protocol.md)). Each `bitcoin-retry-endpoint` instance beacons to **exactly one** group (set via `-beacon-scope`). Deployments that need coverage across multiple scopes run separate instances at each scope.
+Three beacon groups are defined to support intra-site, organisation-wide, and inter-AS endpoint discovery (see [BRC-126](brc-tbd-retransmission-protocol.md)). Each `bitcoin-retry-endpoint` instance beacons to **exactly one** group (set via `-beacon-scope`). Deployments that need coverage across multiple scopes run separate instances at each scope.
 
 ### Site Beacon (`FF05::FF:FFFD` + middle bytes)
 
 - **Scope:** Site-local (`FF05`).
 - **Purpose:** Intra-site retry endpoint discovery. All listeners join this group at startup.
 - **Sender:** Every `bitcoin-retry-endpoint` with `-beacon-scope site`.
-- **Content:** 56-byte ADVERT datagram (BRC-TBD-retransmission).
+- **Content:** 56-byte ADVERT datagram (BRC-126).
 
 ### Org Beacon (`FF08::FF:FFFD` + middle bytes)
 
 - **Scope:** Organization-local (`FF08`).
 - **Purpose:** Organization-wide retry endpoint discovery. Org-level listeners join this group at startup.
 - **Sender:** Every `bitcoin-retry-endpoint` with `-beacon-scope org`.
-- **Content:** 56-byte ADVERT datagram (BRC-TBD-retransmission).
+- **Content:** 56-byte ADVERT datagram (BRC-126).
 
 ### Global Beacon (`FF0E::FF:FFFD` + middle bytes)
 

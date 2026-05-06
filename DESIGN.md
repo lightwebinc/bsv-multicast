@@ -23,7 +23,7 @@ This document provides a comprehensive design overview of the entire multicast e
 9. [Subtree Filtering](#subtree-filtering)
 10. [Testing and Validation](#testing-and-validation)
 11. [Deployment Considerations](#deployment-considerations)
-12. [Endpoint Discovery (BRC-TBD-retransmission/126)](#endpoint-discovery-BRC-TBD-retransmission126)
+12. [Endpoint Discovery (BRC-126)](#endpoint-discovery-brc-126)
 13. [NACK Retransmission Flow](#nack-retransmission-flow)
 
 ---
@@ -479,11 +479,11 @@ Retransmit Egress
 
 ## Retransmission and Reliability
 
-### NACK Protocol (BRC-TBD-retransmission)
+### NACK Protocol (BRC-126)
 
 Listeners detect sequence gaps and send 24-byte NACK datagrams to retry endpoints. The full wire format, response protocol, and escalation state machine are defined in:
 
-**→ [BRC-TBD-retransmission (Retransmission Protocol)](docs/brc-tbd-retransmission-protocol.md)**
+**→ [BRC-126 (Retransmission Protocol)](docs/brc-tbd-retransmission-protocol.md)**
 
 **Key changes from the original fire-and-forget NACK model:**
 
@@ -515,7 +515,7 @@ Listeners detect sequence gaps and send 24-byte NACK datagrams to retry endpoint
 
 ### Endpoint Discovery
 
-Retry endpoints advertise via periodic ADVERT beacons (see [BRC-TBD-retransmission](docs/brc-tbd-retransmission-protocol.md)). Listeners join the site beacon group (`FF05::FF:FFFD`) and optionally the global beacon group (`FF0E::FF:FFFD`) to discover endpoints dynamically. Static `-retry-endpoints` seeds the registry at lowest priority (`Tier=0xFF, Preference=0`).
+Retry endpoints advertise via periodic ADVERT beacons (see [BRC-126](docs/brc-tbd-retransmission-protocol.md)). Listeners join the site beacon group (`FF05::FF:FFFD`) and optionally the global beacon group (`FF0E::FF:FFFD`) to discover endpoints dynamically. Static `-retry-endpoints` seeds the registry at lowest priority (`Tier=0xFF, Preference=0`).
 
 Group address assignments for beacons and the control channel are defined in:
 
@@ -848,11 +848,11 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 
 ---
 
-## Endpoint Discovery (BRC-TBD-retransmission/126)
+## Endpoint Discovery (BRC-126)
 
 Retry endpoint discoverability and hierarchical retransmission are defined across two BRCs:
 
-- **[BRC-TBD-retransmission — Retransmission Protocol](docs/brc-tbd-retransmission-protocol.md):** ADVERT beacon format, NACK/ACK/MISS wire formats, Tier/Preference model, escalation state machine, configurable retransmit modes, flood prevention.
+- **[BRC-126 — Retransmission Protocol](docs/brc-tbd-retransmission-protocol.md):** ADVERT beacon format, NACK/ACK/MISS wire formats, Tier/Preference model, escalation state machine, configurable retransmit modes, flood prevention.
 - **[BRC-TBD-addressing — Multicast Group Address Assignments](docs/brc-tbd-multicast-addressing.md):** Control-plane group index reservations, beacon group addresses, site vs global scope, block template group reservation.
 
 ### Summary
