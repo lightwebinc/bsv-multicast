@@ -459,7 +459,7 @@ Retransmit Egress
 
 **Cache:** in-memory (freecache, 60 s TTL, single-node) or Redis (shared cache, multi-node dedup via SET NX).
 
-**→ [bitcoin-retry-endpoint README](https://github.com/lightwebinc/bitcoin-retry-endpoint)** — configuration reference, metrics
+**→ [bitcoin-retry-endpoint Architecture](https://github.com/lightwebinc/bitcoin-retry-endpoint/blob/main/docs/architecture.md)** — architecture, configuration reference, metrics
 
 ---
 
@@ -770,7 +770,7 @@ All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
 
 - [bitcoin-shard-proxy Architecture](https://github.com/lightwebinc/bitcoin-shard-proxy/blob/main/docs/architecture.md)
 - [bitcoin-shard-listener Architecture](https://github.com/lightwebinc/bitcoin-shard-listener/blob/main/docs/architecture.md)
-- [bitcoin-retry-endpoint README](https://github.com/lightwebinc/bitcoin-retry-endpoint)
+- [bitcoin-retry-endpoint Architecture](https://github.com/lightwebinc/bitcoin-retry-endpoint/blob/main/docs/architecture.md)
 
 **Infrastructure:**
 
@@ -862,5 +862,5 @@ Covers: full pipeline diagram, gap detection & dispatch, tier model, preference 
 
 ---
 
-_Document Version: 1.1_  
-_Last Updated: 2026-05-03_
+_Document Version: 1.2_  
+_Last Updated: 2026-05-06_
