@@ -224,7 +224,7 @@ NACK Dispatch (UDP to retry-endpoint:9300)
 bitcoin-retry-endpoint
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ • Receive NACK on port 9300                                             │
-│ • Rate limit (IP, SenderID, SequenceID)                                 │
+│ • Rate limit (IP, LookupSeq)                                             │
 │ • Lookup frame in cache (memory or Redis)                               │
 │ • If found: re-multicast to FF05::<shard>:9001                          │
 │ • Dedup via Redis SET NX (60s window) to prevent duplicate retransmits  │
@@ -452,7 +452,7 @@ Gap Tracker Sweeper (100ms interval)
 - `-strip-header`: Send payload only (default false)
 - `-retry-endpoints`: Comma-separated retry endpoint addresses
 - `-nack-gap-ttl`: Maximum time to attempt gap recovery before evicting (default 10m)
-- `-nack-max-retries`: Maximum NACK retries per gap (default 3)
+- `-nack-max-retries`: Maximum NACK retries per gap (default 5)
 
 **Metrics (bsl\_ prefix):**
 
@@ -472,7 +472,7 @@ Gap Tracker Sweeper (100ms interval)
 
 - Single-worker multicast receiver (SO_REUSEPORT limitation)
 - Modular cache backend: Redis (primary) or in-memory (fallback)
-- Three-level rate limiting: IP, per-sender sliding window, per-sequence counter
+- Two-level rate limiting: per-IP token bucket, per-LookupSeq sliding window
 - Cross-instance deduplication via Redis SET NX (60s window)
 - Sharding-based multicast egress for retransmitted frames
 
@@ -503,8 +503,7 @@ Retransmit Egress
 **Rate Limiting:**
 
 - IP level: Token bucket (rate + burst)
-- Per-sender sliding window (senderID from NACK source IP)
-- Per-sequence counter (sequenceID from NACK)
+- Per-LookupSeq sliding window (prevents repeated NACKs for the same frame)
 
 **Deduplication:**
 
@@ -518,18 +517,18 @@ Retransmit Egress
 - `-shard-bits`: Txid prefix bit width (1-24, default 16)
 - `-cache-backend`: redis or memory (default memory)
 - `-redis-addr`: Redis server address (default localhost:6379)
-- `-cache-ttl`: Cache TTL (default 10m)
+- `-cache-ttl`: Cache TTL (default 60s)
 - `-nack-port`: NACK listen port (default 9300)
 - `-nack-workers`: NACK worker goroutines (default NumCPU)
 - `-egress-iface`: Egress interface(s) for retransmission
-- `-egress-port`: Retransmission port (default 9100)
+- `-egress-port`: Retransmission port (default 9001)
 - `-dedup-window`: Deduplication window (default 60s)
 
 **Metrics (bre\_ prefix):**
 
 - `bre_cache_hits_total`, `bre_cache_misses_total`, `bre_cache_size`
 - `bre_nack_requests_total`, `bre_retransmits_total`, `bre_retransmit_dedup_total`
-- `bre_rate_limit_drops_total{level=ip|sender|sequence}`
+- `bre_rate_limit_drops_total{level=ip|sequence}`
 - `bre_frames_received_total`, `bre_frames_cached_total`
 
 **Documentation:** [bitcoin-retry-endpoint README](https://github.com/lightwebinc/bitcoin-retry-endpoint)
@@ -641,7 +640,7 @@ Group address assignments for beacons and the control channel are defined in:
 
 **Cache TTL considerations:**
 
-- Default cache TTL: 10 minutes
+- Default cache TTL: 60 seconds
 - Trade-off: Longer TTL = higher recovery probability, but more memory
 - Adjust based on expected gap detection latency and network conditions
 
@@ -978,7 +977,7 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 | bitcoin-shard-listener (NACK)      | 9300 | UDP      | NACK send              |
 | bitcoin-retry-endpoint (multicast) | 9001 | UDP      | Multicast receive      |
 | bitcoin-retry-endpoint (NACK)      | 9300 | UDP      | NACK receive           |
-| bitcoin-retry-endpoint (retransmit)| 9100 | UDP      | Retransmission egress  |
+| bitcoin-retry-endpoint (retransmit)| 9001 | UDP      | Retransmission egress  |
 ```
 
 ### Metrics Ports
