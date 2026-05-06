@@ -287,25 +287,21 @@ Bits [23:0]      index  Group index (up to 24 bits = 16,777,216 groups)
 
 **Scope Codes:**
 
-```text
-| Scope        | Code | Example  | Use Case                 |
-|--------------|------|----------|--------------------------|
-| link-local   | 1    | FF01::   | Single network segment   |
-| site-local   | 5    | FF05::   | Entire site (default)    |
-| organization | 8    | FF08::   | Multi-site organization  |
-| global       | E    | FF0E::   | Internet-wide            |
-```
+| Scope        | Code | Example | Use Case                |
+| ------------ | ---- | ------- | ----------------------- |
+| link-local   | 1    | FF01::  | Single network segment  |
+| site-local   | 5    | FF05::  | Entire site (default)   |
+| organization | 8    | FF08::  | Multi-site organization |
+| global       | E    | FF0E::  | Internet-wide           |
 
 **Control-Plane Reserved Indices (BRC-TBD-addressing):**
 
-```text
-| Index      | Purpose          | Scope | Compressed Address |
-|------------|------------------|-------|--------------------|
-| 0xFFFFFD   | Beacon (site)    | FF05  | FF05::FF:FFFD      |
-| 0xFFFFFD   | Beacon (global)  | FF0E  | FF0E::FF:FFFD      |
-| 0xFFFFFE   | Control channel  | FF0E  | FF0E::FF:FFFE      |
-| 0xFFFFFF   | (reserved)       | —     | do not use         |
-```
+| Index    | Purpose         | Scope | Compressed Address |
+| -------- | --------------- | ----- | ------------------ |
+| 0xFFFFFD | Beacon (site)   | FF05  | FF05::FF:FFFD      |
+| 0xFFFFFD | Beacon (global) | FF0E  | FF0E::FF:FFFD      |
+| 0xFFFFFE | Control channel | FF0E  | FF0E::FF:FFFE      |
+| 0xFFFFFF | (reserved)      | —     | do not use         |
 
 See [BRC-TBD-addressing Multicast Group Address Assignments](docs/brc-tbd-multicast-addressing.md) for full details.
 
@@ -748,13 +744,11 @@ make test-e2e
 
 All services expose Prometheus metrics on dedicated ports:
 
-```text
 | Service                | Metrics Port | Prefix |
-|------------------------|--------------|--------|
-| bitcoin-shard-proxy    | :9100        | bsp_   |
-| bitcoin-shard-listener | :9200        | bsl_   |
-| bitcoin-retry-endpoint | :9400        | bre_   |
-```
+| ---------------------- | ------------ | ------ |
+| bitcoin-shard-proxy    | :9100        | bsp\_  |
+| bitcoin-shard-listener | :9200        | bsl\_  |
+| bitcoin-retry-endpoint | :9400        | bre\_  |
 
 Key signals: `bsp_packets_dropped_total`, `bsl_gaps_detected_total`, `bsl_gaps_unrecovered_total`, `bre_cache_misses_total`, `bre_rate_limit_drops_total`. See each component's docs for full metric reference.
 
@@ -805,46 +799,38 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 
 ### Default Ports
 
-```text
-| Service                            | Port | Protocol | Purpose                |
-|------------------------------------|------|----------|------------------------|
-| bitcoin-shard-proxy (UDP ingress)  | 9000 | UDP      | Frame ingress          |
-| bitcoin-shard-proxy (TCP ingress)  | configurable | TCP      | Reliable frame ingress (disabled by default) |
-| bitcoin-shard-proxy (egress)       | 9001 | UDP      | Multicast egress       |
-| bitcoin-shard-listener (multicast) | 9001 | UDP      | Multicast receive      |
-| bitcoin-shard-listener (NACK)      | 9300 | UDP      | NACK send              |
-| bitcoin-retry-endpoint (multicast) | 9001 | UDP      | Multicast receive      |
-| bitcoin-retry-endpoint (NACK)      | 9300 | UDP      | NACK receive           |
-| bitcoin-retry-endpoint (retransmit)| 9001 | UDP      | Retransmission egress  |
-```
+| Service                             | Port         | Protocol | Purpose                                      |
+| ----------------------------------- | ------------ | -------- | -------------------------------------------- |
+| bitcoin-shard-proxy (UDP ingress)   | 9000         | UDP      | Frame ingress                                |
+| bitcoin-shard-proxy (TCP ingress)   | configurable | TCP      | Reliable frame ingress (disabled by default) |
+| bitcoin-shard-proxy (egress)        | 9001         | UDP      | Multicast egress                             |
+| bitcoin-shard-listener (multicast)  | 9001         | UDP      | Multicast receive                            |
+| bitcoin-shard-listener (NACK)       | 9300         | UDP      | NACK send                                    |
+| bitcoin-retry-endpoint (multicast)  | 9001         | UDP      | Multicast receive                            |
+| bitcoin-retry-endpoint (NACK)       | 9300         | UDP      | NACK receive                                 |
+| bitcoin-retry-endpoint (retransmit) | 9001         | UDP      | Retransmission egress                        |
 
 ### Metrics Ports
 
-```text
-| Service                | Port | Endpoint                           |
-|------------------------|------|------------------------------------|
-| bitcoin-shard-proxy    | 9100 | `/metrics`, `/healthz`, `/readyz`  |
-| bitcoin-shard-listener | 9200 | `/metrics`, `/healthz`, `/readyz`  |
-| bitcoin-retry-endpoint | 9400 | `/metrics`, `/healthz`, `/readyz`  |
-```
+| Service                | Port | Endpoint                          |
+| ---------------------- | ---- | --------------------------------- |
+| bitcoin-shard-proxy    | 9100 | `/metrics`, `/healthz`, `/readyz` |
+| bitcoin-shard-listener | 9200 | `/metrics`, `/healthz`, `/readyz` |
+| bitcoin-retry-endpoint | 9400 | `/metrics`, `/healthz`, `/readyz` |
 
 ### Default AS Numbers
 
-```text
 | Service                 | AS    |
-|-------------------------|-------|
+| ----------------------- | ----- |
 | bitcoin-ingress (proxy) | 65001 |
 | bitcoin-listener        | 65002 |
-```
 
 ### Frame Version Summary
 
-```text
-| Version | Header Size | Hash-Chain Seq | Subtree Support |
-|---------|-------------|----------------|-----------------|
-| v1      | 44 bytes    | No             | No              |
-| BRC-124 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes        |
-```
+| Version | Header Size | Hash-Chain Seq       | Subtree Support |
+| ------- | ----------- | -------------------- | --------------- |
+| v1      | 44 bytes    | No                   | No              |
+| BRC-124 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes             |
 
 ---
 
