@@ -67,7 +67,7 @@ Three beacon groups are defined to support intra-site, organisation-wide, and in
 
 - **Scope:** Organization-local (`FF08`).
 - **Purpose:** Organization-wide retry endpoint discovery. Org-level listeners join this group at startup.
-- **Sender:** Every `bitcoin-retry-endpoint` with `-beacon-scope org`.
+- **Sender:** A `bitcoin-retry-endpoint` configured to beacon on the org scope. Note: org scope (`0x08`) is defined in the BRC-126 wire format but `-beacon-scope=org` is not currently a supported flag value. Use two instances with `-beacon-scope site` and `-beacon-scope global` to cover both levels.
 - **Content:** 56-byte ADVERT datagram (BRC-126).
 
 ### Global Beacon (`FF0E::FF:FFFD` + middle bytes)
@@ -82,7 +82,7 @@ Three beacon groups are defined to support intra-site, organisation-wide, and in
 A single global-scope group would work but leaks discovery traffic to all ASes even when only local endpoints are needed. Splitting by scope allows operators to place beacon traffic at the appropriate boundary without running a single fat process that straddles multiple scopes:
 
 - Local-only deployments run endpoints with `-beacon-scope site` only.
-- Organisation-wide deployments add a second instance with `-beacon-scope org`.
+- Organisation-wide deployments run separate instances with `-beacon-scope site` and `-beacon-scope global`; the org scope wire byte is reserved for future use.
 - Multi-AS deployments add a third instance with `-beacon-scope global`.
 - Each scope level can use independent Tier/Preference tuning.
 

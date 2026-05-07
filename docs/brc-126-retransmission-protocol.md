@@ -19,7 +19,7 @@ Retry endpoints cache BRC-124 frames received via multicast and respond to NACK 
 
 ## ADVERT Wire Format (`MsgType 0x20`) — 56 bytes
 
-Sent periodically (default **60 s**, configurable via `-beacon-interval`) to exactly one beacon group determined by `-beacon-scope` (`site` → `FF05::FF:FFFD`, `org` → `FF08::FF:FFFD`, `global` → `FF0E::FF:FFFD`). To cover multiple scopes, run separate endpoint instances with different `-beacon-scope` values. Listeners derive TTL as `3 × BeaconInterval`.
+Sent periodically (default **60 s**, configurable via `-beacon-interval`) to the beacon group determined by `-beacon-scope`. Valid values: `site` → `FF05::FF:FFFD`; `global` → `FF0E::FF:FFFD`; `both` → sends to both site and global groups. Listeners derive TTL as `3 × BeaconInterval`. Org scope (`FF08::FF:FFFD`, scope byte `0x08`) is defined in the wire format but not yet a supported `-beacon-scope` value.
 
 ```text
 Offset  Size  Field
@@ -34,7 +34,7 @@ Offset  Size  Field
     27     1  Preference    — weighting within a tier; higher = more preferred (default 128)
     28     2  BeaconInterval — seconds; listeners compute TTL = 3 × this value
     30     2  Flags         — see below
-    32     4  InstanceID    — CRC32c of hostname (matches metrics InstanceID)
+    32     4  InstanceID    — CRC32c of hostname; stable across restarts
     36     4  Reserved
     40    16  Reserved      — future use (BGP community, capability bitmap)
 ```
@@ -162,8 +162,7 @@ Operator assigns `-tier` (0–254) and `-preference` (0–255, default 128) on e
 ## Flood Prevention
 
 - **Multicast fill suppression:** retransmits go to multicast; all listeners receive them; `Tracker.Fill()` cancels pending NACKs.
-- **SequenceIDRetransmit marker:** retransmitted frames are tagged; ingress drops them from recaching so endpoints don't re-retransmit.
-- **Redis SET NX dedup:** only one endpoint per site retransmits any given frame (60 s window).
+- **Cache TTL (60 s):** retransmitted frames remain in cache for the TTL window; natural expiry bounds the retransmit window without coordination overhead.
 - **Inter-AS:** MP-BGP propagates retransmits; remote listeners fill before backoff fires.
 
 ---

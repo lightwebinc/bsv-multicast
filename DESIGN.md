@@ -217,7 +217,7 @@ bitcoin-shard-listener detects gap:
 NACK Dispatch (UDP to retry-endpoint:9300)
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ 24-byte NACK datagram: (Magic, LookupType, LookupSeq)                   │
-│ Sent to all configured retry endpoints one after another                │
+│ Endpoints tried by (Tier ASC, Preference DESC); MISS triggers escalation│
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -225,10 +225,10 @@ bitcoin-retry-endpoint
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ • Receive NACK on port 9300                                             │
 │ • Rate limit (IP, LookupSeq)                                            │
-│ • Lookup frame in cache (memory or Redis)                               │
-│ • If found: re-multicast to FF05::<shard>:9001                          │
-│ • Dedup via backend (Redis SET NX, Kafka, etc) (60s window)             │
-│   to prevent duplicate retransmits                                      │
+│ • Lookup frame in cache by LookupType + LookupSeq (dual-index)          │
+│ • If found: re-multicast to FF05::<shard>:9001 (if -retransmit-multicast│
+│   enabled); unicast to NACK source (if -retransmit-unicast); send ACK   │
+│ • If not found: send 16-byte MISS (listener escalates to next endpoint) │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -433,9 +433,8 @@ Gap Tracker Sweeper (100ms interval)
 **Key Characteristics:**
 
 - Single-worker multicast receiver (SO_REUSEPORT limitation)
-- Modular cache backend: Redis (primary) or in-memory (fallback)
+- In-memory cache (freecache, 60 s TTL, GC-free, dual-index by CurSeq and PrevSeq)
 - Two-level rate limiting: per-IP token bucket, per-LookupSeq sliding window
-- Cross-instance deduplication via Redis SET NX (60s window)
 - Sharding-based multicast egress for retransmitted frames
 
 **Architecture:**
@@ -443,7 +442,7 @@ Gap Tracker Sweeper (100ms interval)
 ```text
 Multicast Receiver (1 worker, SO_REUSEPORT)
   ┌──────────────────┐
-  │ Join all groups  │──▶ Cache (memory or Redis)
+  │ Join all groups  │──▶ Cache (freecache, 60 s TTL)
   └──────────────────┘
 
 NACK Server (NACK_WORKERS goroutines)
@@ -457,7 +456,7 @@ Retransmit Egress
   └──────────────────┘
 ```
 
-**Cache:** in-memory (freecache, 60 s TTL, single-node) or Redis (shared cache, multi-node dedup via SET NX).
+**Cache:** freecache (60 s TTL, GC-free). Dual-index: primary key `0x01‖CurSeq → raw frame`, secondary key `0x00‖PrevSeq → CurSeq`. Supports both forward (by PrevSeq) and backward (by CurSeq) NACK lookups.
 
 **→ [bitcoin-retry-endpoint Architecture](https://github.com/lightwebinc/bitcoin-retry-endpoint/blob/main/docs/architecture.md)** — architecture, configuration reference, metrics
 
@@ -525,12 +524,9 @@ Group address assignments for beacons and the control channel are defined in:
    → If exceeded: silent drop, increment bre_rate_limit_drops_total
 3. Cache lookup by LookupType + LookupSeq (dual-index)
    → If found in cache:
-     • Check dedup key (Redis SET NX, 60s window)
-     • If not recently retransmitted:
-       → Re-multicast to FF05::<shard>:9001 (if -retransmit-multicast)
-       → Unicast to NACK source (if -retransmit-unicast)
-       → Send 16-byte ACK unicast to NACK source (unless -suppress-ack)
-     • Else: increment bre_retransmit_dedup_total
+     → Re-multicast to FF05::<shard>:9001 (if -retransmit-multicast)
+     → Unicast to NACK source (if -retransmit-unicast)
+     → Send 16-byte ACK unicast to NACK source (unless -suppress-ack)
    → If not found:
      → Send 16-byte MISS unicast to NACK source (unless -suppress-miss)
      → Increment bre_cache_misses_total
@@ -554,8 +550,7 @@ Group address assignments for beacons and the control channel are defined in:
 
 **Flood prevention:**
 
-- Redis `SET NX` dedup (60 s) prevents multi-endpoint retransmit of same frame
-- `SequenceIDRetransmit` marker prevents recaching of retransmitted frames
+- Cache TTL (60 s) bounds the retransmit window; expired frames drop naturally
 - `Tracker.Fill()` suppresses pending NACKs on multicast repair arrival
 - Jitter hold-off and exponential backoff reduce NACK storm risk
 - All drops are counted in metrics

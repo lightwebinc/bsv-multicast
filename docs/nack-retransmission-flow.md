@@ -199,11 +199,10 @@ No protocol changes required. Network team extends multicast fabric via MP-BGP.
 
 ## 8. Flood Prevention
 
-| Mechanism                     | Layer                    | Effect                                                          |
-| ----------------------------- | ------------------------ | --------------------------------------------------------------- |
-| Redis `SET NX` (60 s)         | Retry endpoint           | Only one endpoint retransmits per frame per site                |
-| `SequenceIDRetransmit` marker | Retry endpoint → ingress | Retransmit frames dropped from recaching                        |
-| `Tracker.Fill()`              | Listener                 | Multicast repair cancels pending NACKs for all listeners        |
-| Jitter hold-off               | Listener                 | Randomised delay before first NACK suppresses duplicates        |
-| Exponential backoff           | Listener                 | Reduces NACK rate on persistent gaps                            |
-| `MaxRetries` + `GapTTL`       | Listener                 | Gap entries evicted after retry exhaustion or absolute deadline |
+| Mechanism               | Layer          | Effect                                                          |
+| ----------------------- | -------------- | --------------------------------------------------------------- |
+| Cache TTL (60 s)        | Retry endpoint | Frames expire naturally; bounds retransmit window               |
+| `Tracker.Fill()`        | Listener       | Multicast repair cancels pending NACKs for all listeners        |
+| Jitter hold-off         | Listener       | Randomised delay before first NACK suppresses duplicates        |
+| Exponential backoff     | Listener       | Reduces NACK rate on persistent gaps                            |
+| `MaxRetries` + `GapTTL` | Listener       | Gap entries evicted after retry exhaustion or absolute deadline |
