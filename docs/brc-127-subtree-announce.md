@@ -12,7 +12,7 @@ Static subtree filtering (`-subtree-include`, `-subtree-exclude`) requires opera
 
 ---
 
-## SubtreeAnnounce Wire Format (`MsgType 0x30`) — 64 bytes
+## SubtreeGroupAnnounce Wire Format (`MsgType 0x30`) — 64 bytes
 
 ```text
 Offset  Size  Field
