@@ -21,10 +21,12 @@ This document provides a comprehensive design overview of the entire multicast e
 7. [Component Deep Dives](#component-deep-dives)
 8. [Retransmission and Reliability](#retransmission-and-reliability)
 9. [Subtree Filtering](#subtree-filtering)
-10. [Testing and Validation](#testing-and-validation)
-11. [Deployment Considerations](#deployment-considerations)
-12. [Endpoint Discovery (BRC-126)](#endpoint-discovery-brc-126)
-13. [NACK Retransmission Flow](#nack-retransmission-flow)
+10. [Group Announcement Protocol (BRC-127)](#group-announcement-protocol-brc-127)
+11. [Testing and Validation](#testing-and-validation)
+12. [Deployment Considerations](#deployment-considerations)
+13. [Endpoint Discovery (BRC-126)](#endpoint-discovery-brc-126)
+14. [BRC-128: Extended Format Frames](#brc-128-extended-format-frames)
+15. [NACK Retransmission Flow](#nack-retransmission-flow)
 
 ---
 
@@ -296,12 +298,13 @@ Bits [23:0]      index  Group index (up to 24 bits = 16,777,216 groups)
 
 **Control-Plane Reserved Indices (BRC-TBD-addressing):**
 
-| Index    | Purpose         | Scope | Compressed Address |
-| -------- | --------------- | ----- | ------------------ |
-| 0xFFFFFD | Beacon (site)   | FF05  | FF05::FF:FFFD      |
-| 0xFFFFFD | Beacon (global) | FF0E  | FF0E::FF:FFFD      |
-| 0xFFFFFE | Control channel | FF0E  | FF0E::FF:FFFE      |
-| 0xFFFFFF | (reserved)      | —     | do not use         |
+| Index    | Purpose                    | Scope | Compressed Address |
+| -------- | -------------------------- | ----- | ------------------ |
+| 0xFFFFFC | Subtree announce (BRC-127) | FF05  | FF05::FF:FFFC      |
+| 0xFFFFFD | Beacon (site)              | FF05  | FF05::FF:FFFD      |
+| 0xFFFFFD | Beacon (global)            | FF0E  | FF0E::FF:FFFD      |
+| 0xFFFFFE | Control channel            | FF0E  | FF0E::FF:FFFE      |
+| 0xFFFFFF | _(reserved)_               | —     | do not use         |
 
 See [BRC-TBD-addressing Multicast Group Address Assignments](docs/brc-tbd-multicast-addressing.md) for full details.
 
@@ -312,6 +315,10 @@ The BRC-124 data-plane frame format (92-byte header, replacing the legacy 44-byt
 **→ [BRC-124 Frame Format](docs/brc-124-frame-format.md)**
 
 Key fields: Network magic, Protocol version, Frame version, Transaction ID, PrevSeq (XXH64), CurSeq (XXH64), Subtree ID, Payload length, and BSV tx payload. Both v1 (legacy) and BRC-124 frames are accepted by all components.
+
+**BRC-128 (Extended Format):** BRC-128 frames carry BRC-30 Extended Format (EF) transaction payloads inside the standard 92-byte BRC-124 header. Frame Version remains `0x02`; the payload is self-identifying via the 6-byte EF marker at payload bytes 4–9 (`0x000000000000EF`). All infrastructure components are payload-agnostic — no changes required to proxy, listener, or retry endpoint.
+
+**→ [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md)**
 
 ---
 
@@ -349,12 +356,18 @@ TCP Listener (1 goroutine)
   └──────────────┘
 ```
 
-**Hot Path:**
+**Hot Path (UDP and TCP data frames):**
 
 1. `frame.Decode(raw)` → extract TxID
 2. If CurSeq (`raw[48:56]`) is non-zero: sender pre-stamped; forward verbatim. Else stamp `raw[40:48]` (PrevSeq) and `raw[48:56]` (CurSeq) = XXH64 hash chain per `(senderIPv6, groupIdx)`
 3. `shard.Engine.GroupIndex(txid)` → derive group
 4. `WriteTo(raw)` → write to all egress interfaces
+
+**TCP Control Frame Path (BRC-127):**
+
+- Detect `MsgTypeSubtreeAnnounce` (0x30) at `buf[6]` in the TCP stream
+- Read 64-byte fixed datagram; call `ForwardControl(targets, buf, CtrlGroupSubtreeAnnounce, egressPort)`
+- Multicasts verbatim to `FF05::FF:FFFC`; no sequence stamping or frame decoding
 
 **→ [bitcoin-shard-proxy docs](https://github.com/lightwebinc/bitcoin-shard-proxy/blob/main/docs/architecture.md)** — architecture, configuration reference, metrics
 
@@ -383,11 +396,18 @@ Receive Workers (NUM_WORKERS goroutines, SO_REUSEPORT)
   ┌─────────┐  ├──▶ per-worker components:
   │ Worker 1│──│     • frame.Decode
   └─────────┘  │     • shard.Engine.GroupIndex
-  ...          │     • filter.Allow
+  ...          │     • filter.Allow (shard + subtree + groupReg)
   ┌─────────┐  │     • egress.Send (unicast)
   │ Worker N│──│     • mcastEgr.Send (multicast, optional)
   └─────────┘  │     • nack.Tracker.Observe
                │
+
+SubtreeAnnounceListener (1 goroutine, BRC-127)
+  ┌──────────────────────────────────────────┐
+  │ Join FF05::FF:FFFC (SO_REUSEPORT socket) │──▶ subtreegroup.Registry
+  │ Evict loop (1 s tick)                    │       ▲
+  └──────────────────────────────────────────┘       │
+                                                filter.Allow (groupReg)
 
 NACK Queue (background goroutines)
   ┌──────────────────┐
@@ -411,7 +431,14 @@ Gap Tracker Sweeper (100ms interval)
 | `shard-include` non-empty   | Only listed indices accepted           |
 | `subtree-include` empty     | All SubtreeIDs accepted                |
 | `subtree-include` non-empty | Only listed IDs accepted               |
-| `subtree-exclude`           | Listed IDs dropped (overrides include) |
+| `subtree-exclude`           | Listed IDs dropped (overrides include)                                    |
+| `-subtree-groups` non-empty | SubtreeIDs in any live announced GroupID accepted (OR with static include) |
+
+**Dynamic Subtree Group Filtering (BRC-127):**
+
+When `-subtree-groups` is configured, the listener instantiates a `subtreegroup.Registry` and wires it into the filter as `groupReg`. On each frame, `filter.Allow` calls `groupReg.Contains(SubtreeID)` as an additional acceptance path alongside the static `-subtree-include` list. Entries expire when not refreshed before their TTL (default: 900 s); configure with `-subtree-group-default-ttl`.
+
+Source filtering for announcements: `-sender-include` / `-sender-exclude` restrict which IPv6 sources are accepted. Both support CIDR notation.
 
 **Gap Tracking:**
 
@@ -614,6 +641,50 @@ With N=8 subtrees and a fixed seed, the same txid always maps to the same subtre
 
 ---
 
+## Group Announcement Protocol (BRC-127)
+
+BRC-127 defines the dynamic subtree group announcement protocol. Producers advertise which SubtreeIDs belong to which logical group; listeners subscribe to named groups and automatically accept frames from those subtrees without static configuration.
+
+**→ [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md)**
+
+### Wire Format
+
+A 64-byte `SubtreeAnnounce` datagram (`MsgType 0x30`) maps one SubtreeID to one GroupID with a TTL:
+
+```text
+Offset  Size  Field
+------  ----  -----
+     0     4  Magic (0xE3E1F3E8)
+     4     2  ProtoVer (0x02BF)
+     6     1  MsgType = 0x30
+     7     1  Flags (reserved)
+     8    32  SubtreeID  — 32-byte SHA-256 subtree root hash
+    40    16  GroupID    — 128-bit logical group identifier
+    56     4  Epoch      — Unix timestamp of announcement
+    60     2  TTL        — Validity in seconds; 0 = listener default (900 s)
+    62     2  Reserved
+```
+
+### Distribution
+
+Producers send SubtreeAnnounce datagrams to the proxy TCP ingress. The proxy's TCP path detects `MsgType 0x30` and calls `ForwardControl`, multicasting verbatim to `FF05::FF:FFFC` (`CtrlGroupSubtreeAnnounce = 0xFFFFFC`). Listeners join this group and populate `subtreegroup.Registry`.
+
+### Listener Configuration
+
+| Flag / Env var                                          | Default | Description                                        |
+| ------------------------------------------------------- | ------- | -------------------------------------------------- |
+| `-subtree-groups` / `SUBTREE_GROUPS`                    | `""`    | Comma-separated 32-char hex GroupIDs to subscribe  |
+| `-subtree-group-default-ttl` / `SUBTREE_GROUP_DEFAULT_TTL` | `900s`  | Fallback TTL when announcement TTL = 0          |
+| `-announce-scope` / `ANNOUNCE_SCOPE`                    | `site`  | Scope(s) for announcement group joins              |
+| `-sender-include` / `SENDER_INCLUDE`                    | `""`    | IPv6 CIDRs of trusted announcement senders         |
+| `-sender-exclude` / `SENDER_EXCLUDE`                    | `""`    | IPv6 CIDRs to reject                               |
+
+### Refresh and Expiry
+
+Announcements must be re-sent before their TTL expires. Recommended: interval 10–30 s; TTL ≥ 3× interval. If announcements cease, entries expire and frames are dropped with `bsl_frames_dropped_total{reason="subtree_include_miss"}`.
+
+---
+
 ## Testing and Validation
 
 ### bitcoin-subtx-generator
@@ -765,6 +836,8 @@ All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
 **Protocol:**
 
 - [Wire Protocol Specification](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md) - Complete v1/BRC-124 frame format
+- [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md) - SubtreeAnnounce wire format, proxy forwarding, listener integration
+- [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md) - EF payload format, detection, infrastructure impact
 
 **Services:**
 
@@ -792,6 +865,11 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 
 - The v1 wire-frame format transports transactions conforming to BRC-12
 - [BSV Blockchain Standards Repository](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0012.md)
+
+**BRC-30: Extended Format (EF) Transaction**
+
+- The payload format for BRC-128 frames
+- [BSV Blockchain Standards Repository](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0030.md)
 
 ---
 
@@ -831,6 +909,7 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 | ------- | ----------- | -------------------- | --------------- |
 | v1      | 44 bytes    | No                   | No              |
 | BRC-124 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes             |
+| BRC-128 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes (EF payload)|
 
 ---
 
@@ -852,6 +931,22 @@ Retry endpoint discoverability and hierarchical retransmission are defined acros
 
 ---
 
+## BRC-128: Extended Format Frames
+
+BRC-128 carries BRC-30 Extended Format (EF) transaction payloads inside the standard 92-byte BRC-124 header. Frame Version remains `0x02`.
+
+**→ [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md)**
+
+### Summary
+
+- **Header:** Identical to BRC-124 (92 bytes). Frame Version `0x02` unchanged.
+- **Payload:** BRC-30 Extended Format. Self-identifying via the 6-byte marker `0x00 0x00 0x00 0x00 0x00 0xEF` at payload bytes 4–9.
+- **Detection:** Inspect payload bytes 4–9; the EF marker present → BRC-30 EF (BRC-128); absent → BRC-12 raw transaction (BRC-124).
+- **Infrastructure impact:** None. Proxy, listener, and retry endpoint are payload-agnostic. BRC-124 and BRC-128 frames coexist on the same multicast groups.
+- **Downstream consumers:** Must inspect the payload marker to select the correct parser (BRC-12 or BRC-30).
+
+---
+
 ## NACK Retransmission Flow
 
 The end-to-end NACK retransmission flow — from gap detection through escalation to repair delivery — is documented with ASCII diagrams in:
@@ -862,5 +957,5 @@ Covers: full pipeline diagram, gap detection & dispatch, tier model, preference 
 
 ---
 
-_Document Version: 1.2_  
-_Last Updated: 2026-05-06_
+_Document Version: 1.3_  
+_Last Updated: 2026-05-10_

@@ -37,7 +37,7 @@ Offset  Size  Align  Field                 Value / Notes
 - **PrevSeq (40:48):** 8-byte XXH64 hash of the previous frame in this sender+group chain, stamped in-place by the proxy. A value of `0` means the proxy has not yet stamped the frame. Equals the `CurSeq` of the immediately preceding frame; a mismatch indicates a missing frame.
 - **CurSeq (48:56):** 8-byte XXH64 hash of the current frame's chain state, stamped in-place by the proxy. Computed as `XXH64(senderIPv6 ∥ groupIdx ∥ counter)`. A value of `0` means the frame has not been stamped. Receivers use this as the primary cache key for NACK-based retransmission.
 - **Subtree ID (56:88):** Opaque 32-byte batch identifier for subtree-level filtering.
-- **Payload (92+):** BSV transaction in BRC-12 raw format (version LE32 + inputs + outputs + locktime LE32).
+- **Payload (92+):** BSV transaction bytes. BRC-124 frames carry BRC-12 raw transactions; BRC-128 frames carry BRC-30 Extended Format (EF) transactions. Inspect payload bytes 4–9 to distinguish: `0x00 0x00 0x00 0x00 0x00 0xEF` = BRC-30 EF (BRC-128), otherwise BRC-12 raw (BRC-124). See **[BRC-128 Extended Format](brc-128-ef-frame-format.md)**.
 
 ---
 
