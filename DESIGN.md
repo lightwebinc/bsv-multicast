@@ -957,5 +957,5 @@ Covers: full pipeline diagram, gap detection & dispatch, tier model, preference 
 
 ---
 
-_Document Version: 1.3_  
-_Last Updated: 2026-05-10_
+_Document Version: 1.4_  
+_Last Updated: 2026-05-11_
