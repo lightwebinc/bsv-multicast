@@ -2,8 +2,6 @@
 
 BRC-TBD-addressing defines the IPv6 multicast group address scheme for the BSV transaction sharding pipeline, including data-plane shard groups, control-plane beacon groups, and reserved indices.
 
-> **Status:** To be submitted as BRC-TBD-addressing PR to jefflightweb/BRCs.
-
 ---
 
 ## Address Derivation
