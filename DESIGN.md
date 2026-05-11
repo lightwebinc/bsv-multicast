@@ -425,13 +425,13 @@ Gap Tracker Sweeper (100ms interval)
 
 **Filter Behavior:**
 
-| Config                      | Behavior                               |
-| --------------------------- | -------------------------------------- |
-| `shard-include` empty       | All shard indices accepted             |
-| `shard-include` non-empty   | Only listed indices accepted           |
-| `subtree-include` empty     | All SubtreeIDs accepted                |
-| `subtree-include` non-empty | Only listed IDs accepted               |
-| `subtree-exclude`           | Listed IDs dropped (overrides include)                                    |
+| Config                      | Behavior                                                                   |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `shard-include` empty       | All shard indices accepted                                                 |
+| `shard-include` non-empty   | Only listed indices accepted                                               |
+| `subtree-include` empty     | All SubtreeIDs accepted                                                    |
+| `subtree-include` non-empty | Only listed IDs accepted                                                   |
+| `subtree-exclude`           | Listed IDs dropped (overrides include)                                     |
 | `-subtree-groups` non-empty | SubtreeIDs in any live announced GroupID accepted (OR with static include) |
 
 **Dynamic Subtree Group Filtering (BRC-127):**
@@ -671,13 +671,13 @@ Producers send SubtreeAnnounce datagrams to the proxy TCP ingress. The proxy's T
 
 ### Listener Configuration
 
-| Flag / Env var                                          | Default | Description                                        |
-| ------------------------------------------------------- | ------- | -------------------------------------------------- |
-| `-subtree-groups` / `SUBTREE_GROUPS`                    | `""`    | Comma-separated 32-char hex GroupIDs to subscribe  |
-| `-subtree-group-default-ttl` / `SUBTREE_GROUP_DEFAULT_TTL` | `900s`  | Fallback TTL when announcement TTL = 0          |
-| `-announce-scope` / `ANNOUNCE_SCOPE`                    | `site`  | Scope(s) for announcement group joins              |
-| `-sender-include` / `SENDER_INCLUDE`                    | `""`    | IPv6 CIDRs of trusted announcement senders         |
-| `-sender-exclude` / `SENDER_EXCLUDE`                    | `""`    | IPv6 CIDRs to reject                               |
+| Flag / Env var                                             | Default | Description                                       |
+| ---------------------------------------------------------- | ------- | ------------------------------------------------- |
+| `-subtree-groups` / `SUBTREE_GROUPS`                       | `""`    | Comma-separated 32-char hex GroupIDs to subscribe |
+| `-subtree-group-default-ttl` / `SUBTREE_GROUP_DEFAULT_TTL` | `900s`  | Fallback TTL when announcement TTL = 0            |
+| `-announce-scope` / `ANNOUNCE_SCOPE`                       | `site`  | Scope(s) for announcement group joins             |
+| `-sender-include` / `SENDER_INCLUDE`                       | `""`    | IPv6 CIDRs of trusted announcement senders        |
+| `-sender-exclude` / `SENDER_EXCLUDE`                       | `""`    | IPv6 CIDRs to reject                              |
 
 ### Refresh and Expiry
 
@@ -905,11 +905,11 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 
 ### Frame Version Summary
 
-| Version | Header Size | Hash-Chain Seq       | Subtree Support |
-| ------- | ----------- | -------------------- | --------------- |
-| v1      | 44 bytes    | No                   | No              |
-| BRC-124 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes             |
-| BRC-128 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes (EF payload)|
+| Version | Header Size | Hash-Chain Seq       | Subtree Support  |
+| ------- | ----------- | -------------------- | ---------------- |
+| v1      | 44 bytes    | No                   | No               |
+| BRC-124 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes              |
+| BRC-128 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes (EF payload) |
 
 ---
 
