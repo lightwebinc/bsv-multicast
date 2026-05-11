@@ -8,7 +8,7 @@ BRC-TBD-addressing defines the IPv6 multicast group address scheme for the BSV t
 
 All IPv6 multicast group addresses are derived from three components:
 
-1. **Scope prefix** (`MCPrefix`, 2 bytes) — the first two bytes of the IPv6 address, e.g. `FF05` (site-local) or `FF0E` (global).
+1. **Scope prefix** (`MCPrefix`, 2 bytes) — the first two bytes of the IPv6 address, e.g. `FF05` (site-local), `FF08` (organization-local), or `FF0E` (global).
 2. **Middle bytes** (`MCMiddleBytes`, 11 bytes) — operator-configurable prefix set via `-mc-base-addr`; occupies bytes 2–12 of the IPv6 address. Defaults to all zeros.
 3. **Group index** (3 bytes) — occupies bytes 13–15 of the IPv6 address.
 
