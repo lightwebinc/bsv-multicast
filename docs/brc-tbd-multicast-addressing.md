@@ -42,7 +42,7 @@ Control-plane groups occupy the top of the 24-bit index space, ensuring orthogon
 
 | Index      | Purpose              | Scope  | Full address (no middle bytes)            | Compressed      |
 | ---------- | -------------------- | ------ | ----------------------------------------- | --------------- |
-| `0xFFFFFC` | Subtree announce     | `FF05` | `FF05:0000:0000:0000:0000:0000:00FF:FFFC` | `FF05::FF:FFFC` |
+| `0xFFFFFC` | Subtree announce     | `FF0E` | `FF0E:0000:0000:0000:0000:0000:00FF:FFFC` | `FF0E::FF:FFFC` |
 | `0xFFFFFD` | Beacon (site)        | `FF05` | `FF05:0000:0000:0000:0000:0000:00FF:FFFD` | `FF05::FF:FFFD` |
 | `0xFFFFFD` | Beacon (org)         | `FF08` | `FF08:0000:0000:0000:0000:0000:00FF:FFFD` | `FF08::FF:FFFD` |
 | `0xFFFFFD` | Beacon (global)      | `FF0E` | `FF0E:0000:0000:0000:0000:0000:00FF:FFFD` | `FF0E::FF:FFFD` |
