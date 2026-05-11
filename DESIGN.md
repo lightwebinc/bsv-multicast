@@ -83,11 +83,11 @@ The project is organized into multiple repositories, each with a specific respon
 
 ### Core Services (Binaries)
 
-| Repository                                                                      | Purpose                                                                              |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [bitcoin-shard-proxy](https://github.com/lightwebinc/bitcoin-shard-proxy)       | Stateless ingress proxy; receives frames, derives multicast group, forwards verbatim |
-| [bitcoin-shard-listener](https://github.com/lightwebinc/bitcoin-shard-listener) | Multicast subscriber; filters by shard/subtree, forwards to unicast consumers        |
-| [bitcoin-retry-endpoint](https://github.com/lightwebinc/bitcoin-retry-endpoint) | Caches frames, retransmits on NACK requests                                          |
+| Repository                                                                      | Purpose                                                                                     |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [bitcoin-shard-proxy](https://github.com/lightwebinc/bitcoin-shard-proxy)       | Stateless ingress proxy; receives frames, derives multicast group, forwards verbatim        |
+| [bitcoin-shard-listener](https://github.com/lightwebinc/bitcoin-shard-listener) | Multicast subscriber; filters by shard/subtree, forwards to unicast and multicast consumers |
+| [bitcoin-retry-endpoint](https://github.com/lightwebinc/bitcoin-retry-endpoint) | Caches frames, retransmits on NACK requests                                                 |
 
 ### Shared Libraries
 
