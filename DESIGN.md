@@ -337,7 +337,7 @@ The BRC-124 data-plane frame format (92-byte header, replacing the legacy 44-byt
 
 **→ [BRC-124 Frame Format](docs/brc-124-frame-format.md)**
 
-Key fields: Network magic, Protocol version, Frame version, Transaction ID, PrevSeq (XXH64), CurSeq (XXH64), Subtree ID, Payload length, and BSV tx payload. Both v1 (legacy) and BRC-124 frames are accepted by all components.
+Key fields: Network magic, Protocol version, Frame version, Transaction ID, PrevSeq (XXH64), CurSeq (XXH64), Subtree ID, Payload length, and BSV tx payload. Both BRC-12 (legacy) and BRC-124/BRC-128 frames are accepted by all components.
 
 **BRC-128 (Extended Format):** BRC-128 frames carry BRC-30 Extended Format (EF) transaction payloads inside the standard 92-byte BRC-124 header. Frame Version remains `0x02`; the payload is self-identifying via the 6-byte EF marker at payload bytes 4–9 (`0x000000000000EF`). All infrastructure components are payload-agnostic — no changes required to proxy, listener, or retry endpoint.
 
@@ -483,7 +483,7 @@ Retransmit Egress
 
 **Purpose:** Shared protocol primitives imported by proxy, listener, and retry endpoint.
 
-**Packages:** `frame` (v1/BRC-124 encode/decode), `shard` (txid → multicast group derivation), `seqhash` (XXH64 hash chain for PrevSeq/CurSeq), `sequence` (per-shard monotonic counters).
+**Packages:** `frame` (BRC-12/BRC-124/BRC-128 encode/decode), `shard` (txid → multicast group derivation), `seqhash` (XXH64 hash chain for PrevSeq/CurSeq), `sequence` (per-shard monotonic counters).
 
 **→ [bitcoin-shard-common README](https://github.com/lightwebinc/bitcoin-shard-common)** — package API, [protocol spec](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md)
 
@@ -605,9 +605,9 @@ subtree-exclude = "abc123...,def456..."  (hex, 32-byte each)
 - `subtree-exclude` empty: no exclusion
 - Both empty: no subtree filtering (all frames pass)
 
-**V1 Frames:**
+**BRC-12 Frames:**
 
-- V1 frames have zero SubtreeID
+- BRC-12 frames have zero SubtreeID
 - Only pass subtree filter if zero is explicitly listed in `subtree-include`
 
 ---
@@ -793,7 +793,7 @@ All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
 
 **Protocol:**
 
-- [Wire Protocol Specification](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md) — Complete v1/BRC-124 frame format
+- [Wire Protocol Specification](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md) — Complete BRC-12/BRC-124/BRC-128 frame format
 - [BRC-124 Frame Format](docs/brc-124-frame-format.md) — 92-byte header, PrevSeq/CurSeq hash chain, backward compatibility
 - [BRC-126 Retransmission Protocol](docs/brc-126-retransmission-protocol.md) — NACK/ACK/MISS wire formats, ADVERT beacon, tier/preference model
 - [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md) — SubtreeAnnounce wire format, proxy forwarding, listener integration
@@ -825,7 +825,7 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 
 **BRC-12: Raw Transaction Format**
 
-- The v1 wire-frame format transports transactions conforming to BRC-12
+- The BRC-12 wire-frame format transports transactions conforming to BRC-12
 - [BSV Blockchain Standards Repository](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0012.md)
 
 **BRC-30: Extended Format (EF) Transaction**
@@ -869,7 +869,7 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 
 | Version | Header Size | Hash-Chain Seq       | Subtree Support  |
 | ------- | ----------- | -------------------- | ---------------- |
-| v1      | 44 bytes    | No                   | No               |
+| BRC-12  | 44 bytes    | No                   | No               |
 | BRC-124 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes              |
 | BRC-128 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes (EF payload) |
 
