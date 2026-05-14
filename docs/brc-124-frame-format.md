@@ -33,7 +33,7 @@ All multi-byte integers are big-endian. 8-byte alignment for all fields after of
 - **Frame version (6):** `0x02` for BRC-124, `0x01` for legacy BRC-12.
 - **Transaction ID (8:40):** Raw 256-bit txid in internal byte order (NOT display-reversed).
 - **PrevSeq (40:48):** 8-byte XXH64 hash of the previous frame in this sender+group chain, stamped in-place by the proxy. A value of `0` means the proxy has not yet stamped the frame. Equals the `CurSeq` of the immediately preceding frame; a mismatch indicates a missing frame.
-- **CurSeq (48:56):** 8-byte XXH64 hash of the current frame's chain state, stamped in-place by the proxy. Computed as `XXH64(senderIPv6 ∥ groupIdx ∥ counter)`. A value of `0` means the frame has not been stamped. Receivers use this as the primary cache key for NACK-based retransmission.
+- **CurSeq (48:56):** 8-byte XXH64 hash of the current frame's chain state, stamped in-place by the proxy. Computed as `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID ∥ counter)`. A value of `0` means the frame has not been stamped. Receivers use this as the primary cache key for NACK-based retransmission.
 - **Subtree ID (56:88):** Opaque 32-byte batch identifier for subtree-level filtering.
 - **Payload (92+):** BSV transaction bytes. BRC-124 frames carry BRC-12 raw transactions; BRC-128 frames carry BRC-30 Extended Format (EF) transactions. Inspect payload bytes 4–9 to distinguish: `0x00 0x00 0x00 0x00 0x00 0xEF` = BRC-30 EF (BRC-128), otherwise BRC-12 raw (BRC-124). See **[BRC-128 Extended Format](brc-128-ef-frame-format.md)**.
 
@@ -62,20 +62,20 @@ Accepted and forwarded verbatim for backward compatibility.
 ### Proxy (`bitcoin-shard-proxy`)
 
 - Decode header (BRC-12 or BRC-124); drop on bad magic or unknown version.
-- For BRC-124: stamp `PrevSeq` and `CurSeq` in-place at bytes 40–55 using the XXH64 hash chain per `(senderIPv6, groupIdx)`.
+- For BRC-124: stamp `PrevSeq` and `CurSeq` in-place at bytes 40–55 using the XXH64 hash chain per `(senderIPv6, groupIdx, subtreeID)`.
 - Forward verbatim to all egress interfaces (no re-encoding).
 
 ### Listener (`bitcoin-shard-listener`)
 
 - Decode header; apply shard filter (group index).
 - Apply subtree filter (SubtreeID include/exclude).
-- For BRC-124 with non-zero `CurSeq`: track gaps per group by verifying `PrevSeq == lastCurSeq` (hash-chain break = missing frame).
+- For BRC-124 with non-zero `CurSeq`: track gaps per `(groupIdx, subtreeID)` chain by verifying `PrevSeq == lastCurSeq` (hash-chain break = missing frame).
 - Forward matching frames to egress address (UDP or TCP).
 
 ### Retry Endpoint (`bitcoin-retry-endpoint`)
 
 - Receive multicast frames; decode header.
-- Store raw frame indexed by `CurSeq` (primary key, `0x01` prefix) and `PrevSeq` (secondary pointer, `0x00` prefix) for dual-direction NACK lookup.
+- Store raw frame indexed by `0x01 ∥ SubtreeID ∥ CurSeq` (41-byte primary key) and `0x00 ∥ SubtreeID ∥ PrevSeq` (41-byte secondary pointer) for dual-direction NACK lookup.
 
 ---
 

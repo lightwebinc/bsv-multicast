@@ -53,7 +53,7 @@ Offset  Size  Field
 
 ---
 
-## NACK Wire Format (`MsgType 0x10`) — 24 bytes
+## NACK Wire Format (`MsgType 0x10`) — 56 bytes
 
 Sent by listener to retry endpoint on gap detection. Requests a frame by its `CurSeq` (backward lookup) or by its `PrevSeq` (forward lookup).
 
@@ -66,9 +66,12 @@ Offset  Size  Field
      7     1  LookupType  — 0x00 = by PrevSeq (forward), 0x01 = by CurSeq (backward)
      8     8  LookupSeq   — XXH64 value to look up in the cache
     16     8  ChainID     — initial CurSeq of the hash-chain; 0x0 = gap not yet chain-attributed
+    24    32  SubtreeID   — 32-byte batch identifier; zeros = unset
 ```
 
-> **ChainID** (offset 16) repurposes the former Reserved field (was all-zeros). It carries the `chainID` assigned by the listener's multi-chain gap tracker — the `CurSeq` of the first frame observed for this chain. The retry endpoint uses ChainID as an additional rate-limiting key (per-flow NACK storm cap). A value of `0` means the gap is an orphan — it was detected before the chain that spawned it has been identified (the connecting frame has not yet arrived). Rate-limiting on `ChainID=0` would bucket all unattributed gaps from the same source together and prematurely exhaust a shared limit, so the chain check is skipped for `ChainID=0`; the gap remains subject to the IP and per-LookupSeq tiers.
+> **ChainID** (offset 16) carries the `chainID` assigned by the listener's multi-chain gap tracker — the `CurSeq` of the first frame observed for this chain. The retry endpoint uses ChainID as an additional rate-limiting key (per-flow NACK storm cap). A value of `0` means the gap is an orphan. Rate-limiting on `ChainID=0` would bucket all unattributed gaps from the same source together and prematurely exhaust a shared limit, so the chain check is skipped for `ChainID=0`.
+
+> **SubtreeID** (offset 24) scopes the cache key lookup to a single subtree's sequence chain. The retry endpoint prepends it to the `LookupSeq` when building the 41-byte cache key (`0x01 ∥ SubtreeID ∥ LookupSeq` for primary; `0x00 ∥ SubtreeID ∥ LookupSeq` for secondary). This prevents false cache hits when two different subtrees happen to produce the same `CurSeq` hash value.
 
 ---
 
