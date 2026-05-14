@@ -32,7 +32,7 @@ The `shard.Engine.Addr(groupIndex, port)` function assembles these components in
 
 ## Data-Plane Shard Groups
 
-Shard group indices occupy the range `0x0000`–`0xFFFA` (the lower 65 531 indices of the 16-bit shard space; the top five indices are reserved for control). With `shardBits = N`, the proxy creates `2^N` groups using indices `0` through `2^N − 1`. Practical `shardBits` is bounded at 15 to keep the data-plane orthogonal to the control-plane reservations.
+Shard group indices occupy the range `0x0000`–`0x0FFF` (4,096 indices). `shardBits` is bounded at 12, keeping all shard indices within this range. Indices at or above `0x1000` MUST NOT be used as shard group indices.
 
 The group index for a transaction is derived deterministically from its TxID:
 
@@ -42,9 +42,15 @@ groupIndex = binary.BigEndian.Uint32(txid[0:4]) >> (32 - shardBits)
 
 ---
 
-## Control-Plane Reserved Indices
+## Free Space and Specialty Transmission Domains
 
-Control-plane groups occupy the top of the 16-bit shard space, ensuring orthogonality with all practical shard configurations (`shardBits ≤ 15`).
+Indices `0x1000`–`0xF7FF` (56,832 indices) are unassigned and reserved for future use. This range accommodates future shard group expansion and specialty transmission domains for purpose-specific multicast services.
+
+---
+
+## Network Service Groups
+
+Network service groups occupy `0xF800`–`0xFFFF` (2,048 indices). Current protocol assignments are allocated from the top of this range; the remainder is reserved for future network services.
 
 | Index    | Purpose                              | Scope  | Full address (default group-id)           | Compressed     |
 | -------- | ------------------------------------ | ------ | ----------------------------------------- | -------------- |
