@@ -30,24 +30,24 @@ This document provides a comprehensive design overview of the entire multicast e
 
 ## Terminology
 
-| Term | Definition |
-| ---- | ---------- |
-| **Shard** | A deterministic partition of the transaction space. Each shard maps to one IPv6 multicast group; group membership is derived from the TxID. |
-| **Subtree** | An ordered set of related transactions sharing a common 32-byte batch identifier (`SubtreeID`, or Subtree Merkle root hash). Used for transaction specialization and block template assembly. |
-| **Gap** | A detected break in the PrevSeq/CurSeq hash chain, indicating one or more missing frames. |
-| **Chain** | The per-(sender IP, multicast group) sequence of frames linked by PrevSeq/CurSeq hash values. |
-| **NACK** | Negative acknowledgement — a 24-byte datagram requesting retransmission of a missing frame. |
-| **ACK** | Positive acknowledgement — a 16-byte response confirming a retransmit was dispatched. |
-| **MISS** | Cache-miss response — a 16-byte response indicating the requested frame is not cached; triggers immediate escalation. |
-| **ADVERT** | A 56-byte beacon datagram advertising a retry endpoint's address, tier, and preference. |
-| **Fabric** | The IPv6 multicast network interconnecting proxies, listeners, and retry endpoints. |
-| **Ingress** | The initial stage where transactions are received and processed before being distributed to the multicast network. |
-| **Egress** | The final stage where transactions are delivered to the final destination after being processed through the multicast network. |
-| **Proxy** | A node that receives transactions from senders and forwards them to the multicast network. |
-| **Listener** | A node that receives transactions from the multicast network and forwards them to the egress stage. |
-| **Retry Endpoint** | A node that caches frames, receives NACKs, and retransmits missing frames to the multicast network. |
-| **Frame** | A single transaction or subtree announcement packaged for multicast transmission. |
-| **TxID** | The unique identifier for a transaction, used to determine shard membership and frame ordering. |
+| Term               | Definition                                                                                                                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Shard**          | A deterministic partition of the transaction space. Each shard maps to one IPv6 multicast group; group membership is derived from the TxID.                                                   |
+| **Subtree**        | An ordered set of related transactions sharing a common 32-byte batch identifier (`SubtreeID`, or Subtree Merkle root hash). Used for transaction specialization and block template assembly. |
+| **Gap**            | A detected break in the PrevSeq/CurSeq hash chain, indicating one or more missing frames.                                                                                                     |
+| **Chain**          | The per-(sender IP, multicast group) sequence of frames linked by PrevSeq/CurSeq hash values.                                                                                                 |
+| **NACK**           | Negative acknowledgement — a 24-byte datagram requesting retransmission of a missing frame.                                                                                                   |
+| **ACK**            | Positive acknowledgement — a 16-byte response confirming a retransmit was dispatched.                                                                                                         |
+| **MISS**           | Cache-miss response — a 16-byte response indicating the requested frame is not cached; triggers immediate escalation.                                                                         |
+| **ADVERT**         | A 56-byte beacon datagram advertising a retry endpoint's address, tier, and preference.                                                                                                       |
+| **Fabric**         | The IPv6 multicast network interconnecting proxies, listeners, and retry endpoints.                                                                                                           |
+| **Ingress**        | The initial stage where transactions are received and processed before being distributed to the multicast network.                                                                            |
+| **Egress**         | The final stage where transactions are delivered to the final destination after being processed through the multicast network.                                                                |
+| **Proxy**          | A node that receives transactions from senders and forwards them to the multicast network.                                                                                                    |
+| **Listener**       | A node that receives transactions from the multicast network and forwards them to the egress stage.                                                                                           |
+| **Retry Endpoint** | A node that caches frames, receives NACKs, and retransmits missing frames to the multicast network.                                                                                           |
+| **Frame**          | A single transaction or subtree announcement packaged for multicast transmission.                                                                                                             |
+| **TxID**           | The unique identifier for a transaction, used to determine shard membership and frame ordering.                                                                                               |
 
 ---
 
@@ -126,9 +126,9 @@ The project is organized into multiple repositories, each with a specific respon
 
 ### Testing and Tools
 
-| Repository                                                                        | Purpose                                                    |
-| --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [bitcoin-subtx-generator](https://github.com/lightwebinc/bitcoin-subtx-generator) | Traffic generator for load/functional testing              |
+| Repository                                                                        | Purpose                                                     |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| [bitcoin-subtx-generator](https://github.com/lightwebinc/bitcoin-subtx-generator) | Traffic generator for load/functional testing               |
 | [bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test)   | Integration test harness; scenario suite, lab setup, deploy |
 
 ### Meta Repository
@@ -323,16 +323,21 @@ on-wire default is `0x000B` for IANA conformance.
 | organization | 8    | FF08::  | Multi-site organization |
 | global       | E    | FF0E::  | Internet-wide           |
 
-**Control-Plane Reserved Indices (BRC-TBD-addressing):**
+**Control-Plane Reserved Indices (BRC-129):**
 
-| Index    | Purpose                      | Scope | Compressed Address |
-| -------- | ---------------------------- | ----- | ------------------ |
-| 0xFFFC | Subtree announce (site)      | FF05  | FF05::B:FFFC      |
-| 0xFFFC | Subtree announce (global)    | FF0E  | FF0E::B:FFFC      |
-| 0xFFFD | Beacon (site)                | FF05  | FF05::B:FFFD      |
-| 0xFFFD | Beacon (global)              | FF0E  | FF0E::B:FFFD      |
-| 0xFFFE | Control channel              | FF0E  | FF0E::B:FFFE      |
-| 0xFFFF | _(reserved)_                 | —     | do not use         |
+| Index  | Purpose                         | Scope | Compressed Address |
+| ------ | ------------------------------- | ----- | ------------------ |
+| 0xFFFB | Subtree announce (site)         | FF05  | FF05::B:FFFB       |
+| 0xFFFB | Subtree announce (org)          | FF08  | FF08::B:FFFB       |
+| 0xFFFB | Subtree announce (global)       | FF0E  | FF0E::B:FFFB       |
+| 0xFFFC | Subtree Group announce (site)   | FF05  | FF05::B:FFFC       |
+| 0xFFFC | Subtree Group announce (org)    | FF08  | FF08::B:FFFC       |
+| 0xFFFC | Subtree Group announce (global) | FF0E  | FF0E::B:FFFC       |
+| 0xFFFD | Beacon (site)                   | FF05  | FF05::B:FFFD       |
+| 0xFFFD | Beacon (org)                    | FF08  | FF08::B:FFFD       |
+| 0xFFFD | Beacon (global)                 | FF0E  | FF0E::B:FFFD       |
+| 0xFFFE | Block Control channel           | FF0E  | FF0E::B:FFFE       |
+| 0xFFFF | _(reserved)_                    | —     | do not use         |
 
 See [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md) for full details.
 
