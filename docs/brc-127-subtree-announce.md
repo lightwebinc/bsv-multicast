@@ -1,6 +1,6 @@
 # BRC-127 — Subtree Group Announcement
 
-BRC-127 defines the protocol for dynamically advertising SubtreeID–GroupID bindings over the multicast fabric. Producers send periodic `SubtreeAnnounce` datagrams to the proxy via TCP; the proxy forwards them to the `CtrlGroupSubtreeAnnounce` multicast group (`FF05::FF:FFFC`). Listeners subscribe to this group and populate a dynamic registry used at the subtree filter layer.
+BRC-127 defines the protocol for dynamically advertising SubtreeID–GroupID bindings over the multicast fabric. Producers send periodic `SubtreeAnnounce` datagrams to the proxy via TCP; the proxy forwards them to the `CtrlGroupSubtreeAnnounce` multicast group (`FF05::B:FFFC`). Listeners subscribe to this group and populate a dynamic registry used at the subtree filter layer.
 
 > **Status:** To be submitted as BRC-127 PR to github.com/bitcoin-sv/BRCs
 
@@ -38,9 +38,9 @@ SubtreeAnnounce datagrams are distributed on the control-plane group:
 
 | Index      | Scope | Compressed Address | Constant                   |
 | ---------- | ----- | ------------------ | -------------------------- |
-| `0xFFFFFC` | FF05  | `FF05::FF:FFFC`    | `CtrlGroupSubtreeAnnounce` |
+| `0xFFFC` | FF05  | `FF05::B:FFFC`    | `CtrlGroupSubtreeAnnounce` |
 
-Defined in `bitcoin-shard-common/shard/control.go`. Occupies the top of the 24-bit index space and is orthogonal to all data-plane shard groups (`shardBits ≤ 23`). When middle bytes are configured via `-mc-base-addr`, the same operator prefix applies to this group as to all other multicast addresses.
+Defined in `bitcoin-shard-common/shard/control.go`. Occupies the top of the 16-bit shard space and is orthogonal to all data-plane shard groups (`shardBits ≤ 15`). When the IANA group-id is overridden via `-mc-group-id`, the same group-id applies to this control group as to all other multicast addresses.
 
 ---
 
@@ -57,11 +57,11 @@ bitcoin-shard-proxy  (TCP ingress, worker/tcp.go)
     │  Reads 64-byte datagram
     │  Calls ForwardControl(targets, buf, CtrlGroupSubtreeAnnounce, egressPort)
     ▼
-IPv6 multicast fabric  →  FF05::FF:FFFC:9001
+IPv6 multicast fabric  →  FF05::B:FFFC:9001
     │
     ▼
 bitcoin-shard-listener
-    │  SubtreeAnnounceListener joins FF05::FF:FFFC
+    │  SubtreeAnnounceListener joins FF05::B:FFFC
     │  DecodeSubtreeAnnounce → subtreegroup.Registry.Add(GroupID, SubtreeID, TTL)
     ▼
 filter.Allow (hot path, per received frame)
@@ -83,7 +83,7 @@ The proxy TCP ingress (`worker/tcp.go`) handles SubtreeAnnounce datagrams transp
 3. Read remaining 20 bytes to complete the 64-byte datagram.
 4. Call `fwd.ForwardControl(targets, ctrlBuf[:], shard.CtrlGroupSubtreeAnnounce, fwd.EgressPort())`.
 
-`ForwardControl` derives the destination using `shard.ControlGroupAddr(mcPrefix, mcMiddleBytes, 0xFFFFFC)` and calls `WriteTo` on all egress interfaces. No sequence stamping, caching, or frame decoding is performed.
+`ForwardControl` derives the destination using `shard.ControlGroupAddr(mcPrefix, mcGroupID, 0xFFFC)` and calls `WriteTo` on all egress interfaces. No sequence stamping, caching, or frame decoding is performed.
 
 ---
 
@@ -158,7 +158,7 @@ When both `-announce-addr` and `-subtree-group` are set, `subtx-gen` maintains a
 | ---------------------------------------------- | ----------------------------------------------------------------- |
 | Wire format encode/decode                      | `bitcoin-shard-common/frame/subtree_announce.go`                  |
 | `MsgTypeSubtreeAnnounce = 0x30`, `SubtreeAnnounceSize = 64` | `bitcoin-shard-common/frame/frame.go`              |
-| `CtrlGroupSubtreeAnnounce = 0xFFFFFC`          | `bitcoin-shard-common/shard/control.go`                           |
+| `CtrlGroupSubtreeAnnounce = 0xFFFC`          | `bitcoin-shard-common/shard/control.go`                           |
 | Proxy TCP detection + `ForwardControl`         | `bitcoin-shard-proxy/worker/tcp.go`, `forwarder/forwarder.go`     |
 | `SubtreeAnnounceListener`                      | `bitcoin-shard-listener/discovery/subtree_announce.go`            |
 | `subtreegroup.Registry`                        | `bitcoin-shard-listener/subtreegroup/registry.go`                 |

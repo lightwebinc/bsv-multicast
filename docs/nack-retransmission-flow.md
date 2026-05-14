@@ -149,8 +149,8 @@ bitcoin-retry-endpoint                    bitcoin-shard-listener
 │ beacon.Sender       │                  │ discovery.Beacon    │
 │                     │  ADVERT (56B)    │   Listener          │
 │ every 60s ──────────┼──── multicast ──►│                     │
-│ to FF05::FF:FFFD    │  (site-scoped)   │ DecodeADVERT()      │
-│ to FF0E::FF:FFFD    │  (global-scoped) │       │             │
+│ to FF05::B:FFFD     │  (site-scoped)   │ DecodeADVERT()      │
+│ to FF0E::B:FFFD     │  (global-scoped) │       │             │
 │ (per -beacon-scope) │                  │       ▼             │
 └─────────────────────┘                  │ registry.Upsert()   │
                                          │  TTL = 3 × interval │
@@ -177,7 +177,7 @@ AS 100 (Source)                    AS 200 (Remote)
 │   ▼              │  MP-BGP      │                   │
 │ Tier-0 Endpoint  │◄─multicast──►│ Tier-1 Endpoint   │
 │ beacons on       │  MVPN/MSDP   │ (HasParent)       │
-│ FF0E::FF:FFFD    │              │                   │
+│ FF0E::B:FFFD     │              │                   │
 │                  │              │ Listeners         │
 └──────────────────┘              │ join both beacon  │
                                   │ groups; discover  │

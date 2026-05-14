@@ -301,13 +301,18 @@ Group 1 splits into:  1a (txid[0] bit 31 = 0), 1b (txid[0] bit 31 = 1)
 
 **Benefit:** When increasing shard_bits, subscribers only need to join additional groups. Existing subscriptions remain valid.
 
-### IPv6 Multicast Address Layout
+### IPv6 Multicast Address Layout (IANA-aligned)
 
 ```text
-Bits [127:112]   FFsc   Multicast prefix + scope (e.g., FF05 for site-local)
-Bits [111:24]    0x00   Zero padding (assigned address space)
-Bits [23:0]      index  Group index (up to 24 bits = 16,777,216 groups)
+Bits [127:112]   FF0X  Multicast prefix + scope (e.g., FF05 for site-local)
+Bits [111: 32]   0x00  Zero (IANA 96-bit boundary, 80 bits)
+Bits [ 31: 16]   GID   IANA group-id (default 0x000B = IANA Bitcoin SV Node Groups)
+Bits [ 15:  0]   IDX   Shard index (up to 16 bits; top 4 reserved for control)
 ```
+
+The IANA Bitcoin SV Node Groups allocation is `FF0X::B`. Operators MAY override the
+group-id via `-mc-group-id` for testing or private deployments, but the
+on-wire default is `0x000B` for IANA conformance.
 
 **Scope Codes:**
 
@@ -322,12 +327,12 @@ Bits [23:0]      index  Group index (up to 24 bits = 16,777,216 groups)
 
 | Index    | Purpose                      | Scope | Compressed Address |
 | -------- | ---------------------------- | ----- | ------------------ |
-| 0xFFFFFC | Subtree announce (site)      | FF05  | FF05::FF:FFFC      |
-| 0xFFFFFC | Subtree announce (global)    | FF0E  | FF0E::FF:FFFC      |
-| 0xFFFFFD | Beacon (site)                | FF05  | FF05::FF:FFFD      |
-| 0xFFFFFD | Beacon (global)              | FF0E  | FF0E::FF:FFFD      |
-| 0xFFFFFE | Control channel              | FF0E  | FF0E::FF:FFFE      |
-| 0xFFFFFF | _(reserved)_                 | —     | do not use         |
+| 0xFFFC | Subtree announce (site)      | FF05  | FF05::B:FFFC      |
+| 0xFFFC | Subtree announce (global)    | FF0E  | FF0E::B:FFFC      |
+| 0xFFFD | Beacon (site)                | FF05  | FF05::B:FFFD      |
+| 0xFFFD | Beacon (global)              | FF0E  | FF0E::B:FFFD      |
+| 0xFFFE | Control channel              | FF0E  | FF0E::B:FFFE      |
+| 0xFFFF | _(reserved)_                 | —     | do not use         |
 
 See [BRC-TBD-addressing Multicast Group Address Assignments](docs/brc-tbd-multicast-addressing.md) for full details.
 
@@ -416,7 +421,7 @@ Receive Workers (NUM_WORKERS goroutines, SO_REUSEPORT)
 
 SubtreeAnnounceListener (1 goroutine, BRC-127)
   ┌──────────────────────────────────────────┐
-  │ Join FF05::FF:FFFC (SO_REUSEPORT socket) │──▶ subtreegroup.Registry
+  │ Join FF05::B:FFFC (SO_REUSEPORT socket) │──▶ subtreegroup.Registry
   │ Evict loop (1 s tick)                    │       ▲
   └──────────────────────────────────────────┘       │
                                                 filter.Allow (groupReg)
@@ -527,7 +532,7 @@ Listeners detect sequence gaps and send 24-byte NACK datagrams to retry endpoint
 
 ### Endpoint Discovery
 
-Retry endpoints advertise via periodic ADVERT beacons (see [BRC-126](docs/brc-126-retransmission-protocol.md)). Listeners join the site beacon group (`FF05::FF:FFFD`) and optionally the global beacon group (`FF0E::FF:FFFD`) to discover endpoints dynamically. Static `-retry-endpoints` seeds the registry at lowest priority (`Tier=0xFF, Preference=0`).
+Retry endpoints advertise via periodic ADVERT beacons (see [BRC-126](docs/brc-126-retransmission-protocol.md)). Listeners join the site beacon group (`FF05::B:FFFD`) and optionally the global beacon group (`FF0E::B:FFFD`) to discover endpoints dynamically. Static `-retry-endpoints` seeds the registry at lowest priority (`Tier=0xFF, Preference=0`).
 
 Group address assignments for beacons and the control channel are defined in:
 
@@ -614,7 +619,7 @@ subtree-exclude = "abc123...,def456..."  (hex, 32-byte each)
 
 ## Group Announcement Protocol (BRC-127)
 
-BRC-127 defines the dynamic subtree group announcement protocol. Producers advertise which SubtreeIDs belong to which logical group by sending 64-byte `SubtreeAnnounce` datagrams (`MsgType 0x30`) to the proxy TCP ingress. The proxy forwards these verbatim to the control-plane multicast group (`CtrlGroupSubtreeAnnounce = 0xFFFFFC`). Listeners join this group and populate a `subtreegroup.Registry`, automatically accepting frames from announced subtrees without static configuration.
+BRC-127 defines the dynamic subtree group announcement protocol. Producers advertise which SubtreeIDs belong to which logical group by sending 64-byte `SubtreeAnnounce` datagrams (`MsgType 0x30`) to the proxy TCP ingress. The proxy forwards these verbatim to the control-plane multicast group (`CtrlGroupSubtreeAnnounce = 0xFFFC`). Listeners join this group and populate a `subtreegroup.Registry`, automatically accepting frames from announced subtrees without static configuration.
 
 Announcements must be re-sent before their TTL expires (recommended: interval 10–30 s; TTL ≥ 3× interval). If announcements cease, entries expire and frames are dropped.
 

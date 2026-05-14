@@ -19,7 +19,7 @@ Retry endpoints cache BRC-124 frames received via multicast and respond to NACK 
 
 ## ADVERT Wire Format (`MsgType 0x20`) — 56 bytes
 
-Sent periodically (default **60 s**, configurable via `-beacon-interval`) to the beacon group determined by `-beacon-scope`. Valid values: `site` → `FF05::FF:FFFD`; `global` → `FF0E::FF:FFFD`; `both` → sends to both site and global groups. Listeners derive TTL as `3 × BeaconInterval`. Org scope (`FF08::FF:FFFD`, scope byte `0x08`) is defined in the wire format but not yet a supported `-beacon-scope` value.
+Sent periodically (default **60 s**, configurable via `-beacon-interval`) to the beacon group determined by `-beacon-scope`. Valid values: `site` → `FF05::B:FFFD`; `global` → `FF0E::B:FFFD`; `both` → sends to both site and global groups. Listeners derive TTL as `3 × BeaconInterval`. Org scope (`FF08::B:FFFD`, scope byte `0x08`) is defined in the wire format but not yet a supported `-beacon-scope` value.
 
 ```text
 Offset  Size  Field
