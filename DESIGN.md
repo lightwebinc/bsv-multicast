@@ -22,6 +22,7 @@ This document provides a comprehensive design overview of the entire multicast e
 - [Component Deep Dives](#component-deep-dives)
 - [Retransmission and Reliability](#retransmission-and-reliability)
 - [Subtree Filtering](#subtree-filtering)
+- [Fragmentation (BRC-130)](#fragmentation-brc-130)
 - [Group Announcement Protocol (BRC-127)](#group-announcement-protocol-brc-127)
 - [Testing and Validation](#testing-and-validation)
 - [Deployment Considerations](#deployment-considerations)
@@ -353,6 +354,10 @@ Key fields: Network magic, Protocol version, Frame version, Transaction ID, Hash
 
 **→ [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md)**
 
+**BRC-130 (Fragmentation):** BRC-130 fragments large transactions that exceed the path MTU into a sequence of fixed-size UDP datagrams (Frame Version `0x03`). Bytes 0–91 are layout-identical to BRC-124, preserving firewall rule and classifier compatibility. The proxy stamps an independent `HashKey`/`SeqNum` per fragment so that individual lost fragments can be retransmitted via the standard BRC-126 NACK mechanism without changes to the retry endpoint. Listeners reassemble fragments keyed on `TxID`, verify `SHA256d`, and deliver a synthetic BRC-124 frame to the normal filter → egress → gap-tracking pipeline.
+
+**→ [BRC-130 Fragmentation](docs/brc-130-fragmentation.md)**
+
 ---
 
 ## Component Deep Dives
@@ -407,6 +412,7 @@ TCP Listener (1 goroutine)
 - NACK dispatch to configurable retry endpoints
 - Egress via UDP or TCP (optional strip-header mode)
 - Multicast egress for domain bridging (re-emit filtered frames to a separate multicast address space)
+- BRC-130 fragment reassembly (`reassembly` package) with SHA256d verification
 
 **Architecture:**
 
@@ -422,6 +428,7 @@ Receive Workers (NUM_WORKERS goroutines, SO_REUSEPORT)
   ┌─────────┐  │     • egress.Send (unicast)
   │ Worker N│──│     • mcastEgr.Send (multicast, optional)
   └─────────┘  │     • nack.Tracker.Observe
+               │     • reassembly.Buffer (BRC-130 fragments)
                │
 
 SubtreeAnnounceListener (1 goroutine, BRC-127)
@@ -493,7 +500,7 @@ Retransmit Egress
 
 **Purpose:** Shared protocol primitives imported by proxy, listener, and retry endpoint.
 
-**Packages:** `frame` (BRC-12/BRC-124/BRC-128 encode/decode), `shard` (txid → multicast group derivation), `seqhash` (XXH64 flow hash for HashKey), `sequence` (per-flow monotonic counters).
+**Packages:** `frame` (BRC-12/BRC-124/BRC-128/BRC-130 encode/decode, `EncodeFragment`/`DecodeFragment`/`IsFragment`), `shard` (txid → multicast group derivation), `seqhash` (XXH64 flow hash for HashKey), `sequence` (per-flow monotonic counters).
 
 **→ [bitcoin-shard-common README](https://github.com/lightwebinc/bitcoin-shard-common)** — package API, [protocol spec](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md)
 
@@ -619,6 +626,33 @@ subtree-exclude = "abc123...,def456..."  (hex, 32-byte each)
 
 - BRC-12 frames have zero SubtreeID
 - Only pass subtree filter if zero is explicitly listed in `subtree-include`
+
+---
+
+## Fragmentation (BRC-130)
+
+BRC-130 solves the path-MTU problem for large BSV transactions without relying on IP-layer fragmentation (unreliable on multicast paths). The proxy slices the payload into _k_ equal-sized chunks and emits _k_ independent UDP datagrams. Each datagram carries a 104-byte header that is layout-compatible with BRC-124 at bytes 0–91 (`FrameVer=0x03`).
+
+**Fragment data size** at standard Ethernet MTU (1500 B): `1500 − 40 − 8 − 104 = 1348 bytes/fragment`.
+
+**Per-fragment gap tracking:** The proxy stamps an independent `HashKey`/`SeqNum` per fragment so each fragment is treated as a separate frame. Individual lost fragments are recovered via the standard BRC-126 NACK mechanism — no changes to the retry endpoint.
+
+**Listener reassembly (`reassembly` package):**
+
+```text
+ Fragment arrives (FrameVer=0x03)
+   → Allocate slot (TxID key, OrigPayloadLen buffer, FragTotal bitmask, TTL)
+   → Copy fragment data at offset = FragIndex × fragDataSize
+   → All bits set → SHA256d verify → deliver synthetic BRC-124 frame
+   → filter → egress → gap-tracking (unchanged)
+
+ TTL expiry (10 s): drop slot; bsl_reassembly_abandoned_total++
+ Hash mismatch:     drop slot; bsl_reassembly_hash_mismatch_total++
+```
+
+Key metrics: `bsl_reassembly_started_total`, `bsl_reassembly_completed_total`, `bsl_reassembly_abandoned_total`, `bsl_reassembly_hash_mismatch_total`.
+
+**→ [BRC-130 Fragmentation](docs/brc-130-fragmentation.md)** — header layout, fragDataSize derivation, error handling, constants reference
 
 ---
 
@@ -809,6 +843,7 @@ All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
 - [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md) — SubtreeAnnounce wire format, proxy forwarding, listener integration
 - [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md) — EF payload format, detection, infrastructure impact
 - [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md) — IPv6 address scheme, control-plane indices, beacon groups
+- [BRC-130 Fragmentation](docs/brc-130-fragmentation.md) — fragment header layout, fragDataSize, per-fragment NACK, reassembly algorithm, metrics
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end pipeline diagrams, escalation state machine, flood prevention
 
 **Services:**
@@ -882,8 +917,9 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 | BRC-12  | 44 bytes    | No                   | No               |
 | BRC-124 | 92 bytes    | Yes (HashKey/SeqNum) | Yes              |
 | BRC-128 | 92 bytes    | Yes (HashKey/SeqNum) | Yes (EF payload) |
+| BRC-130 | 104 bytes   | Yes (per-fragment)   | Yes (fragmented) |
 
 ---
 
-_Document Version: 1.8_  
-_Last Updated: 2026-05-14_
+_Document Version: 1.9_  
+_Last Updated: 2026-05-17_
