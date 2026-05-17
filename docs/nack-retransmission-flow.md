@@ -11,26 +11,26 @@ System-level design document describing the end-to-end NACK retransmission pipel
                          ┌──────────────────────────────────────────────────┐
                          │                                                  │
 BSV Source ──► bitcoin-shard-proxy ──┬──► listener-1 ──► downstream consumer
-              (stamps PrevSeq/CurSeq)│
+              (stamps HashKey/SeqNum) │
                                      ├──► listener-2 ──► downstream consumer
                                      │
                                      └──► bitcoin-retry-endpoint (caches all frames)
 ```
 
-- **Proxy** receives transactions, stamps `PrevSeq`/`CurSeq` (XXH64 hash chain per sender+group), derives shard group from TxID, multicasts to `FF05::<shard>`.
-- **Listeners** subscribe to shard groups, decode frames, track per-group PrevSeq/CurSeq chain breaks, forward to consumers.
-- **Retry endpoint** subscribes to all shard groups, caches raw frames indexed by `CurSeq` (primary) and `PrevSeq` (secondary).
+- **Proxy** receives transactions, stamps `HashKey` (XXH64 of sender+group+subtree) and `SeqNum` (monotonic per-flow counter), derives shard group from TxID, multicasts to `FF05::<shard>`.
+- **Listeners** subscribe to shard groups, decode frames, track per-flow `SeqNum` gaps (keyed by `HashKey`), forward to consumers.
+- **Retry endpoint** subscribes to all shard groups, caches raw frames indexed by `HashKey ∥ SeqNum` (single 16-byte key).
 
 ---
 
 ## 2. Gap Detection & NACK Dispatch
 
 ```text
-Listener receives:  Seq 1, 2, 3, [gap], 6, 7, ...
+Listener receives:  SeqNum 1, 2, 3, [gap], 6, 7, ...
                               │
                               ▼
-              Gap detected: prevSeq=X, curSeq=Z but expected prevSeq=lastCurSeq
-              Key: CurSeq of the missing frame (= incoming PrevSeq)
+              Gap detected: incoming SeqNum (6) > lastSeqNum (3) + 1
+              Missing: SeqNum 4, 5 for this HashKey
                               │
                     ┌─────────┴──────────┐
                     ▼                    ▼
@@ -38,7 +38,7 @@ Listener receives:  Seq 1, 2, 3, [gap], 6, 7, ...
             (suppression)        in Tracker.pending
                     │
                     ▼
-              NACK dispatched (24 bytes, unicast UDP)
+              NACK dispatched (64 bytes, unicast UDP)
               to retry endpoint from registry snapshot
                     │
                     ▼
@@ -57,7 +57,7 @@ Listener receives:  Seq 1, 2, 3, [gap], 6, 7, ...
                 endpoint   & retry
 ```
 
-The NACK carries a `LookupType` (by `PrevSeq` or by `CurSeq`) and the corresponding `LookupSeq` XXH64 value identifying the missing frame. The listener opens a per-request ephemeral UDP socket (`[::]:0`), sends the NACK, and waits up to 300 ms for a single response.
+The NACK carries the `HashKey` (stable per-flow identifier) and `StartSeq`/`EndSeq` (missing sequence range). The retry endpoint looks up the frame using the 16-byte cache key `HashKey ∥ StartSeq`. The listener opens a per-request ephemeral UDP socket (`[::]:0`), sends the NACK, and waits up to 300 ms for a single response.
 
 ---
 
@@ -202,7 +202,7 @@ No protocol changes required. Network team extends multicast fabric via MP-BGP.
 | Mechanism                | Layer          | Effect                                                                                            |
 | ------------------------ | -------------- | ------------------------------------------------------------------------------------------------- |
 | Cache TTL (60 s)         | Retry endpoint | Frames expire naturally; bounds retransmit window                                                 |
-| Multi-tier rate limiting | Retry endpoint | Per-IP, per-chain, per-sequence (pre-lookup, silent drop); per-group (post-lookup, ACK preserved) |
+| Multi-tier rate limiting | Retry endpoint | Per-IP, per-HashKey, per-SeqNum (pre-lookup, silent drop); per-group (post-lookup, ACK preserved) |
 | `Tracker.Fill()`         | Listener       | Multicast repair cancels pending NACKs for all listeners                                          |
 | Jitter hold-off          | Listener       | Randomised delay before first NACK suppresses duplicates                                          |
 | Exponential backoff      | Listener       | Reduces NACK rate on persistent gaps                                                              |

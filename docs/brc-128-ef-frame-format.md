@@ -19,8 +19,8 @@ The header is identical to BRC-124. Only the payload format differs.
 | 6      | 1    | —     | Frame version  | 0x02 (BRC-124 — unchanged)                               |
 | 7      | 1    | —     | Reserved       | 0x00                                                     |
 | 8      | 32   | 8B    | Transaction ID | Raw 256-bit txid (internal byte order)                   |
-| 40     | 8    | 8B    | PrevSeq        | XXH64 of previous chain state; 0 = unset (proxy-stamped) |
-| 48     | 8    | 8B    | CurSeq         | XXH64 of current chain state; 0 = unset (proxy-stamped)  |
+| 40     | 8    | 8B    | HashKey        | Stable per-flow XXH64 identifier; 0 = unstamped          |
+| 48     | 8    | 8B    | SeqNum         | Monotonic per-flow counter (starts at 1); 0 = unstamped  |
 | 56     | 32   | 8B    | Subtree ID     | 32-byte batch identifier; zeros = unset                  |
 | 88     | 4    | 8B    | Payload length | uint32 BE                                                |
 | 92     | \*   | —     | EF tx payload  | BRC-30 Extended Format transaction bytes                 |
@@ -61,9 +61,9 @@ The EF marker is part of the BRC-30 spec and cannot collide with a valid BRC-12 
 
 ## Infrastructure Impact
 
-- **Proxy** — no changes. Forwards verbatim, stamps PrevSeq/CurSeq. Payload is opaque.
+- **Proxy** — no changes. Forwards verbatim, stamps HashKey/SeqNum. Payload is opaque.
 - **Listener** — no changes. Header decode, shard/subtree filter, gap tracking all work identically.
-- **Retry endpoint** — no changes. Caches by CurSeq/PrevSeq, not payload content.
+- **Retry endpoint** — no changes. Caches by `HashKey ∥ SeqNum`, not payload content.
 - **Downstream consumers** — must inspect payload bytes 4–9 to choose BRC-12 or BRC-30 parser.
 
 BRC-124 and BRC-128 frames coexist on the same multicast groups.

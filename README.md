@@ -21,7 +21,7 @@ A high-throughput, horizontally-scalable transaction distribution system for Bit
 ## Documentation
 
 - **[DESIGN.md](DESIGN.md)** — Comprehensive design overview: architecture, data flow, sharding, frame format, components, retransmission, subtree filtering, deployment
-- [BRC-124 Frame Format](docs/brc-124-frame-format.md) — 92-byte wire format with PrevSeq/CurSeq hash chain
+- [BRC-124 Frame Format](docs/brc-124-frame-format.md) — 92-byte wire format with HashKey/SeqNum per-flow sequencing
 - [BRC-126 Retransmission Protocol](docs/brc-126-retransmission-protocol.md) — NACK/ACK/MISS, ADVERT beacon, tier/preference model
 - [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md) — Dynamic subtree-to-group binding protocol
 - [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md) — BRC-30 EF payloads within BRC-124 frames

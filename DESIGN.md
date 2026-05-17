@@ -34,9 +34,9 @@ This document provides a comprehensive design overview of the entire multicast e
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Shard**          | A deterministic partition of the transaction space. Each shard maps to one IPv6 multicast group; group membership is derived from the TxID.                                                   |
 | **Subtree**        | An ordered set of related transactions sharing a common 32-byte batch identifier (`SubtreeID`, or Subtree Merkle root hash). Used for transaction specialization and block template assembly. |
-| **Gap**            | A detected break in the PrevSeq/CurSeq hash chain, indicating one or more missing frames.                                                                                                     |
-| **Chain**          | The per-(sender IP, multicast group) sequence of frames linked by PrevSeq/CurSeq hash values.                                                                                                 |
-| **NACK**           | Negative acknowledgement — a 24-byte datagram requesting retransmission of a missing frame.                                                                                                   |
+| **Gap**            | A detected break in the monotonic `SeqNum` counter for a flow, indicating one or more missing frames.                                                                                          |
+| **Flow**           | The per-(sender IP, multicast group, subtree) sequence of frames sharing a common `HashKey`.                                                                                                    |
+| **NACK**           | Negative acknowledgement — a 64-byte datagram requesting retransmission of a missing frame.                                                                                                   |
 | **ACK**            | Positive acknowledgement — a 16-byte response confirming a retransmit was dispatched.                                                                                                         |
 | **MISS**           | Cache-miss response — a 16-byte response indicating the requested frame is not cached; triggers immediate escalation.                                                                         |
 | **ADVERT**         | A 56-byte beacon datagram advertising a retry endpoint's address, tier, and preference.                                                                                                       |
@@ -198,7 +198,7 @@ The project is organized into multiple repositories, each with a specific respon
 2. bitcoin-shard-proxy
    ┌─────────────────────────────────────────────────────────────────────────┐
    │ • Decode frame (extract TxID)                                           │
-   │ • Stamp PrevSeq/CurSeq in-place (BRC-124 only, bytes 40–55)             │
+   │ • Stamp HashKey/SeqNum in-place (BRC-124 only, bytes 40–55)             │
    │ • Derive multicast group: FF05::<groupIndex> from TxID top bits         │
    │ • Forward verbatim to all egress interfaces                             │
    └─────────────────────────────────────────────────────────────────────────┘
@@ -217,8 +217,8 @@ The project is organized into multiple repositories, each with a specific respon
    │ Miner / Exchange            │         │ • Join configured shard groups via MLD   │
    │ (consumes directly)         │         │ • Apply shard filter (defense-in-depth)  │
    └─────────────────────────────┘         │ • Apply subtree filter (include/exclude) │
-                                           │ • Track sequence gaps per group          │
-                                           │   (PrevSeq/CurSeq hash-chain breaks)     │
+                                           │ • Track sequence gaps per flow           │
+                                           │   (HashKey/SeqNum monotonic counter)      │
                                            │ • Forward matching frames to egress_addr │
                                            │   (UDP or TCP, optional strip-header)    │
                                            └──────────────────────────────────────────┘
@@ -232,15 +232,15 @@ The project is organized into multiple repositories, each with a specific respon
 ```text
 bitcoin-shard-listener detects gap:
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ • PrevSeq ≠ lastCurSeq (hash-chain break detected)                      │
-│ • Register missing frame in pending map (key = incoming PrevSeq)        │
+│ • SeqNum > lastSeqNum + 1 (gap detected for this HashKey)               │
+│ • Register missing frame(s) in pending map (key = HashKey + SeqNum)    │
 │ • Background sweeper dispatches NACK after nack-gap-ttl                 │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 NACK Dispatch (UDP to retry-endpoint:9300)
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ 24-byte BRC-126 NACK datagram (see BRC-126 wire format)                  │
+│ 64-byte BRC-126 NACK datagram (see BRC-126 wire format)                  │
 │ Endpoints tried by (Tier ASC, Preference DESC); MISS triggers escalation│
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -248,8 +248,8 @@ NACK Dispatch (UDP to retry-endpoint:9300)
 bitcoin-retry-endpoint
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ • Receive NACK on port 9300                                             │
-│ • Rate limit (IP, LookupSeq)                                            │
-│ • Lookup frame in cache by LookupType + LookupSeq (dual-index)          │
+│ • Rate limit (IP, HashKey, SeqNum)                                      │
+│ • Lookup frame in cache by HashKey ∥ SeqNum (single 16-byte key)        │
 │ • If found: re-multicast to FF05::<shard>:9001 (if -retransmit-multicast│
 │   enabled); unicast to NACK source (if -retransmit-unicast); send ACK   │
 │ • If not found: send 16-byte MISS (listener escalates to next endpoint) │
@@ -347,7 +347,7 @@ The BRC-124 data-plane frame format (92-byte header, replacing the legacy 44-byt
 
 **→ [BRC-124 Frame Format](docs/brc-124-frame-format.md)**
 
-Key fields: Network magic, Protocol version, Frame version, Transaction ID, PrevSeq (XXH64), CurSeq (XXH64), Subtree ID, Payload length, and BSV tx payload. Both BRC-12 (legacy) and BRC-124/BRC-128 frames are accepted by all components.
+Key fields: Network magic, Protocol version, Frame version, Transaction ID, HashKey (XXH64 per-flow identifier), SeqNum (monotonic per-flow counter), Subtree ID, Payload length, and BSV tx payload. Both BRC-12 (legacy) and BRC-124/BRC-128 frames are accepted by all components.
 
 **BRC-128 (Extended Format):** BRC-128 frames carry BRC-30 Extended Format (EF) transaction payloads inside the standard 92-byte BRC-124 header. Frame Version remains `0x02`; the payload is self-identifying via the 6-byte EF marker at payload bytes 4–9 (`0x000000000000EF`). All infrastructure components are payload-agnostic — no changes required to proxy, listener, or retry endpoint.
 
@@ -363,7 +363,7 @@ Key fields: Network magic, Protocol version, Frame version, Transaction ID, Prev
 
 **Key Characteristics:**
 
-- Zero-copy forwarding: frame never modified after PrevSeq/CurSeq stamp
+- Zero-copy forwarding: frame never modified after HashKey/SeqNum stamp
 - Multi-CPU design: N UDP workers via SO_REUSEPORT + 1 TCP listener
 - Deterministic: same txid always maps to same group
 - Stateless: no coordination between workers or nodes required
@@ -389,7 +389,7 @@ TCP Listener (1 goroutine)
   └──────────────┘
 ```
 
-**Hot path:** Decode frame → stamp PrevSeq/CurSeq in-place (XXH64, BRC-124 only) → derive multicast group from TxID → `WriteTo` verbatim to all egress interfaces. TCP connections carry the same frame stream plus BRC-127 SubtreeAnnounce control datagrams (forwarded verbatim to the announce multicast group).
+**Hot path:** Decode frame → stamp HashKey/SeqNum in-place (BRC-124 only) → derive multicast group from TxID → `WriteTo` verbatim to all egress interfaces. TCP connections carry the same frame stream plus BRC-127 SubtreeAnnounce control datagrams (forwarded verbatim to the announce multicast group).
 
 **→ [bitcoin-shard-proxy Architecture](https://github.com/lightwebinc/bitcoin-shard-proxy/blob/main/docs/architecture.md)** — hot-path detail, configuration reference, metrics
 
@@ -403,7 +403,7 @@ TCP Listener (1 goroutine)
 
 - SO_REUSEPORT multi-worker receive (kernel-level source affinity)
 - Dual-level filtering: MLD group join + userspace shard/subtree filter
-- NORM-inspired gap tracking per group via PrevSeq/CurSeq hash chain
+- NORM-inspired gap tracking per flow via HashKey/SeqNum monotonic counter
 - NACK dispatch to configurable retry endpoints
 - Egress via UDP or TCP (optional strip-header mode)
 - Multicast egress for domain bridging (re-emit filtered frames to a separate multicast address space)
@@ -447,7 +447,7 @@ Gap Tracker Sweeper (100ms interval)
 
 **Filtering:** Dual-level — shard index (MLD group join + userspace filter) and subtree ID (static include/exclude lists, plus dynamic BRC-127 group membership via `subtreegroup.Registry`). See [Subtree Filtering](#subtree-filtering) and [BRC-127](#group-announcement-protocol-brc-127) below.
 
-**Gap tracking:** Per-group PrevSeq/CurSeq hash-chain verification. Chain breaks register gap entries; a background sweeper dispatches NACKs with exponential backoff. Gaps are auto-closed when the missing frame arrives via multicast or explicit NACK ACK.
+**Gap tracking:** Per-flow `SeqNum` monotonic counter verification (keyed by `HashKey`). Gaps (`SeqNum` advances by >1) register gap entries; a background sweeper dispatches NACKs with exponential backoff. Gaps are auto-closed when the missing frame arrives via multicast or explicit NACK ACK.
 
 **→ [bitcoin-shard-listener Architecture](https://github.com/lightwebinc/bitcoin-shard-listener/blob/main/docs/architecture.md)** — filter behavior table, gap tracker internals, configuration reference, metrics
 
@@ -460,8 +460,8 @@ Gap Tracker Sweeper (100ms interval)
 **Key Characteristics:**
 
 - Single-worker multicast receiver (SO_REUSEPORT limitation)
-- In-memory cache (freecache, 60 s TTL, GC-free, dual-index by CurSeq and PrevSeq)
-- Multi-tier rate limiting: per-IP, per-chain (ChainID), per-sequence (LookupSeq) pre-lookup; per-group (groupIdx) post-lookup (ACK still sent on throttle)
+- In-memory cache (freecache, 60 s TTL, GC-free, single 16-byte key: `HashKey ∥ SeqNum`)
+- Multi-tier rate limiting: per-IP, per-HashKey, per-SeqNum pre-lookup; per-group (groupIdx) post-lookup (ACK still sent on throttle)
 - Sharding-based multicast egress for retransmitted frames
 
 **Architecture:**
@@ -483,7 +483,7 @@ Retransmit Egress
   └──────────────────┘
 ```
 
-**Cache:** Dual-index by CurSeq (primary) and PrevSeq (secondary pointer), supporting both forward and backward NACK lookups. Default backend: in-process freecache (60 s TTL, GC-free). Optional: Redis for cross-instance shared cache.
+**Cache:** Single 16-byte key (`HashKey ∥ SeqNum`) → raw frame. Default backend: in-process freecache (60 s TTL, GC-free). Optional: Redis for cross-instance shared cache.
 
 **→ [bitcoin-retry-endpoint Architecture](https://github.com/lightwebinc/bitcoin-retry-endpoint/blob/main/docs/architecture.md)** — cache encoding, rate-limit configuration, configuration reference, metrics
 
@@ -493,7 +493,7 @@ Retransmit Egress
 
 **Purpose:** Shared protocol primitives imported by proxy, listener, and retry endpoint.
 
-**Packages:** `frame` (BRC-12/BRC-124/BRC-128 encode/decode), `shard` (txid → multicast group derivation), `seqhash` (XXH64 hash chain for PrevSeq/CurSeq), `sequence` (per-shard monotonic counters).
+**Packages:** `frame` (BRC-12/BRC-124/BRC-128 encode/decode), `shard` (txid → multicast group derivation), `seqhash` (XXH64 flow hash for HashKey), `sequence` (per-flow monotonic counters).
 
 **→ [bitcoin-shard-common README](https://github.com/lightwebinc/bitcoin-shard-common)** — package API, [protocol spec](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md)
 
@@ -503,7 +503,7 @@ Retransmit Egress
 
 ### NACK Protocol (BRC-126)
 
-Listeners detect sequence gaps and send 24-byte NACK datagrams to retry endpoints. The full wire format, response protocol, and escalation state machine are defined in:
+Listeners detect sequence gaps and send 64-byte NACK datagrams to retry endpoints. The full wire format, response protocol, and escalation state machine are defined in:
 
 **→ [BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.md)**
 
@@ -523,7 +523,7 @@ Listeners detect sequence gaps and send 24-byte NACK datagrams to retry endpoint
 2. Background sweeper (100ms interval)
    → If past nextAttempt and retries < nack-max-retries:
      → Select endpoint from registry snapshot (Tier ASC, Preference DESC)
-     → Open ephemeral UDP socket; send 24-byte NACK; wait ≤300ms
+     → Open ephemeral UDP socket; send 64-byte NACK; wait ≤300ms
      → ACK received: cancel gap entry
      → MISS received: advance endpoint; retry immediately (no backoff)
      → Timeout: exponential backoff; retry next sweep
@@ -551,7 +551,7 @@ The end-to-end NACK retransmission flow — from gap detection through escalatio
 
 ### Retry Endpoint Processing
 
-The retry endpoint applies four-tier rate limiting (per-IP, per-chain, per-sequence pre-lookup; per-group post-lookup), performs a dual-index cache lookup, and retransmits via multicast and/or unicast on a hit. On a miss, a 16-byte MISS response triggers immediate listener escalation. The group-tier limiter skips the retransmit but still sends ACK so the listener does not escalate unnecessarily.
+The retry endpoint applies four-tier rate limiting (per-IP, per-HashKey, per-SeqNum pre-lookup; per-group post-lookup), performs a single-key cache lookup (`HashKey ∥ SeqNum`), and retransmits via multicast and/or unicast on a hit. On a miss, a 16-byte MISS response triggers immediate listener escalation. The group-tier limiter skips the retransmit but still sends ACK so the listener does not escalate unnecessarily.
 
 See **[BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.md)** and **[bitcoin-retry-endpoint Architecture](https://github.com/lightwebinc/bitcoin-retry-endpoint/blob/main/docs/architecture.md)** for the full processing pipeline and rate-limit configuration.
 
@@ -804,7 +804,7 @@ All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
 **Protocol:**
 
 - [Wire Protocol Specification](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md) — Complete BRC-12/BRC-124/BRC-128 frame format
-- [BRC-124 Frame Format](docs/brc-124-frame-format.md) — 92-byte header, PrevSeq/CurSeq hash chain, backward compatibility
+- [BRC-124 Frame Format](docs/brc-124-frame-format.md) — 92-byte header, HashKey/SeqNum per-flow sequencing, backward compatibility
 - [BRC-126 Retransmission Protocol](docs/brc-126-retransmission-protocol.md) — NACK/ACK/MISS wire formats, ADVERT beacon, tier/preference model
 - [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md) — SubtreeAnnounce wire format, proxy forwarding, listener integration
 - [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md) — EF payload format, detection, infrastructure impact
@@ -877,11 +877,11 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 
 ### Frame Version Summary
 
-| Version | Header Size | Hash-Chain Seq       | Subtree Support  |
+| Version | Header Size | Flow Sequencing      | Subtree Support  |
 | ------- | ----------- | -------------------- | ---------------- |
 | BRC-12  | 44 bytes    | No                   | No               |
-| BRC-124 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes              |
-| BRC-128 | 92 bytes    | Yes (PrevSeq/CurSeq) | Yes (EF payload) |
+| BRC-124 | 92 bytes    | Yes (HashKey/SeqNum) | Yes              |
+| BRC-128 | 92 bytes    | Yes (HashKey/SeqNum) | Yes (EF payload) |
 
 ---
 
