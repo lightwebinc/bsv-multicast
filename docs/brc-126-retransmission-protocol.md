@@ -53,9 +53,9 @@ Offset  Size  Field
 
 ---
 
-## NACK Wire Format (`MsgType 0x10`) — 56 bytes
+## NACK Wire Format (`MsgType 0x10`) — 64 bytes
 
-Sent by listener to retry endpoint on gap detection. Requests a frame by its `CurSeq` (backward lookup) or by its `PrevSeq` (forward lookup).
+Sent by listener to retry endpoint on gap detection. Identifies the missing frame by its flow (`HashKey`) and sequence number (`StartSeq`). `StartSeq == EndSeq` for single-frame retrieval; range requests (`StartSeq < EndSeq`) are reserved for future use.
 
 ```text
 Offset  Size  Field
@@ -63,15 +63,18 @@ Offset  Size  Field
      0     4  Magic (0xE3E1F3E8)
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x10 (NACK)
-     7     1  LookupType  — 0x00 = by PrevSeq (forward), 0x01 = by CurSeq (backward)
-     8     8  LookupSeq   — XXH64 value to look up in the cache
-    16     8  ChainID     — initial CurSeq of the hash-chain; 0x0 = gap not yet chain-attributed
-    24    32  SubtreeID   — 32-byte batch identifier; zeros = unset
+     7     1  Flags (reserved 0x00)
+     8     8  HashKey   — stable per-flow XXH64 identifier from the BRC-124 frame
+    16     8  StartSeq  — first missing SeqNum (inclusive)
+    24     8  EndSeq    — last missing SeqNum (inclusive); equals StartSeq for single-frame
+    32    32  SubtreeID — 32-byte batch identifier; zeros = unset
 ```
 
-> **ChainID** (offset 16) carries the `chainID` assigned by the listener's multi-chain gap tracker — the `CurSeq` of the first frame observed for this chain. The retry endpoint uses ChainID as an additional rate-limiting key (per-flow NACK storm cap). A value of `0` means the gap is an orphan. Rate-limiting on `ChainID=0` would bucket all unattributed gaps from the same source together and prematurely exhaust a shared limit, so the chain check is skipped for `ChainID=0`.
+> **HashKey** (offset 8) is the `HashKey` field from the BRC-124 frame, computed as `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)`. It uniquely identifies the flow. The retry endpoint uses `HashKey` as a per-flow rate-limiting key (NACK storm cap). A value of `0` bypasses the per-flow check.
 
-> **SubtreeID** (offset 24) scopes the cache key lookup to a single subtree's sequence chain. The retry endpoint prepends it to the `LookupSeq` when building the 41-byte cache key (`0x01 ∥ SubtreeID ∥ LookupSeq` for primary; `0x00 ∥ SubtreeID ∥ LookupSeq` for secondary). This prevents false cache hits when two different subtrees happen to produce the same `CurSeq` hash value.
+> **StartSeq / EndSeq** (offsets 16/24) specify the range of missing sequence numbers. For current single-frame retrieval, `StartSeq == EndSeq`. The retry endpoint looks up the frame using the 16-byte cache key `HashKey ∥ StartSeq`.
+
+> **SubtreeID** (offset 32) is carried for informational purposes; the cache key is `HashKey ∥ SeqNum` and does not require SubtreeID for disambiguation.
 
 ---
 
@@ -86,7 +89,7 @@ Offset  Size  Field
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x11 (MISS)
      7     1  Flags (reserved 0x00)
-     8     8  CurSeq — always 0 on MISS
+     8     8  SeqNum — always 0 on MISS
 ```
 
 ---
@@ -102,7 +105,7 @@ Offset  Size  Field
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x12 (ACK)
      7     1  Flags (0x01=multicast_sent)
-     8     8  CurSeq — CurSeq of the retransmitted frame
+     8     8  SeqNum — SeqNum of the retransmitted frame
 ```
 
 ---
