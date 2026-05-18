@@ -40,11 +40,11 @@ The BRC-131 header is **layout-identical** to a BRC-124 header. Infrastructure c
 | 8      | 32   | 8B    | ContentID      | BlockHash (announce) or CoinbaseTxID (coinbase)           |
 | 40     | 8    | 8B    | HashKey        | XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros); stamped by proxy     |
 | 48     | 8    | 8B    | SeqNum         | Per-sender monotonic counter; stamped by proxy            |
-| 56     | 32   | 8B    | Reserved32     | All zeros (no subtree ID for control-plane frames)        |
+| 56     | 32   | 8B    | LayoutPad32    | All zeros. Keeps the header at 92 bytes so all infrastructure components share `HeaderSize`, one TCP read sequence, and one stamping path. |
 | 88     | 4    | 8B    | PayloadLen     | Size of payload in bytes (uint32 BE)                      |
 | 92     | \*   | —     | Payload        | MsgType-specific payload (see below)                      |
 
-**Key distinction from BRC-124:** byte 7 carries `MsgType` rather than `Reserved=0x00`. The Reserved32 field at bytes 56–87 is always zeros (there is no subtree ID for control-plane frames; every subscriber receives every block announcement).
+**Key distinction from BRC-124:** byte 7 carries `MsgType` rather than `Reserved=0x00`. The `LayoutPad32` field at bytes 56–87 is always zeros — block frames have no subtree scope, so there is no meaningful value to place here. The field exists as a deliberate layout trade-off: keeping the BRC-131 header at exactly 92 bytes means the proxy TCP reader (`read 44 bytes → detect FrameVer → read 48 more`), the stamping path, the listener, and the retry endpoint all share the single `HeaderSize` constant with no special-casing. The cost is 32 zero bytes per frame, which is negligible relative to any real payload.
 
 ---
 
@@ -90,7 +90,7 @@ The payload for a `CoinbaseTx` frame (`MsgType=0x02`) is the raw serialized coin
 
 BRC-131 frames participate in the same NACK-based reliability mechanism as BRC-124 frames:
 
-- The proxy stamps `HashKey` and `SeqNum` in-place before forwarding. `HashKey` is computed as XXH64 of `(senderIPv6 ∥ ctrlGroupIdx ∥ zeroSubtreeID)` where `ctrlGroupIdx = 0xFFFE`. `SeqNum` is a monotonic per-sender counter.
+- The proxy stamps `HashKey` and `SeqNum` in-place before forwarding. `HashKey` is computed as `XXH64(senderIPv6 ∥ ctrlGroupIdx ∥ zeroSubtreeID)` where `ctrlGroupIdx = 0xFFFE`. The all-zero subtree input reflects that block frames have no subtree scope; the `LayoutPad32` field on the wire is the visual counterpart of that. `SeqNum` is a monotonic per-sender counter.
 - If `SeqNum` is already non-zero when the proxy receives the frame, it is forwarded verbatim (pre-stamped path).
 - Listeners detect gaps by comparing consecutive `SeqNum` values on the `(HashKey, ctrlGroupIdx, zeroSubtreeID)` flow and dispatch BRC-126 NACKs to retry endpoints.
 - Retry endpoints join the `FF0E::B:FFFE` group and cache all BRC-131 frames by `HashKey ∥ SeqNum`. On NACK, the retransmitted frame is sent back to `FF0E::B:FFFE` (the control group), not to a shard group.
