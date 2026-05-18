@@ -25,7 +25,9 @@ A high-throughput, horizontally-scalable transaction distribution system for Bit
 - [BRC-126 Retransmission Protocol](docs/brc-126-retransmission-protocol.md) — NACK/ACK/MISS, ADVERT beacon, tier/preference model
 - [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md) — Dynamic subtree-to-group binding protocol
 - [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md) — BRC-30 EF payloads within BRC-124 frames
-- [Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md) — IPv6 address scheme, control-plane indices
+- [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md) — IPv6 address scheme, control-plane indices
+- [BRC-130 Fragmentation](docs/brc-130-fragmentation.md) — Large-transaction fragmentation; per-fragment NACK; listener reassembly
+- [BRC-131 Block Announcement Protocol](docs/brc-131-block-announcements.md) — BlockAnnounce/CoinbaseTx frame types; control-group routing
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end pipeline diagrams
 
 ## License
