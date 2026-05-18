@@ -22,7 +22,8 @@ Bytes 0–91 are **layout-identical** to a BRC-124 header. Existing infrastructu
 | 92     | 4    | 4B    | OrigPayloadLen  | Total unfragmented payload length (uint32 BE)                  |
 | 96     | 2    | 2B    | FragIndex       | 0-based index of this fragment (uint16 BE)                     |
 | 98     | 2    | 2B    | FragTotal       | Total number of fragments in this transaction (uint16 BE)      |
-| 100    | 4    | 4B    | Reserved2       | 0x00000000                                                     |
+| 100    | 1    | 1B    | OrigFrameVer    | Original FrameVer: `0x00`/`0x02`=V2, `0x04`=V4 block, `0x05`=V5 subtree data |
+| 101    | 3    | 1B    | Reserved2       | `0x000000`                                                     |
 | 104    | \*   | —     | Fragment data   | Slice of the original payload (PayloadLen bytes)               |
 
 ---
@@ -53,8 +54,11 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 1. **Slot allocation** — On first fragment for a TxID, allocate an `OrigPayloadLen`-byte buffer, a `FragTotal`-bit received-fragment bitmask, and a TTL timer.
 2. **Fragment placement** — Copy data into buffer at `offset = FragIndex × fragDataSize`. Mark the bit.
 3. **Completion** — When all `FragTotal` bits are set, proceed to verification.
-4. **Hash verification** — Compute `SHA256(SHA256(buffer))` and compare to TxID. Mismatch → drop + increment `bsl_reassembly_hash_mismatch_total`.
-5. **Delivery** — Construct a synthetic BRC-124 frame (FrameVer = 0x02) and route through the normal filter → egress → gap-tracking path.
+4. **Completion callback** — The reassembly buffer invokes the callback registered for the given `OrigFrameVer`:
+   - `OrigFrameVer == 0x00 / 0x02` → SHA256d verification (`SHA256(SHA256(buffer)) == TxID`); deliver as synthetic BRC-124 frame.
+   - `OrigFrameVer == 0x04` → Deliver as synthetic BRC-131 block control frame; route through `processBlockFrame`.
+   - `OrigFrameVer == 0x05` → Deliver as synthetic BRC-132 subtree data frame; SHA256d does **not** apply (SubtreeID is a Merkle root, not a payload hash); route through `processSubtreeDataFrame`.
+5. **Delivery** — Route the reassembled frame through the normal egress and gap-tracking path for its frame version.
 6. **TTL eviction** — Slots not completed within 10 s are discarded; increment `bsl_reassembly_abandoned_total`.
 7. **Slot cap** — Default maximum 4096 concurrent slots; oldest incomplete slot evicted on overflow.
 8. **Duplicates** — Same TxID + FragIndex silently ignored.
@@ -102,6 +106,9 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 | Name                | Value | Hex    | Description                              |
 | ------------------- | ----- | ------ | ---------------------------------------- |
 | FrameVerV3          | 3     | 0x03   | BRC-130 fragment frame version           |
+| OrigFrameVerV2      | 2     | 0x02   | Original frame is BRC-124 (default)      |
+| OrigFrameVerV4      | 4     | 0x04   | Original frame is BRC-131 block control  |
+| OrigFrameVerV5      | 5     | 0x05   | Original frame is BRC-132 subtree data   |
 | HeaderSizeV3        | 104   | 0x68   | BRC-130 header size in bytes             |
 | IPv6HeaderSize      | 40    | 0x28   | IPv6 header overhead                     |
 | UDPHeaderSize       | 8     | 0x08   | UDP header overhead                      |
@@ -118,3 +125,4 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 - [bitcoin-shard-common/frame](https://github.com/lightwebinc/bitcoin-shard-common/tree/main/frame) — `EncodeFragment`, `DecodeFragment`, `IsFragment`
 - [bitcoin-shard-proxy/forwarder](https://github.com/lightwebinc/bitcoin-shard-proxy/tree/main/forwarder) — proxy-side fragmentation
 - [bitcoin-shard-listener/reassembly](https://github.com/lightwebinc/bitcoin-shard-listener/tree/main/reassembly) — listener-side reassembly
+- [BRC-132: Subtree Data Multicast Protocol](brc-132-subtree-data.md) — `OrigFrameVer=0x05` usage

@@ -103,9 +103,11 @@ Like beacon groups, subtree group announcements support multiple scopes (site-lo
 
 ## Subtree Announcements
 
-Subtree announcements are used to announce the presence of a subtree and its ordered, validated, and linked transaction IDs to other nodes in the network. The subtree is a Merkle tree structure that rolls up into the Merkle root hash, which forms the subtree ID.
+Subtree announcements deliver the full contents of a Merkle subtree (transaction hashes and optional metadata) to all subscribed listeners. The subtree is identified by its Merkle root hash (SubtreeID). BRC-132 (FrameVer 0x05) defines the frame format and fragmentation strategy for subtree data distribution on this channel.
 
-Like beacon groups, subtree announcements support multiple scopes (site-local, organization-local, and global). See the control-plane table above for complete scope and address details.
+Subtree data frames are large (32–48 MB per subtree at 1M transactions) and are fragmented using BRC-130. Each BRC-130 fragment carries `OrigFrameVer = 0x05` so that the reassembly path can deliver the reconstituted payload to the correct handler.
+
+Like beacon groups, subtree announcements support multiple scopes (site-local, organization-local, and global). See the control-plane table above for complete scope and address details. See [BRC-132](brc-132-subtree-data.md) for the frame format specification.
 
 ---
 
