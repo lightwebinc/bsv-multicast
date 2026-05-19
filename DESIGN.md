@@ -25,6 +25,7 @@ This document provides a comprehensive design overview of the entire multicast e
 - [Fragmentation (BRC-130)](#fragmentation-brc-130)
 - [Group Announcement Protocol (BRC-127)](#group-announcement-protocol-brc-127)
 - [Block Announcement Protocol (BRC-131)](#block-announcement-protocol-brc-131)
+- [Subtree Data Protocol (BRC-132)](#subtree-data-protocol-brc-132)
 - [Testing and Validation](#testing-and-validation)
 - [Deployment Considerations](#deployment-considerations)
 
@@ -359,6 +360,10 @@ Key fields: Network magic, Protocol version, Frame version, Transaction ID, Hash
 
 **→ [BRC-130 Fragmentation](docs/brc-130-fragmentation.md)**
 
+**BRC-132 (Subtree Data):** BRC-132 defines Frame Version `0x05` for distributing complete subtree data payloads (transaction hashes and optional fee/size metadata) over the multicast fabric. Frames are delivered to the `CtrlGroupSubtreeAnnounce` group (`FF0X::B:FFFB`). Two message types are defined: `HashesOnly` (32 bytes/node) and `FullNodes` (48 bytes/node, includes fee and size). The 92-byte header is layout-identical to BRC-124. Payloads of 32–48 MB (at 1M nodes) are always fragmented via BRC-130 (`OrigFrameVer=0x05`). Gap tracking and NACK retransmission work identically to BRC-124; the retry endpoint retransmits to `FF0X::B:FFFB` rather than a shard group.
+
+**→ [BRC-132 Subtree Data Protocol](docs/brc-132-subtree-data.md)**
+
 ---
 
 ## Component Deep Dives
@@ -501,7 +506,7 @@ Retransmit Egress
 
 **Purpose:** Shared protocol primitives imported by proxy, listener, and retry endpoint.
 
-**Packages:** `frame` (BRC-12/BRC-124/BRC-128/BRC-130 encode/decode, `EncodeFragment`/`DecodeFragment`/`IsFragment`), `shard` (txid → multicast group derivation), `seqhash` (XXH64 flow hash for HashKey), `sequence` (per-flow monotonic counters).
+**Packages:** `frame` (BRC-12/BRC-124/BRC-128/BRC-130/BRC-132 encode/decode, `EncodeFragment`/`DecodeFragment`/`IsFragment`, `EncodeSubtreeData`/`DecodeSubtreeData`/`IsSubtreeDataFrame`), `shard` (txid → multicast group derivation), `seqhash` (XXH64 flow hash for HashKey), `sequence` (per-flow monotonic counters).
 
 **→ [bitcoin-shard-common README](https://github.com/lightwebinc/bitcoin-shard-common)** — package API, [protocol spec](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md)
 
@@ -684,6 +689,25 @@ For payloads exceeding the path MTU (uncommon for typical block announcements bu
 
 ---
 
+## Subtree Data Protocol (BRC-132)
+
+BRC-132 defines Frame Version `0x05` for distributing complete subtree data payloads — the transaction hashes (and optionally fee/size metadata) that make up a Merkle subtree — over the multicast fabric. This fills the gap between individual transaction distribution (BRC-124) and block-level metadata (BRC-131), enabling subscribers to reconstruct subtree Merkle trees locally and verify block inclusion without fetching individual transactions.
+
+Two message types are defined:
+
+- **HashesOnly (`MsgType 0x01`)** — 32-byte transaction hash per node, plus a 24-byte metadata prefix (TotalFees, TotalSizeBytes, NodeCount) and a conflict set.
+- **FullNodes (`MsgType 0x02`)** — 48-byte entry per node (TxHash + Fee + Size), same prefix and conflict set.
+
+Both types are delivered on the **CtrlGroupSubtreeAnnounce** group (`FF0X::B:FFFB`), the same group used for BRC-127 subtree group announcements but at the lower index `0xFFFB` rather than `0xFFFC`.
+
+The 92-byte header is layout-identical to BRC-124. `HashKey` is computed as `XXH64(senderIPv6 ∥ 0xFFFB ∥ subtreeID)` so each (sender, subtreeID) pair owns an independent sequence stream. Because payloads range from ~32 MB (HashesOnly, 1M nodes) to ~48 MB (FullNodes, 1M nodes), BRC-130 fragmentation is always required in practice; the proxy sets `OrigFrameVer=0x05` in each fragment header. Listener reassembly is keyed by SubtreeID; SHA256d hash verification is skipped (SubtreeID is a Merkle root, not a payload double-hash). Optional post-reassembly Merkle-root recomputation is available via `-subtree-data-verify-merkle`.
+
+Sequence tracking and NACK retransmission are identical to BRC-124 and BRC-131: the retry endpoint joins `FF0X::B:FFFB`, caches BRC-132 frames and their BRC-130 fragments, and retransmits to `FF0X::B:FFFB` on NACK (not to a shard group).
+
+**→ [BRC-132 Subtree Data Protocol](docs/brc-132-subtree-data.md)** — frame header layout, MsgType payload formats, fragmentation rules, Merkle verification, proxy/listener/retry-endpoint changes, error handling, constants reference
+
+---
+
 ## Testing and Validation
 
 ### bitcoin-subtx-generator
@@ -863,6 +887,7 @@ All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
 - [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md) — IPv6 address scheme, control-plane indices, beacon groups
 - [BRC-130 Fragmentation](docs/brc-130-fragmentation.md) — fragment header layout, fragDataSize, per-fragment NACK, reassembly algorithm, metrics
 - [BRC-131 Block Announcement Protocol](docs/brc-131-block-announcements.md) — block frame header, BlockAnnounce + CoinbaseTx payloads, control-group routing, proxy/listener/retry-endpoint changes
+- [BRC-132 Subtree Data Protocol](docs/brc-132-subtree-data.md) — frame header layout, HashesOnly/FullNodes payload formats, fragmentation rules, Merkle verification, proxy/listener/retry-endpoint changes
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end pipeline diagrams, escalation state machine, flood prevention
 
 **Services:**
@@ -938,8 +963,9 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 | BRC-128 | 92 bytes    | Yes (HashKey/SeqNum) | Yes (EF payload) |
 | BRC-130 | 104 bytes   | Yes (per-fragment)   | Yes (fragmented) |
 | BRC-131 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane)  |
+| BRC-132 | 92 bytes    | Yes (per-subtree)    | No (ctrl-plane)  |
 
 ---
 
-_Document Version: 1.10_  
-_Last Updated: 2026-05-18_
+_Document Version: 1.11_  
+_Last Updated: 2026-05-19_
