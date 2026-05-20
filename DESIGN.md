@@ -332,9 +332,9 @@ on-wire default is `0x000B` for IANA conformance.
 
 | Index  | Purpose                         | Scope | Compressed Address |
 | ------ | ------------------------------- | ----- | ------------------ |
-| 0xFFFB | Subtree announce (site)         | FF05  | FF05::B:FFFB       |
-| 0xFFFB | Subtree announce (org)          | FF08  | FF08::B:FFFB       |
-| 0xFFFB | Subtree announce (global)       | FF0E  | FF0E::B:FFFB       |
+| 0xFFFB | Subtree data (site)             | FF05  | FF05::B:FFFB       |
+| 0xFFFB | Subtree data (org)              | FF08  | FF08::B:FFFB       |
+| 0xFFFB | Subtree data (global)           | FF0E  | FF0E::B:FFFB       |
 | 0xFFFC | Subtree Group announce (site)   | FF05  | FF05::B:FFFC       |
 | 0xFFFC | Subtree Group announce (org)    | FF08  | FF08::B:FFFC       |
 | 0xFFFC | Subtree Group announce (global) | FF0E  | FF0E::B:FFFC       |
@@ -368,11 +368,11 @@ Key fields: Network magic, Protocol version, Frame version, Transaction ID, Hash
 
 **BRC-133 (Coinbase Transaction):** BRC-133 formalizes MsgType `0x02` within BRC-131 frames (FrameVer `0x04`) as the canonical wire format for distributing raw coinbase transactions. The ContentID in the frame header carries the SHA256d of the coinbase transaction. Frames are delivered on `CtrlGroupControl` (`FF0E::B:FFFE`); NACK-based retransmission and gap tracking work identically to BRC-131 block announcement frames.
 
-**→ [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-frame.md)**
+**→ [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)**
 
 **BRC-134 (Anchor Transaction):** BRC-134 defines Frame Version `0x06` for distributing chained anchor transactions — the root transaction of a dependent chain — over the control plane. Because all subsequent chain transactions reference the anchor as an input, every subscriber must receive it regardless of shard assignment. The 92-byte header is layout-identical to BRC-124 with `FrameVer=0x06`; the TxID field carries the SHA256d of the anchor transaction. Frames are delivered on `CtrlGroupControl` (`FF0E::B:FFFE`). BRC-130 fragmentation is not defined for BRC-134. Gap tracking and NACK retransmission are identical to BRC-131.
 
-**→ [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-frame.md)**
+**→ [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)**
 
 ---
 
@@ -674,7 +674,7 @@ Key metrics: `bsl_reassembly_started_total`, `bsl_reassembly_completed_total`, `
 
 ## Subtree Group Announcement (BRC-127)
 
-BRC-127 defines the dynamic subtree group announcement protocol. Producers advertise which SubtreeIDs belong to which logical group by sending 64-byte `SubtreeAnnounce` datagrams (`MsgType 0x30`) to the proxy TCP ingress. The proxy forwards these verbatim to the control-plane multicast group (`CtrlGroupSubtreeAnnounce = 0xFFFC`). Listeners join this group and populate a `subtreegroup.Registry`, automatically accepting frames from announced subtrees without static configuration.
+BRC-127 defines the dynamic subtree group announcement protocol. Producers advertise which SubtreeIDs belong to which logical group by sending 64-byte `SubtreeAnnounce` datagrams (`MsgType 0x30`) to the proxy TCP ingress. The proxy forwards these verbatim to the control-plane multicast group (`CtrlGroupSubtreeGroupAnnounce = 0xFFFC`). Listeners join this group and populate a `subtreegroup.Registry`, automatically accepting frames from announced subtrees without static configuration.
 
 Announcements must be re-sent before their TTL expires (recommended: interval 10–30 s; TTL ≥ 3× interval). If announcements cease, entries expire and frames are dropped.
 
@@ -708,7 +708,7 @@ Two message types are defined:
 - **HashesOnly (`MsgType 0x01`)** — 32-byte transaction hash per node, plus a 24-byte metadata prefix (TotalFees, TotalSizeBytes, NodeCount) and a conflict set.
 - **FullNodes (`MsgType 0x02`)** — 48-byte entry per node (TxHash + Fee + Size), same prefix and conflict set.
 
-Both types are delivered on the **CtrlGroupSubtreeAnnounce** group (`FF0X::B:FFFB`), the same group used for BRC-127 subtree group announcements but at the lower index `0xFFFB` rather than `0xFFFC`.
+Both types are delivered on the **CtrlGroupSubtreeAnnounce** group (`FF0X::B:FFFB`). BRC-127 subtree group announcements use a separate group (`CtrlGroupSubtreeGroupAnnounce`, `FF0X::B:FFFC`).
 
 The 92-byte header is layout-identical to BRC-124. `HashKey` is computed as `XXH64(senderIPv6 ∥ 0xFFFB ∥ subtreeID)` so each (sender, subtreeID) pair owns an independent sequence stream. Because payloads range from ~32 MB (HashesOnly, 1M nodes) to ~48 MB (FullNodes, 1M nodes), BRC-130 fragmentation is always required in practice; the proxy sets `OrigFrameVer=0x05` in each fragment header. Listener reassembly is keyed by SubtreeID; SHA256d hash verification is skipped (SubtreeID is a Merkle root, not a payload double-hash). Optional post-reassembly Merkle-root recomputation is available via `-subtree-data-verify-merkle`.
 
@@ -726,7 +726,7 @@ The 92-byte header is identical to the BRC-124 / BRC-131 layout. The ContentID f
 
 Sequence tracking and NACK retransmission are identical to BRC-131: the retry endpoint joins `FF0E::B:FFFE`, caches FrameVerV4 frames with `MsgType=0x02`, and retransmits to `FF0E::B:FFFE` on NACK.
 
-**→ [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-frame.md)** — header layout, MsgType constants, proxy/listener/retry-endpoint changes, sequencing rules
+**→ [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)** — header layout, MsgType constants, proxy/listener/retry-endpoint changes, sequencing rules
 
 ---
 
@@ -740,7 +740,7 @@ The 92-byte header is layout-identical to BRC-124 with Frame Version `0x06` at o
 
 Sequence tracking and NACK retransmission are identical to BRC-131 and BRC-133: the retry endpoint joins `FF0E::B:FFFE`, caches FrameVerV6 frames, and retransmits to `FF0E::B:FFFE` on NACK.
 
-**→ [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-frame.md)** — header layout, FrameVerV6 constant, proxy/listener/retry-endpoint changes, sequencing rules
+**→ [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)** — header layout, FrameVerV6 constant, proxy/listener/retry-endpoint changes, sequencing rules
 
 ---
 
@@ -924,8 +924,8 @@ All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
 - [BRC-130 Fragmentation](docs/brc-130-fragmentation.md) — fragment header layout, fragDataSize, per-fragment NACK, reassembly algorithm, metrics
 - [BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md) — block frame header, BlockAnnounce + CoinbaseTx payloads, control-group routing, proxy/listener/retry-endpoint changes
 - [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md) — frame header layout, HashesOnly/FullNodes payload formats, fragmentation rules, Merkle verification, proxy/listener/retry-endpoint changes
-- [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-frame.md) — coinbase frame wire format, MsgType constants, proxy/listener/retry-endpoint changes
-- [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-frame.md) — anchor frame wire format, FrameVerV6, proxy/listener/retry-endpoint changes
+- [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md) — coinbase frame wire format, MsgType constants, proxy/listener/retry-endpoint changes
+- [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md) — anchor frame wire format, FrameVerV6, proxy/listener/retry-endpoint changes
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end pipeline diagrams, escalation state machine, flood prevention
 
 **Services:**

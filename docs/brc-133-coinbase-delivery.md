@@ -34,8 +34,8 @@ Coinbase frames are delivered on the **CtrlGroupControl** group:
 
 The global scope (`FF0E`) ensures coinbase transactions cross site boundaries.
 The group index `0xFFFE` is in the reserved control-plane range and never
-overlaps with data-plane shard groups (maximum shard group index is `0x7FFF` for
-`shard_bits=15`).
+overlaps with data-plane shard groups (maximum shard group index is `0x0FFF` for
+`shard_bits=12`).
 
 ---
 

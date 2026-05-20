@@ -12,7 +12,7 @@ The multicast fabric already distributes transactions shard-by-shard (BRC-124) a
 2. Verify block inclusion without fetching individual transactions.
 3. Power downstream analytics and block-assembly tooling without libp2p retrieval.
 
-BRC-132 coexists with BRC-127 (subtree group announcements, `FF0X::B:FFFC`), which continues to map SubtreeIDs to GroupIDs for filter purposes.
+BRC-132 coexists with BRC-127 (subtree group announcements, `FF0X::B:FFFC`), which maps SubtreeIDs to GroupIDs for filter purposes on a separate multicast group.
 
 ---
 

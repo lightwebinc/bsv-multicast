@@ -23,7 +23,7 @@ Block frames are sent to the **CtrlGroupControl** group:
 | ------ | ------ | ------------------ | ------------------- |
 | 0xFFFE | global | `FF0E::B:FFFE`     | `CtrlGroupControl`  |
 
-The global scope (`FF0E`) ensures block announcements cross site boundaries and reach all geographically distributed subscribers. The group index `0xFFFE` is in the reserved control-plane range (above the maximum shard group index for any practical `shard_bits` ≤ 15).
+The global scope (`FF0E`) ensures block announcements cross site boundaries and reach all geographically distributed subscribers. The group index `0xFFFE` is in the reserved control-plane range (above the maximum shard group index `0x0FFF` for `shard_bits` ≤ 12).
 
 ---
 

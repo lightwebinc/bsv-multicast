@@ -95,19 +95,19 @@ Beacon groups support infrastructure service discovery across multiple scopes (s
 
 ## Subtree Group Announcements
 
-Subtree group announcements are used to announce the presence of new subtree inclusion in a group of subtrees to other nodes in the network. This is used by listeners to discover related groups of transactions and allow for automated filtering for downstream special interest networks.
+Subtree group announcements (BRC-127, MsgType `0x30`) advertise SubtreeID–GroupID bindings so listeners can discover related groups of transactions and filter dynamically for downstream special interest networks. These 64-byte datagrams are forwarded by the proxy to the `CtrlGroupSubtreeGroupAnnounce` group (`0xFFFC`).
 
 Like beacon groups, subtree group announcements support multiple scopes (site-local, organization-local, and global). See the control-plane table above for complete scope and address details.
 
 ---
 
-## Subtree Announcements
+## Subtree Data Announcements
 
-Subtree announcements deliver the full contents of a Merkle subtree (transaction hashes and optional metadata) to all subscribed listeners. The subtree is identified by its Merkle root hash (SubtreeID). BRC-132 (FrameVer 0x05) defines the frame format and fragmentation strategy for subtree data distribution on this channel.
+Subtree data frames (BRC-132, FrameVer `0x05`) deliver the full contents of a Merkle subtree (transaction hashes and optional metadata) to all subscribed listeners on the `CtrlGroupSubtreeAnnounce` group (`0xFFFB`). The subtree is identified by its Merkle root hash (SubtreeID).
 
-Subtree data frames are large (32–48 MB per subtree at 1M transactions) and are fragmented using BRC-130. Each BRC-130 fragment carries `OrigFrameVer = 0x05` so that the reassembly path can deliver the reconstituted payload to the correct handler.
+BRC-132 frames are large (32–48 MB per subtree at 1M transactions) and are fragmented using BRC-130. Each BRC-130 fragment carries `OrigFrameVer = 0x05` so that the reassembly path can deliver the reconstituted payload to the correct handler.
 
-Like beacon groups, subtree announcements support multiple scopes (site-local, organization-local, and global). See the control-plane table above for complete scope and address details. See [BRC-132](brc-132-subtree-data.md) for the frame format specification.
+Like beacon groups, subtree data announcements support multiple scopes (site-local, organization-local, and global). See the control-plane table above for complete scope and address details. See [BRC-132](brc-132-subtree-data.md) for the frame format specification.
 
 ---
 

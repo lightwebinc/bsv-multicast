@@ -38,15 +38,15 @@ All multi-byte integers are big-endian. 8-byte alignment for all fields after of
 
 Accepted and forwarded verbatim for backward compatibility.
 
-| Offset | Size | Field          |
-| ------ | ---- | -------------- | ---------- |
-| 0      | 4    | Network magic  | 0xE3E1F3E8 |
-| 4      | 2    | Protocol ver   | 0x02BF     |
-| 6      | 1    | Frame version  | 0x01       |
-| 7      | 1    | Reserved       | 0x00       |
-| 8      | 32   | Transaction ID |
-| 40     | 4    | Payload length |
-| 44     | \*   | Payload        |
+| Offset | Size | Field          | Value / Notes |
+| ------ | ---- | -------------- | ------------- |
+| 0      | 4    | Network magic  | 0xE3E1F3E8    |
+| 4      | 2    | Protocol ver   | 0x02BF        |
+| 6      | 1    | Frame version  | 0x01          |
+| 7      | 1    | Reserved       | 0x00          |
+| 8      | 32   | Transaction ID |               |
+| 40     | 4    | Payload length |               |
+| 44     | \*   | Payload        |               |
 
 **BRC-12 Limitations:** No `HashKey`, `SeqNum`, or `SubtreeID` fields. Flow-based gap tracking and subtree filtering do not apply.
 
