@@ -2,11 +2,20 @@
 
 ## Overview
 
-The Bitcoin Multicast project is a high-throughput, horizontally-scalable transaction distribution system for Bitcoin SV (BSV) designed to pave the road towards 1 billion+ transactions per second. It uses IPv6 multicast to efficiently distribute transaction data across a fabric of subscribers (miners, exchanges, service providers) with deterministic sharding and NACK-based reliability.
+The Bitcoin Multicast project is a high-throughput, horizontally-scalable
+transaction distribution system for Bitcoin SV (BSV) designed to pave the road
+towards 1 billion+ transactions per second. It uses IPv6 multicast to
+efficiently distribute transaction data across a fabric of subscribers (miners,
+exchanges, service providers) with deterministic sharding and NACK-based
+reliability.
 
-This document provides a comprehensive design overview of the entire multicast ecosystem, encompassing all repositories and their interactions.
+This document provides a comprehensive design overview of the entire multicast
+ecosystem, encompassing all repositories and their interactions.
 
-**Conceptual Attribution:** The IPv6 multicast transaction broadcast architecture from which this software draws inspiration was articulated by Dr. Craig S. Wright in [Multicast Within Multicast: Anycast, Sharded Resends, and Hierarchical Distribution for Transaction and Block Propagation](https://singulargrit.substack.com/p/multicast-within-multicast-anycast).
+**Conceptual Attribution:** The IPv6 multicast transaction broadcast
+architecture from which this software draws inspiration was articulated by Dr.
+Craig S. Wright in
+[Multicast Within Multicast: Anycast, Sharded Resends, and Hierarchical Distribution for Transaction and Block Propagation](https://singulargrit.substack.com/p/multicast-within-multicast-anycast).
 
 ---
 
@@ -40,8 +49,8 @@ This document provides a comprehensive design overview of the entire multicast e
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Shard**          | A deterministic partition of the transaction space. Each shard maps to one IPv6 multicast group; group membership is derived from the TxID.                                                   |
 | **Subtree**        | An ordered set of related transactions sharing a common 32-byte batch identifier (`SubtreeID`, or Subtree Merkle root hash). Used for transaction specialization and block template assembly. |
-| **Gap**            | A detected break in the monotonic `SeqNum` counter for a flow, indicating one or more missing frames.                                                                                          |
-| **Flow**           | The per-(sender IP, multicast group, subtree) sequence of frames sharing a common `HashKey`.                                                                                                    |
+| **Gap**            | A detected break in the monotonic `SeqNum` counter for a flow, indicating one or more missing frames.                                                                                         |
+| **Flow**           | The per-(sender IP, multicast group, subtree) sequence of frames sharing a common `HashKey`.                                                                                                  |
 | **NACK**           | Negative acknowledgement — a 64-byte datagram requesting retransmission of a missing frame.                                                                                                   |
 | **ACK**            | Positive acknowledgement — a 16-byte response confirming a retransmit was dispatched.                                                                                                         |
 | **MISS**           | Cache-miss response — a 16-byte response indicating the requested frame is not cached; triggers immediate escalation.                                                                         |
@@ -96,17 +105,23 @@ The multicast pipeline consists of three tiers:
 
 **Key Design Principles:**
 
-- **Stateless Ingress:** Proxy nodes carry no state; any number can be deployed without coordination
-- **Deterministic Sharding:** Same transaction ID always maps to the same multicast group
-- **Consistent Hashing:** Increasing shard bits splits groups without invalidating existing subscriptions
-- **Horizontal Scale:** Add nodes to scale capacity; no reconfiguration of existing nodes required
-- **NACK-based Recovery:** Listeners detect gaps and request retransmission from cached retry endpoints
+- **Stateless Ingress:** Proxy nodes carry no state; any number can be deployed
+  without coordination
+- **Deterministic Sharding:** Same transaction ID always maps to the same
+  multicast group
+- **Consistent Hashing:** Increasing shard bits splits groups without
+  invalidating existing subscriptions
+- **Horizontal Scale:** Add nodes to scale capacity; no reconfiguration of
+  existing nodes required
+- **NACK-based Recovery:** Listeners detect gaps and request retransmission from
+  cached retry endpoints
 
 ---
 
 ## Repository Overview
 
-The project is organized into multiple repositories, each with a specific responsibility:
+The project is organized into multiple repositories, each with a specific
+responsibility:
 
 ### Core Services (Binaries)
 
@@ -224,7 +239,7 @@ The project is organized into multiple repositories, each with a specific respon
    │ (consumes directly)         │         │ • Apply shard filter (defense-in-depth)  │
    └─────────────────────────────┘         │ • Apply subtree filter (include/exclude) │
                                            │ • Track sequence gaps per flow           │
-                                           │   (HashKey/SeqNum monotonic counter)      │
+                                           │   (HashKey/SeqNum monotonic counter)     │
                                            │ • Forward matching frames to egress_addr │
                                            │   (UDP or TCP, optional strip-header)    │
                                            └──────────────────────────────────────────┘
@@ -239,14 +254,14 @@ The project is organized into multiple repositories, each with a specific respon
 bitcoin-shard-listener detects gap:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ • SeqNum > lastSeqNum + 1 (gap detected for this HashKey)               │
-│ • Register missing frame(s) in pending map (key = HashKey + SeqNum)    │
+│ • Register missing frame(s) in pending map (key = HashKey + SeqNum)     │
 │ • Background sweeper dispatches NACK after nack-gap-ttl                 │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 NACK Dispatch (UDP to retry-endpoint:9300)
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ 64-byte BRC-126 NACK datagram (see BRC-126 wire format)                  │
+│ 64-byte BRC-126 NACK datagram (see BRC-126 wire format)                 │
 │ Endpoints tried by (Tier ASC, Preference DESC); MISS triggers escalation│
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -255,7 +270,7 @@ bitcoin-retry-endpoint
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ • Receive NACK on port 9300                                             │
 │ • Rate limit (IP, HashKey, SeqNum)                                      │
-│ • Lookup frame in cache by HashKey ∥ SeqNum (single 16-byte key)        │
+│ • Lookup frame in cache by HashKey + SeqNum (single 16-byte key)        │
 │ • If found: re-multicast to FF05::<shard>:9001 (if -retransmit-multicast│
 │   enabled); unicast to NACK source (if -retransmit-unicast); send ACK   │
 │ • If not found: send 16-byte MISS (listener escalates to next endpoint) │
@@ -305,7 +320,8 @@ Group 1 splits into:  1a (txid[0] bit 31 = 0), 1b (txid[0] bit 31 = 1)
 ...
 ```
 
-**Benefit:** When increasing shard_bits, subscribers only need to join additional groups. Existing subscriptions remain valid.
+**Benefit:** When increasing shard_bits, subscribers only need to join
+additional groups. Existing subscriptions remain valid.
 
 ### IPv6 Multicast Address Layout (IANA-aligned)
 
@@ -316,8 +332,8 @@ Bits [ 31: 16]   GID   IANA group-id (default 0x000B = IANA Bitcoin SV Node Grou
 Bits [ 15:  0]   IDX   Shard index (up to 16 bits; top 4 reserved for control)
 ```
 
-The IANA Bitcoin SV Node Groups allocation is `FF0X::B`. Operators MAY override the
-group-id via `-mc-group-id` for testing or private deployments, but the
+The IANA Bitcoin SV Node Groups allocation is `FF0X::B`. Operators MAY override
+the group-id via `-mc-group-id` for testing or private deployments, but the
 on-wire default is `0x000B` for IANA conformance.
 
 **Scope Codes:**
@@ -345,39 +361,86 @@ on-wire default is `0x000B` for IANA conformance.
 | 0xFFFE | Block Control channel           | FF0E  | FF0E::B:FFFE       |
 | 0xFFFF | _(reserved)_                    | —     | do not use         |
 
-See [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md) for full details.
+See
+[BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md)
+for full details.
 
 ## Frame Format
 
-The BRC-124 data-plane frame format (92-byte header, replacing the legacy 44-byte BRC-12 header) is defined in a dedicated design document:
+The BRC-124 data-plane frame format (92-byte header, replacing the legacy
+44-byte BRC-12 header) is defined in a dedicated design document:
 
 **→ [BRC-124 Frame Format](docs/brc-124-frame-format.md)**
 
-Key fields: Network magic, Protocol version, Frame version, Transaction ID, HashKey (XXH64 per-flow identifier), SeqNum (monotonic per-flow counter), Subtree ID, Payload length, and BSV tx payload. Both BRC-12 (legacy) and BRC-124/BRC-128 frames are accepted by all components.
+Key fields: Network magic, Protocol version, Frame version, Transaction ID,
+HashKey (XXH64 per-flow identifier), SeqNum (monotonic per-flow counter),
+Subtree ID, Payload length, and BSV tx payload. Both BRC-12 (legacy) and
+BRC-124/BRC-128 frames are accepted by all components.
 
-**BRC-128 (Extended Format):** BRC-128 frames carry BRC-30 Extended Format (EF) transaction payloads inside the standard 92-byte BRC-124 header. Frame Version remains `0x02`; the payload is self-identifying via the 6-byte EF marker at payload bytes 4–9 (`0x000000000000EF`). All infrastructure components are payload-agnostic — no changes required to proxy, listener, or retry endpoint.
+**BRC-128 (Extended Format):** BRC-128 frames carry BRC-30 Extended Format (EF)
+transaction payloads inside the standard 92-byte BRC-124 header. Frame Version
+remains `0x02`; the payload is self-identifying via the 6-byte EF marker at
+payload bytes 4–9 (`0x000000000000EF`). All infrastructure components are
+payload-agnostic — no changes required to proxy, listener, or retry endpoint.
 
 **→ [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md)**
 
-**BRC-130 (Fragmentation):** BRC-130 fragments large transactions that exceed the path MTU into a sequence of fixed-size UDP datagrams (Frame Version `0x03`). Bytes 0–91 are layout-identical to BRC-124, preserving firewall rule and classifier compatibility. The proxy stamps an independent `HashKey`/`SeqNum` per fragment so that individual lost fragments can be retransmitted via the standard BRC-126 NACK mechanism without changes to the retry endpoint. Listeners reassemble fragments keyed on `TxID`, verify `SHA256d`, and deliver a synthetic BRC-124 frame to the normal filter → egress → gap-tracking pipeline.
+**BRC-130 (Fragmentation):** BRC-130 fragments large transactions that exceed
+the path MTU into a sequence of fixed-size UDP datagrams (Frame Version `0x03`).
+Bytes 0–91 are layout-identical to BRC-124, preserving firewall rule and
+classifier compatibility. The proxy stamps an independent `HashKey`/`SeqNum` per
+fragment so that individual lost fragments can be retransmitted via the standard
+BRC-126 NACK mechanism without changes to the retry endpoint. Listeners
+reassemble fragments keyed on `TxID`, verify `SHA256d`, and deliver a synthetic
+BRC-124 frame to the normal filter → egress → gap-tracking pipeline.
 
 **→ [BRC-130 Fragmentation](docs/brc-130-fragmentation.md)**
 
-**BRC-132 (Subtree Data Frame Format):** BRC-132 defines Frame Version `0x05` for distributing complete subtree data payloads (transaction hashes and optional fee/size metadata) over the multicast fabric. Frames are delivered to the `CtrlGroupSubtreeAnnounce` group (`FF0X::B:FFFB`). Two message types are defined: `HashesOnly` (32 bytes/node) and `FullNodes` (48 bytes/node, includes fee and size). The 92-byte header is layout-identical to BRC-124. Payloads of 32–48 MB (at 1M nodes) are always fragmented via BRC-130 (`OrigFrameVer=0x05`). Gap tracking and NACK retransmission work identically to BRC-124; the retry endpoint retransmits to `FF0X::B:FFFB` rather than a shard group.
+**BRC-132 (Subtree Data Frame Format):** BRC-132 defines Frame Version `0x05`
+for distributing complete subtree data payloads (transaction hashes and optional
+fee/size metadata) over the multicast fabric. Frames are delivered to the
+`CtrlGroupSubtreeAnnounce` group (`FF0X::B:FFFB`). Two message types are
+defined: `HashesOnly` (32 bytes/node) and `FullNodes` (48 bytes/node, includes
+fee and size). The 92-byte header is layout-identical to BRC-124. Payloads of
+32–48 MB (at 1M nodes) are always fragmented via BRC-130 (`OrigFrameVer=0x05`).
+Gap tracking and NACK retransmission work identically to BRC-124; the retry
+endpoint retransmits to `FF0X::B:FFFB` rather than a shard group.
 
 **→ [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md)**
 
-**BRC-133 (Coinbase Transaction):** BRC-133 formalizes MsgType `0x02` within BRC-131 frames (FrameVer `0x04`) as the canonical wire format for distributing raw coinbase transactions. The ContentID in the frame header carries the SHA256d of the coinbase transaction. Frames are delivered on `CtrlGroupControl` (`FF0E::B:FFFE`); NACK-based retransmission and gap tracking work identically to BRC-131 block announcement frames.
+**BRC-133 (Coinbase Transaction):** BRC-133 formalizes MsgType `0x02` within
+BRC-131 frames (FrameVer `0x04`) as the canonical wire format for distributing
+raw coinbase transactions. The ContentID in the frame header carries the SHA256d
+of the coinbase transaction. Frames are delivered on `CtrlGroupControl`
+(`FF0E::B:FFFE`); NACK-based retransmission and gap tracking work identically to
+BRC-131 block announcement frames.
 
-**→ [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)**
+**→
+[BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)**
 
-**BRC-134 (Anchor Transaction):** BRC-134 defines Frame Version `0x06` for distributing chained anchor transactions — the root transaction of a dependent chain — over the control plane. Because all subsequent chain transactions reference the anchor as an input, every subscriber must receive it regardless of shard assignment. The 92-byte header is layout-identical to BRC-124 with `FrameVer=0x06`; the TxID field carries the SHA256d of the anchor transaction. Frames are delivered on `CtrlGroupControl` (`FF0E::B:FFFE`). BRC-130 fragmentation is not defined for BRC-134. Gap tracking and NACK retransmission are identical to BRC-131.
+**BRC-134 (Anchor Transaction):** BRC-134 defines Frame Version `0x06` for
+distributing chained anchor transactions — the root transaction of a dependent
+chain — over the control plane. Because all subsequent chain transactions
+reference the anchor as an input, every subscriber must receive it regardless of
+shard assignment. The 92-byte header is layout-identical to BRC-124 with
+`FrameVer=0x06`; the TxID field carries the SHA256d of the anchor transaction.
+Frames are delivered on `CtrlGroupControl` (`FF0E::B:FFFE`). BRC-130
+fragmentation is not defined for BRC-134. Gap tracking and NACK retransmission
+are identical to BRC-131.
 
-**→ [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)**
+**→
+[BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)**
 
-**BRC-135 (Block Header Format):** BRC-135 defines Frame Version `0x07` for distributing standalone 80-byte BSV block headers. BRC-135 frames are produced by an emitter (any node that receives a BRC-131 `BlockAnnounce`) by extracting the raw 80-byte header and wrapping it in a minimal 172-byte frame. The emitter stamps its own `HashKey`/`SeqNum` and sends the frame to its configured egress (unicast or multicast). BRC-135 frames are not re-injected onto the primary fabric. No fragmentation is required.
+**BRC-135 (Block Header Format):** BRC-135 defines Frame Version `0x07` for
+distributing standalone 80-byte BSV block headers. BRC-135 frames are produced
+by an emitter (any node that receives a BRC-131 `BlockAnnounce`) by extracting
+the raw 80-byte header and wrapping it in a minimal 172-byte frame. The emitter
+stamps its own `HashKey`/`SeqNum` and sends the frame to its configured egress
+(unicast or multicast). BRC-135 frames are not re-injected onto the primary
+fabric. No fragmentation is required.
 
-**→ [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md)**
+**→
+[BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md)**
 
 ---
 
@@ -385,7 +448,8 @@ Key fields: Network magic, Protocol version, Frame version, Transaction ID, Hash
 
 ### bitcoin-shard-proxy (Ingress)
 
-**Purpose:** Stateless ingress proxy; receives BSV transaction frames, derives multicast group, forwards verbatim.
+**Purpose:** Stateless ingress proxy; receives BSV transaction frames, derives
+multicast group, forwards verbatim.
 
 **Key Characteristics:**
 
@@ -415,15 +479,21 @@ TCP Listener (1 goroutine)
   └──────────────┘
 ```
 
-**Hot path:** Decode frame → stamp HashKey/SeqNum in-place (BRC-124 only) → derive multicast group from TxID → `WriteTo` verbatim to all egress interfaces. TCP connections carry the same frame stream plus BRC-127 SubtreeAnnounce control datagrams (forwarded verbatim to the announce multicast group).
+**Hot path:** Decode frame → stamp HashKey/SeqNum in-place (BRC-124 only) →
+derive multicast group from TxID → `WriteTo` verbatim to all egress interfaces.
+TCP connections carry the same frame stream plus BRC-127 SubtreeAnnounce control
+datagrams (forwarded verbatim to the announce multicast group).
 
-**→ [bitcoin-shard-proxy Architecture](https://github.com/lightwebinc/bitcoin-shard-proxy/blob/main/docs/architecture.md)** — hot-path detail, configuration reference, metrics
+**→
+[bitcoin-shard-proxy Architecture](https://github.com/lightwebinc/bitcoin-shard-proxy/blob/main/docs/architecture.md)**
+— hot-path detail, configuration reference, metrics
 
 ---
 
 ### bitcoin-shard-listener (Subscriber)
 
-**Purpose:** Multicast subscriber; filters by shard/subtree, forwards to unicast and/or multicast consumers, performs NACK-based gap recovery.
+**Purpose:** Multicast subscriber; filters by shard/subtree, forwards to unicast
+and/or multicast consumers, performs NACK-based gap recovery.
 
 **Key Characteristics:**
 
@@ -432,7 +502,8 @@ TCP Listener (1 goroutine)
 - NORM-inspired gap tracking per flow via HashKey/SeqNum monotonic counter
 - NACK dispatch to configurable retry endpoints
 - Egress via UDP or TCP (optional strip-header mode)
-- Multicast egress for domain bridging (re-emit filtered frames to a separate multicast address space)
+- Multicast egress for domain bridging (re-emit filtered frames to a separate
+  multicast address space)
 - BRC-130 fragment reassembly (`reassembly` package) with SHA256d verification
 
 **Architecture:**
@@ -454,7 +525,7 @@ Receive Workers (NUM_WORKERS goroutines, SO_REUSEPORT)
 
 SubtreeAnnounceListener (1 goroutine, BRC-127)
   ┌──────────────────────────────────────────┐
-  │ Join FF05::B:FFFC (SO_REUSEPORT socket) │──▶ subtreegroup.Registry
+  │ Join FF05::B:FFFC (SO_REUSEPORT socket)  │──▶ subtreegroup.Registry
   │ Evict loop (1 s tick)                    │       ▲
   └──────────────────────────────────────────┘       │
                                                 filter.Allow (groupReg)
@@ -471,13 +542,22 @@ Gap Tracker Sweeper (100ms interval)
   └──────────────────┘
 ```
 
-**Important:** Linux delivers multicast to ALL SO_REUSEPORT sockets (no load balancing). For multicast deployments, `NUM_WORKERS` must be set to 1.
+**Important:** Linux delivers multicast to ALL SO_REUSEPORT sockets (no load
+balancing). For multicast deployments, `NUM_WORKERS` must be set to 1.
 
-**Filtering:** Dual-level — shard index (MLD group join + userspace filter) and subtree ID (static include/exclude lists, plus dynamic BRC-127 group membership via `subtreegroup.Registry`). See [Subtree Filtering](#subtree-filtering) and [BRC-127](#subtree-group-announcement-brc-127) below.
+**Filtering:** Dual-level — shard index (MLD group join + userspace filter) and
+subtree ID (static include/exclude lists, plus dynamic BRC-127 group membership
+via `subtreegroup.Registry`). See [Subtree Filtering](#subtree-filtering) and
+[BRC-127](#subtree-group-announcement-brc-127) below.
 
-**Gap tracking:** Per-flow `SeqNum` monotonic counter verification (keyed by `HashKey`). Gaps (`SeqNum` advances by >1) register gap entries; a background sweeper dispatches NACKs with exponential backoff. Gaps are auto-closed when the missing frame arrives via multicast or explicit NACK ACK.
+**Gap tracking:** Per-flow `SeqNum` monotonic counter verification (keyed by
+`HashKey`). Gaps (`SeqNum` advances by >1) register gap entries; a background
+sweeper dispatches NACKs with exponential backoff. Gaps are auto-closed when the
+missing frame arrives via multicast or explicit NACK ACK.
 
-**→ [bitcoin-shard-listener Architecture](https://github.com/lightwebinc/bitcoin-shard-listener/blob/main/docs/architecture.md)** — filter behavior table, gap tracker internals, configuration reference, metrics
+**→
+[bitcoin-shard-listener Architecture](https://github.com/lightwebinc/bitcoin-shard-listener/blob/main/docs/architecture.md)**
+— filter behavior table, gap tracker internals, configuration reference, metrics
 
 ---
 
@@ -488,8 +568,10 @@ Gap Tracker Sweeper (100ms interval)
 **Key Characteristics:**
 
 - Single-worker multicast receiver (SO_REUSEPORT limitation)
-- In-memory cache (freecache, 60 s TTL, GC-free, single 16-byte key: `HashKey ∥ SeqNum`)
-- Multi-tier rate limiting: per-IP, per-HashKey, per-SeqNum pre-lookup; per-group (groupIdx) post-lookup (ACK still sent on throttle)
+- In-memory cache (freecache, 60 s TTL, GC-free, single 16-byte key:
+  `HashKey ∥ SeqNum`)
+- Multi-tier rate limiting: per-IP, per-HashKey, per-SeqNum pre-lookup;
+  per-group (groupIdx) post-lookup (ACK still sent on throttle)
 - Sharding-based multicast egress for retransmitted frames
 
 **Architecture:**
@@ -511,19 +593,33 @@ Retransmit Egress
   └──────────────────┘
 ```
 
-**Cache:** Single 16-byte key (`HashKey ∥ SeqNum`) → raw frame. Default backend: in-process freecache (60 s TTL, GC-free). Optional: Redis for cross-instance shared cache.
+**Cache:** Single 16-byte key (`HashKey ∥ SeqNum`) → raw frame. Default backend:
+in-process freecache (60 s TTL, GC-free). Optional: Redis for cross-instance
+shared cache.
 
-**→ [bitcoin-retry-endpoint Architecture](https://github.com/lightwebinc/bitcoin-retry-endpoint/blob/main/docs/architecture.md)** — cache encoding, rate-limit configuration, configuration reference, metrics
+**→
+[bitcoin-retry-endpoint Architecture](https://github.com/lightwebinc/bitcoin-retry-endpoint/blob/main/docs/architecture.md)**
+— cache encoding, rate-limit configuration, configuration reference, metrics
 
 ---
 
 ### bitcoin-shard-common (Protocol Primitives)
 
-**Purpose:** Shared protocol primitives imported by proxy, listener, and retry endpoint.
+**Purpose:** Shared protocol primitives imported by proxy, listener, and retry
+endpoint.
 
-**Packages:** `frame` (BRC-12/BRC-124/BRC-128/BRC-130/BRC-132/BRC-133/BRC-134 encode/decode, `EncodeFragment`/`DecodeFragment`/`IsFragment`, `EncodeSubtreeData`/`DecodeSubtreeData`/`IsSubtreeDataFrame`, `BlockMsgCoinbase`, `DecodeBlock`, `FrameVerV6`, `DecodeAnchor`/`IsAnchorFrame`), `shard` (txid → multicast group derivation), `seqhash` (XXH64 flow hash for HashKey), `sequence` (per-flow monotonic counters).
+**Packages:** `frame` (BRC-12/BRC-124/BRC-128/BRC-130/BRC-132/BRC-133/BRC-134
+encode/decode, `EncodeFragment`/`DecodeFragment`/`IsFragment`,
+`EncodeSubtreeData`/`DecodeSubtreeData`/`IsSubtreeDataFrame`,
+`BlockMsgCoinbase`, `DecodeBlock`, `FrameVerV6`,
+`DecodeAnchor`/`IsAnchorFrame`), `shard` (txid → multicast group derivation),
+`seqhash` (XXH64 flow hash for HashKey), `sequence` (per-flow monotonic
+counters).
 
-**→ [bitcoin-shard-common README](https://github.com/lightwebinc/bitcoin-shard-common)** — package API, [protocol spec](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md)
+**→
+[bitcoin-shard-common README](https://github.com/lightwebinc/bitcoin-shard-common)**
+— package API,
+[protocol spec](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md)
 
 ---
 
@@ -531,16 +627,26 @@ Retransmit Egress
 
 ### NACK Protocol (BRC-126)
 
-Listeners detect sequence gaps and send 64-byte NACK datagrams to retry endpoints. The full wire format, response protocol, and escalation state machine are defined in:
+Listeners detect sequence gaps and send 64-byte NACK datagrams to retry
+endpoints. The full wire format, response protocol, and escalation state machine
+are defined in:
 
-**→ [BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.md)**
+**→
+[BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.md)**
 
 **Key changes from the original fire-and-forget NACK model:**
 
-- **ACK/MISS responses** — every NACK receives a unicast response (16 bytes). ACK confirms retransmit dispatched; MISS indicates cache miss and triggers immediate escalation to the next endpoint.
-- **Beacon discovery** — retry endpoints periodically multicast ADVERT messages (56 bytes) to site/global beacon groups. Listeners maintain a dynamic endpoint registry, sorted by `(Tier ASC, Preference DESC)`.
-- **Tier-based escalation** — on MISS, listeners advance through endpoints at the same tier, then escalate to the next tier. No backoff on MISS; immediate retry.
-- **Configurable retransmit modes** — endpoints can retransmit via multicast, unicast, or both. Responses can be selectively suppressed.
+- **ACK/MISS responses** — every NACK receives a unicast response (16 bytes).
+  ACK confirms retransmit dispatched; MISS indicates cache miss and triggers
+  immediate escalation to the next endpoint.
+- **Beacon discovery** — retry endpoints periodically multicast ADVERT messages
+  (56 bytes) to site/global beacon groups. Listeners maintain a dynamic endpoint
+  registry, sorted by `(Tier ASC, Preference DESC)`.
+- **Tier-based escalation** — on MISS, listeners advance through endpoints at
+  the same tier, then escalate to the next tier. No backoff on MISS; immediate
+  retry.
+- **Configurable retransmit modes** — endpoints can retransmit via multicast,
+  unicast, or both. Responses can be selectively suppressed.
 
 ### NACK Dispatch Flow
 
@@ -565,23 +671,39 @@ Listeners detect sequence gaps and send 64-byte NACK datagrams to retry endpoint
 
 ### Endpoint Discovery
 
-Retry endpoints advertise via periodic ADVERT beacons (see [BRC-126](docs/brc-126-retransmission-protocol.md)). Listeners join the site beacon group (`FF05::B:FFFD`) and optionally the global beacon group (`FF0E::B:FFFD`) to discover endpoints dynamically. Static `-retry-endpoints` seeds the registry at lowest priority (`Tier=0xFF, Preference=0`).
+Retry endpoints advertise via periodic ADVERT beacons (see
+[BRC-126](docs/brc-126-retransmission-protocol.md)). Listeners join the site
+beacon group (`FF05::B:FFFD`) and optionally the global beacon group
+(`FF0E::B:FFFD`) to discover endpoints dynamically. Static `-retry-endpoints`
+seeds the registry at lowest priority (`Tier=0xFF, Preference=0`).
 
 Group address assignments for beacons and the control channel are defined in:
 
-**→ [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md)**
+**→
+[BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md)**
 
-Inter-AS extension via MP-BGP requires no protocol changes — network teams extend the multicast fabric; endpoints and listeners operate identically.
+Inter-AS extension via MP-BGP requires no protocol changes — network teams
+extend the multicast fabric; endpoints and listeners operate identically.
 
-The end-to-end NACK retransmission flow — from gap detection through escalation to repair delivery — is documented with ASCII diagrams in:
+The end-to-end NACK retransmission flow — from gap detection through escalation
+to repair delivery — is documented with ASCII diagrams in:
 
 **→ [NACK Retransmission Flow](docs/nack-retransmission-flow.md)**
 
 ### Retry Endpoint Processing
 
-The retry endpoint applies four-tier rate limiting (per-IP, per-HashKey, per-SeqNum pre-lookup; per-group post-lookup), performs a single-key cache lookup (`HashKey ∥ SeqNum`), and retransmits via multicast and/or unicast on a hit. On a miss, a 16-byte MISS response triggers immediate listener escalation. The group-tier limiter skips the retransmit but still sends ACK so the listener does not escalate unnecessarily.
+The retry endpoint applies four-tier rate limiting (per-IP, per-HashKey,
+per-SeqNum pre-lookup; per-group post-lookup), performs a single-key cache
+lookup (`HashKey ∥ SeqNum`), and retransmits via multicast and/or unicast on a
+hit. On a miss, a 16-byte MISS response triggers immediate listener escalation.
+The group-tier limiter skips the retransmit but still sends ACK so the listener
+does not escalate unnecessarily.
 
-See **[BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.md)** and **[bitcoin-retry-endpoint Architecture](https://github.com/lightwebinc/bitcoin-retry-endpoint/blob/main/docs/architecture.md)** for the full processing pipeline and rate-limit configuration.
+See
+**[BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.md)**
+and
+**[bitcoin-retry-endpoint Architecture](https://github.com/lightwebinc/bitcoin-retry-endpoint/blob/main/docs/architecture.md)**
+for the full processing pipeline and rate-limit configuration.
 
 ### Reliability Characteristics
 
@@ -591,7 +713,8 @@ See **[BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.m
 - NACK + ACK/MISS provides deterministic gap recovery signalling
 - MISS triggers immediate escalation (no wasted backoff time)
 - Multicast repair path and NACK path are independent; either can fill a gap
-- No guarantee of recovery (network partition, cache expiration, all endpoints MISS)
+- No guarantee of recovery (network partition, cache expiration, all endpoints
+  MISS)
 
 **Cache TTL considerations:**
 
@@ -612,7 +735,15 @@ See **[BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.m
 
 ### Subtree Model
 
-A _subtree_ is an ordered set of related transactions sharing a common batch context. The 32-byte `SubtreeID` field allows downstream subscribers to associate frames with a named batch. In Teranode, this is currently used to batch transactions for processing and to link ordered sets of validated transactions from block templates. This may be extended to support transaction specialization, and some sort of dynamic announcement and hashing mechanism may be required later. A rudimentary implementation has been put together in the proposed [BRC-127: Subtree Group Announcement](https://github.com/lightwebinc/bitcoin-multicast/blob/main/docs/brc-127-subtree-announce.md).
+A _subtree_ is an ordered set of related transactions sharing a common batch
+context. The 32-byte `SubtreeID` field allows downstream subscribers to
+associate frames with a named batch. In Teranode, this is currently used to
+batch transactions for processing and to link ordered sets of validated
+transactions from block templates. This may be extended to support transaction
+specialization, and some sort of dynamic announcement and hashing mechanism may
+be required later. A rudimentary implementation has been put together in the
+proposed
+[BRC-127: Subtree Group Announcement](https://github.com/lightwebinc/bitcoin-multicast/blob/main/docs/brc-127-subtree-announce.md).
 
 **Use Cases:**
 
@@ -652,11 +783,19 @@ subtree-exclude = "abc123...,def456..."  (hex, 32-byte each)
 
 ## Fragmentation (BRC-130)
 
-BRC-130 solves the path-MTU problem for large BSV transactions without relying on IP-layer fragmentation (unreliable on multicast paths). The proxy slices the payload into _k_ equal-sized chunks and emits _k_ independent UDP datagrams. Each datagram carries a 104-byte header that is layout-compatible with BRC-124 at bytes 0–91 (`FrameVer=0x03`).
+BRC-130 solves the path-MTU problem for large BSV transactions without relying
+on IP-layer fragmentation (unreliable on multicast paths). The proxy slices the
+payload into _k_ equal-sized chunks and emits _k_ independent UDP datagrams.
+Each datagram carries a 104-byte header that is layout-compatible with BRC-124
+at bytes 0–91 (`FrameVer=0x03`).
 
-**Fragment data size** at standard Ethernet MTU (1500 B): `1500 − 40 − 8 − 104 = 1348 bytes/fragment`.
+**Fragment data size** at standard Ethernet MTU (1500 B):
+`1500 − 40 − 8 − 104 = 1348 bytes/fragment`.
 
-**Per-fragment gap tracking:** The proxy stamps an independent `HashKey`/`SeqNum` per fragment so each fragment is treated as a separate frame. Individual lost fragments are recovered via the standard BRC-126 NACK mechanism — no changes to the retry endpoint.
+**Per-fragment gap tracking:** The proxy stamps an independent
+`HashKey`/`SeqNum` per fragment so each fragment is treated as a separate frame.
+Individual lost fragments are recovered via the standard BRC-126 NACK mechanism
+— no changes to the retry endpoint.
 
 **Listener reassembly (`reassembly` package):**
 
@@ -671,91 +810,185 @@ BRC-130 solves the path-MTU problem for large BSV transactions without relying o
  Hash mismatch:     drop slot; bsl_reassembly_hash_mismatch_total++
 ```
 
-Key metrics: `bsl_reassembly_started_total`, `bsl_reassembly_completed_total`, `bsl_reassembly_abandoned_total`, `bsl_reassembly_hash_mismatch_total`.
+Key metrics: `bsl_reassembly_started_total`, `bsl_reassembly_completed_total`,
+`bsl_reassembly_abandoned_total`, `bsl_reassembly_hash_mismatch_total`.
 
-**→ [BRC-130 Fragmentation](docs/brc-130-fragmentation.md)** — header layout, fragDataSize derivation, error handling, constants reference
+**→ [BRC-130 Fragmentation](docs/brc-130-fragmentation.md)** — header layout,
+fragDataSize derivation, error handling, constants reference
 
 ---
 
 ## Subtree Group Announcement (BRC-127)
 
-BRC-127 defines the dynamic subtree group announcement protocol. Producers advertise which SubtreeIDs belong to which logical group by sending 64-byte `SubtreeAnnounce` datagrams (`MsgType 0x30`) to the proxy TCP ingress. The proxy forwards these verbatim to the control-plane multicast group (`CtrlGroupSubtreeGroupAnnounce = 0xFFFC`). Listeners join this group and populate a `subtreegroup.Registry`, automatically accepting frames from announced subtrees without static configuration.
+BRC-127 defines the dynamic subtree group announcement protocol. Producers
+advertise which SubtreeIDs belong to which logical group by sending 64-byte
+`SubtreeAnnounce` datagrams (`MsgType 0x30`) to the proxy TCP ingress. The proxy
+forwards these verbatim to the control-plane multicast group
+(`CtrlGroupSubtreeGroupAnnounce = 0xFFFC`). Listeners join this group and
+populate a `subtreegroup.Registry`, automatically accepting frames from
+announced subtrees without static configuration.
 
-Announcements must be re-sent before their TTL expires (recommended: interval 10–30 s; TTL ≥ 3× interval). If announcements cease, entries expire and frames are dropped.
+Announcements must be re-sent before their TTL expires (recommended: interval
+10–30 s; TTL ≥ 3× interval). If announcements cease, entries expire and frames
+are dropped.
 
-**→ [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md)** — wire format, listener configuration flags, distribution path, refresh/expiry rules
+**→ [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md)** —
+wire format, listener configuration flags, distribution path, refresh/expiry
+rules
 
 ---
 
 ## Block Announcement Frame Format (BRC-131)
 
-BRC-131 defines a dedicated frame version (`FrameVer 0x04`) for distributing block-level metadata to all fabric subscribers. Two message types are defined:
+BRC-131 defines a dedicated frame version (`FrameVer 0x04`) for distributing
+block-level metadata to all fabric subscribers. Two message types are defined:
 
-- **BlockAnnounce (`MsgType 0x01`)** — carries the 80-byte block header, the CoinbaseTxID, and an ordered list of subtree root hashes included in the block. Subscribers use this to update block templates and validate received transactions against the new chain tip.
-- **CoinbaseTx (`MsgType 0x02`)** — carries the raw coinbase transaction bytes. The ContentID in the frame header is the SHA256d of the coinbase transaction.
+- **BlockAnnounce (`MsgType 0x01`)** — carries the 80-byte block header, the
+  CoinbaseTxID, and an ordered list of subtree root hashes included in the
+  block. Subscribers use this to update block templates and validate received
+  transactions against the new chain tip.
+- **CoinbaseTx (`MsgType 0x02`)** — carries the raw coinbase transaction bytes.
+  The ContentID in the frame header is the SHA256d of the coinbase transaction.
 
-Both types share the 92-byte BRC-124 header layout and are delivered on the **CtrlGroupControl** group (`FF0E::B:FFFE`), ensuring global reach independent of shard assignment. Every subscriber receives every block announcement — there is no shard or subtree filtering for block frames.
+Both types share the 92-byte BRC-124 header layout and are delivered on the
+**CtrlGroupControl** group (`FF0E::B:FFFE`), ensuring global reach independent
+of shard assignment. Every subscriber receives every block announcement — there
+is no shard or subtree filtering for block frames.
 
-Sequence tracking and NACK-based retransmission work identically to BRC-124: the proxy stamps `HashKey` and `SeqNum` in-place, listeners track the control flow for gaps, and retry endpoints cache and retransmit V4 frames back to the control group (not to a shard group — a critical routing distinction).
+Sequence tracking and NACK-based retransmission work identically to BRC-124: the
+proxy stamps `HashKey` and `SeqNum` in-place, listeners track the control flow
+for gaps, and retry endpoints cache and retransmit V4 frames back to the control
+group (not to a shard group — a critical routing distinction).
 
-For payloads exceeding the path MTU (uncommon for typical block announcements but relevant for large coinbase transactions), the proxy uses BRC-130 fragmentation with `OrigFrameVer=0x04` in the fragment header.
+For payloads exceeding the path MTU (uncommon for typical block announcements
+but relevant for large coinbase transactions), the proxy uses BRC-130
+fragmentation with `OrigFrameVer=0x04` in the fragment header.
 
-**→ [BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md)** — frame header layout, BlockAnnounce payload format, CoinbaseTx payload, gap tracking on the control flow, fragmentation rules, proxy/listener/retry-endpoint changes
+**→
+[BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md)**
+— frame header layout, BlockAnnounce payload format, CoinbaseTx payload, gap
+tracking on the control flow, fragmentation rules, proxy/listener/retry-endpoint
+changes
 
 ---
 
 ## Subtree Data Frame Format (BRC-132)
 
-BRC-132 defines Frame Version `0x05` for distributing complete subtree data payloads — the transaction hashes (and optionally fee/size metadata) that make up a Merkle subtree — over the multicast fabric. This fills the gap between individual transaction distribution (BRC-124) and block-level metadata (BRC-131), enabling subscribers to reconstruct subtree Merkle trees locally and verify block inclusion without fetching individual transactions.
+BRC-132 defines Frame Version `0x05` for distributing complete subtree data
+payloads — the transaction hashes (and optionally fee/size metadata) that make
+up a Merkle subtree — over the multicast fabric. This fills the gap between
+individual transaction distribution (BRC-124) and block-level metadata
+(BRC-131), enabling subscribers to reconstruct subtree Merkle trees locally and
+verify block inclusion without fetching individual transactions.
 
 Two message types are defined:
 
-- **HashesOnly (`MsgType 0x01`)** — 32-byte transaction hash per node, plus a 24-byte metadata prefix (TotalFees, TotalSizeBytes, NodeCount) and a conflict set.
-- **FullNodes (`MsgType 0x02`)** — 48-byte entry per node (TxHash + Fee + Size), same prefix and conflict set.
+- **HashesOnly (`MsgType 0x01`)** — 32-byte transaction hash per node, plus a
+  24-byte metadata prefix (TotalFees, TotalSizeBytes, NodeCount) and a conflict
+  set.
+- **FullNodes (`MsgType 0x02`)** — 48-byte entry per node (TxHash + Fee + Size),
+  same prefix and conflict set.
 
-Both types are delivered on the **CtrlGroupSubtreeAnnounce** group (`FF0X::B:FFFB`). BRC-127 subtree group announcements use a separate group (`CtrlGroupSubtreeGroupAnnounce`, `FF0X::B:FFFC`).
+Both types are delivered on the **CtrlGroupSubtreeAnnounce** group
+(`FF0X::B:FFFB`). BRC-127 subtree group announcements use a separate group
+(`CtrlGroupSubtreeGroupAnnounce`, `FF0X::B:FFFC`).
 
-The 92-byte header is layout-identical to BRC-124. `HashKey` is computed as `XXH64(senderIPv6 ∥ 0xFFFB ∥ subtreeID)` so each (sender, subtreeID) pair owns an independent sequence stream. Because payloads range from ~32 MB (HashesOnly, 1M nodes) to ~48 MB (FullNodes, 1M nodes), BRC-130 fragmentation is always required in practice; the proxy sets `OrigFrameVer=0x05` in each fragment header. Listener reassembly is keyed by SubtreeID; SHA256d hash verification is skipped (SubtreeID is a Merkle root, not a payload double-hash). Optional post-reassembly Merkle-root recomputation is available via `-subtree-data-verify-merkle`.
+The 92-byte header is layout-identical to BRC-124. `HashKey` is computed as
+`XXH64(senderIPv6 ∥ 0xFFFB ∥ subtreeID)` so each (sender, subtreeID) pair owns
+an independent sequence stream. Because payloads range from ~32 MB (HashesOnly,
+1M nodes) to ~48 MB (FullNodes, 1M nodes), BRC-130 fragmentation is always
+required in practice; the proxy sets `OrigFrameVer=0x05` in each fragment
+header. Listener reassembly is keyed by SubtreeID; SHA256d hash verification is
+skipped (SubtreeID is a Merkle root, not a payload double-hash). Optional
+post-reassembly Merkle-root recomputation is available via
+`-subtree-data-verify-merkle`.
 
-Sequence tracking and NACK retransmission are identical to BRC-124 and BRC-131: the retry endpoint joins `FF0X::B:FFFB`, caches BRC-132 frames and their BRC-130 fragments, and retransmits to `FF0X::B:FFFB` on NACK (not to a shard group).
+Sequence tracking and NACK retransmission are identical to BRC-124 and BRC-131:
+the retry endpoint joins `FF0X::B:FFFB`, caches BRC-132 frames and their BRC-130
+fragments, and retransmits to `FF0X::B:FFFB` on NACK (not to a shard group).
 
-**→ [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md)** — frame header layout, MsgType payload formats, fragmentation rules, Merkle verification, proxy/listener/retry-endpoint changes, error handling, constants reference
+**→ [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md)** — frame
+header layout, MsgType payload formats, fragmentation rules, Merkle
+verification, proxy/listener/retry-endpoint changes, error handling, constants
+reference
 
 ---
 
 ## Coinbase Transaction Frame Format (BRC-133)
 
-BRC-133 formalizes the wire mechanism for distributing coinbase transactions as a dedicated message type (`BlockMsgCoinbase = 0x02`) within BRC-131 block control frames (FrameVer `0x04`). Coinbase transactions are delivered to all subscribers via the **CtrlGroupControl** group (`FF0E::B:FFFE`), independent of shard assignment.
+BRC-133 formalizes the wire mechanism for distributing coinbase transactions as
+a dedicated message type (`BlockMsgCoinbase = 0x02`) within BRC-131 block
+control frames (FrameVer `0x04`). Coinbase transactions are delivered to all
+subscribers via the **CtrlGroupControl** group (`FF0E::B:FFFE`), independent of
+shard assignment.
 
-The 92-byte header is identical to the BRC-124 / BRC-131 layout. The ContentID field (bytes 8–39) carries the CoinbaseTxID (SHA256d of the coinbase transaction). The proxy stamps `HashKey` as `XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros)` and a monotonic `SeqNum` in-place. The raw BSV-serialised coinbase transaction (no P2P envelope) is carried as the payload.
+The 92-byte header is identical to the BRC-124 / BRC-131 layout. The ContentID
+field (bytes 8–39) carries the CoinbaseTxID (SHA256d of the coinbase
+transaction). The proxy stamps `HashKey` as `XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros)`
+and a monotonic `SeqNum` in-place. The raw BSV-serialised coinbase transaction
+(no P2P envelope) is carried as the payload.
 
-Sequence tracking and NACK retransmission are identical to BRC-131: the retry endpoint joins `FF0E::B:FFFE`, caches FrameVerV4 frames with `MsgType=0x02`, and retransmits to `FF0E::B:FFFE` on NACK.
+Sequence tracking and NACK retransmission are identical to BRC-131: the retry
+endpoint joins `FF0E::B:FFFE`, caches FrameVerV4 frames with `MsgType=0x02`, and
+retransmits to `FF0E::B:FFFE` on NACK.
 
-**→ [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)** — header layout, MsgType constants, proxy/listener/retry-endpoint changes, sequencing rules
+**→
+[BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)**
+— header layout, MsgType constants, proxy/listener/retry-endpoint changes,
+sequencing rules
 
 ---
 
 ## Anchor Transaction Frame Format (BRC-134)
 
-BRC-134 defines Frame Version `0x06` for distributing chained anchor transactions over the multicast fabric. An _anchor transaction_ is the root (first) transaction in a chain of dependent transactions; because all subsequent transactions reference it as an input, every subscriber must receive it regardless of which shard its TxID would otherwise hash to.
+BRC-134 defines Frame Version `0x06` for distributing chained anchor
+transactions over the multicast fabric. An _anchor transaction_ is the root
+(first) transaction in a chain of dependent transactions; because all subsequent
+transactions reference it as an input, every subscriber must receive it
+regardless of which shard its TxID would otherwise hash to.
 
-Anchor frames are delivered on the **CtrlGroupControl** group (`FF0E::B:FFFE`), the same global control channel used for BRC-131 block announcements and BRC-133 coinbase transactions.
+Anchor frames are delivered on the **CtrlGroupControl** group (`FF0E::B:FFFE`),
+the same global control channel used for BRC-131 block announcements and BRC-133
+coinbase transactions.
 
-The 92-byte header is layout-identical to BRC-124 with Frame Version `0x06` at offset 6. The TxID field (bytes 8–39) carries the SHA256d of the anchor transaction. `HashKey` is stamped as `XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros)` by the proxy; `SeqNum` is a monotonic per-sender counter. The raw BSV-serialised anchor transaction is carried as the payload (no P2P envelope). BRC-130 fragmentation is not defined for BRC-134.
+The 92-byte header is layout-identical to BRC-124 with Frame Version `0x06` at
+offset 6. The TxID field (bytes 8–39) carries the SHA256d of the anchor
+transaction. `HashKey` is stamped as `XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros)` by the
+proxy; `SeqNum` is a monotonic per-sender counter. The raw BSV-serialised anchor
+transaction is carried as the payload (no P2P envelope). BRC-130 fragmentation
+is not defined for BRC-134.
 
-Sequence tracking and NACK retransmission are identical to BRC-131 and BRC-133: the retry endpoint joins `FF0E::B:FFFE`, caches FrameVerV6 frames, and retransmits to `FF0E::B:FFFE` on NACK.
+Sequence tracking and NACK retransmission are identical to BRC-131 and BRC-133:
+the retry endpoint joins `FF0E::B:FFFE`, caches FrameVerV6 frames, and
+retransmits to `FF0E::B:FFFE` on NACK.
 
-**→ [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)** — header layout, FrameVerV6 constant, proxy/listener/retry-endpoint changes, sequencing rules
+**→
+[BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)**
+— header layout, FrameVerV6 constant, proxy/listener/retry-endpoint changes,
+sequencing rules
 
 ---
 
 ## Block Header Format (BRC-135)
 
-BRC-135 defines Frame Version `0x07` for distributing standalone 80-byte BSV block headers as a lightweight derivative of BRC-131 `BlockAnnounce` frames. Any node that receives a `BlockAnnounce` can act as an _emitter_: it extracts the 80-byte header from the announce payload, wraps it in a 172-byte BRC-135 frame (92-byte header + 80-byte payload), stamps its own `HashKey`/`SeqNum`, and sends it to downstream consumers via unicast or multicast egress.
+BRC-135 defines Frame Version `0x07` for distributing standalone 80-byte BSV
+block headers as a lightweight derivative of BRC-131 `BlockAnnounce` frames. Any
+node that receives a `BlockAnnounce` can act as an _emitter_: it extracts the
+80-byte header from the announce payload, wraps it in a 172-byte BRC-135 frame
+(92-byte header + 80-byte payload), stamps its own `HashKey`/`SeqNum`, and sends
+it to downstream consumers via unicast or multicast egress.
 
-BRC-135 frames are emitter-originated and are NOT re-injected onto the primary fabric (`FF0E::B:FFFE`). They target downstream consumers that need only block headers (SPV clients, header-chain validators, mining coordinators). At 172 bytes total, no fragmentation is required. BRC-135 frames are not covered by the primary-fabric BRC-126 NACK path; recovery relies on redundant emitters, upstream BRC-131 NACK retransmission, or application-level retry.
+BRC-135 frames are emitter-originated and are NOT re-injected onto the primary
+fabric (`FF0E::B:FFFE`). They target downstream consumers that need only block
+headers (SPV clients, header-chain validators, mining coordinators). At 172
+bytes total, no fragmentation is required. BRC-135 frames are not covered by the
+primary-fabric BRC-126 NACK path; recovery relies on redundant emitters,
+upstream BRC-131 NACK retransmission, or application-level retry.
 
-**→ [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md)** — header layout, FrameVerV7 constant, payload format, sequencing, retransmission strategy
+**→
+[BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md)** —
+header layout, FrameVerV7 constant, payload format, sequencing, retransmission
+strategy
 
 ---
 
@@ -765,15 +998,21 @@ BRC-135 frames are emitter-originated and are NOT re-injected onto the primary f
 
 **Purpose:** Random BSV-shaped frame generator for load and functional testing.
 
-**Features:** random BSV-shaped payloads, deterministic subtree ID pool, optional gap injection (`-seq-gap-every`, `-seq-gap-delay`) for NACK/retransmit tests, multi-core token-bucket pacer.
+**Features:** random BSV-shaped payloads, deterministic subtree ID pool,
+optional gap injection (`-seq-gap-every`, `-seq-gap-delay`) for NACK/retransmit
+tests, multi-core token-bucket pacer.
 
-**→ [bitcoin-subtx-generator README](https://github.com/lightwebinc/bitcoin-subtx-generator)** — usage examples, flags
+**→
+[bitcoin-subtx-generator README](https://github.com/lightwebinc/bitcoin-subtx-generator)**
+— usage examples, flags
 
 ### bitcoin-shard-listener E2E Tests
 
 **Purpose:** Self-contained end-to-end tests for listener functionality.
 
-**Approach:** Inject frames as unicast UDP directly to listener's bound port (`[::1]:listen-port`), bypassing proxy and multicast fabric. This avoids Linux loopback multicast reliability issues on CI.
+**Approach:** Inject frames as unicast UDP directly to listener's bound port
+(`[::1]:listen-port`), bypassing proxy and multicast fabric. This avoids Linux
+loopback multicast reliability issues on CI.
 
 **Test Scenarios:**
 
@@ -788,18 +1027,28 @@ cd bitcoin-shard-listener
 make test-e2e
 ```
 
-**Documentation:** [bitcoin-shard-listener README](https://github.com/lightwebinc/bitcoin-shard-listener)
+**Documentation:**
+[bitcoin-shard-listener README](https://github.com/lightwebinc/bitcoin-shard-listener)
 
 ### Integration Test Scenarios (bitcoin-multicast-test)
 
-**Purpose:** Full-stack integration testing across all components in an LXD-based lab environment.
+**Purpose:** Full-stack integration testing across all components in an
+LXD-based lab environment.
 
-The [bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test) repository provides:
+The
+[bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test)
+repository provides:
 
-- **Lab setup scripts** — automated LXD VM provisioning (source, proxy, listeners, retry endpoints, metrics)
-- **Ansible deploy** — single-command deployment of all services via `run-deploy.sh`
-- **Scenario suite** — numbered test scenarios covering functional validation, shard/subtree filtering, multicast egress bridging, NACK retransmission, rate limiting, beacon discovery, MISS escalation, BRC-127 group announcements, and BRC-131 block announcement delivery and retransmission
-- **`run-all.sh`** — sequential execution of all scenarios with pass/fail summary
+- **Lab setup scripts** — automated LXD VM provisioning (source, proxy,
+  listeners, retry endpoints, metrics)
+- **Ansible deploy** — single-command deployment of all services via
+  `run-deploy.sh`
+- **Scenario suite** — numbered test scenarios covering functional validation,
+  shard/subtree filtering, multicast egress bridging, NACK retransmission, rate
+  limiting, beacon discovery, MISS escalation, BRC-127 group announcements, and
+  BRC-131 block announcement delivery and retransmission
+- **`run-all.sh`** — sequential execution of all scenarios with pass/fail
+  summary
 
 **Getting Started:**
 
@@ -858,7 +1107,8 @@ bash scenarios/run-all.sh   # Run full scenario suite
   - Ingress: Only multicast data on ingress interface
   - Egress: Only NACK datagrams outbound
   - All other traffic dropped
-- See [bitcoin-listener security docs](https://github.com/lightwebinc/bitcoin-listener/blob/main/docs/security.md)
+- See
+  [bitcoin-listener security docs](https://github.com/lightwebinc/bitcoin-listener/blob/main/docs/security.md)
 
 **Retry Endpoint (bitcoin-retransmission):**
 
@@ -873,14 +1123,16 @@ bash scenarios/run-all.sh   # Run full scenario suite
 - Optional eBGP on ingress interface
 - Announce shared prefixes from all proxy nodes
 - Senders routed to nearest proxy via BGP best-path selection
-- See [bitcoin-ingress BGP docs](https://github.com/lightwebinc/bitcoin-ingress/blob/main/docs/bgp.md)
+- See
+  [bitcoin-ingress BGP docs](https://github.com/lightwebinc/bitcoin-ingress/blob/main/docs/bgp.md)
 
 **Listener (bitcoin-listener):**
 
 - Optional BGP for listener reachability into fabric
 - Advertise listener's own unicast prefix
 - Enables MLD/PIM distribution trees in L3 fabrics
-- See [bitcoin-listener BGP docs](https://github.com/lightwebinc/bitcoin-listener/blob/main/docs/bgp.md)
+- See
+  [bitcoin-listener BGP docs](https://github.com/lightwebinc/bitcoin-listener/blob/main/docs/bgp.md)
 
 **Retry Endpoint (bitcoin-retransmission):**
 
@@ -916,11 +1168,16 @@ All services expose Prometheus metrics on dedicated ports:
 | bitcoin-shard-listener | :9200        | bsl\_  |
 | bitcoin-retry-endpoint | :9400        | bre\_  |
 
-Key signals: `bsp_packets_dropped_total`, `bsl_gaps_detected_total`, `bsl_gaps_unrecovered_total`, `bre_cache_misses_total`, `bre_rate_limit_drops_total`. See each component's docs for full metric reference.
+Key signals: `bsp_packets_dropped_total`, `bsl_gaps_detected_total`,
+`bsl_gaps_unrecovered_total`, `bre_cache_misses_total`,
+`bre_rate_limit_drops_total`. See each component's docs for full metric
+reference.
 
 ### Graceful Shutdown
 
-All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` → 503), optional drain timeout, close ingress sockets, wait for in-flight processing, flush OTLP exporter.
+All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
+503), optional drain timeout, close ingress sockets, wait for in-flight
+processing, flush OTLP exporter.
 
 ---
 
@@ -930,19 +1187,35 @@ All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
 
 **Protocol:**
 
-- [Wire Protocol Specification](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md) — Complete BRC-12/BRC-124/BRC-128 frame format
-- [BRC-124 Frame Format](docs/brc-124-frame-format.md) — 92-byte header, HashKey/SeqNum per-flow sequencing, backward compatibility
-- [BRC-126 Retransmission Protocol](docs/brc-126-retransmission-protocol.md) — NACK/ACK/MISS wire formats, ADVERT beacon, tier/preference model
-- [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md) — SubtreeAnnounce wire format, proxy forwarding, listener integration
-- [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md) — EF payload format, detection, infrastructure impact
-- [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md) — IPv6 address scheme, control-plane indices, beacon groups
-- [BRC-130 Fragmentation](docs/brc-130-fragmentation.md) — fragment header layout, fragDataSize, per-fragment NACK, reassembly algorithm, metrics
-- [BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md) — block frame header, BlockAnnounce + CoinbaseTx payloads, control-group routing, proxy/listener/retry-endpoint changes
-- [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md) — frame header layout, HashesOnly/FullNodes payload formats, fragmentation rules, Merkle verification, proxy/listener/retry-endpoint changes
-- [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md) — coinbase frame wire format, MsgType constants, proxy/listener/retry-endpoint changes
-- [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md) — anchor frame wire format, FrameVerV6, proxy/listener/retry-endpoint changes
-- [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) — standalone block header split, FrameVerV7, emitter-originated sequencing
-- [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end pipeline diagrams, escalation state machine, flood prevention
+- [Wire Protocol Specification](https://github.com/lightwebinc/bitcoin-shard-common/blob/main/docs/protocol.md)
+  — Complete BRC-12/BRC-124/BRC-128 frame format
+- [BRC-124 Frame Format](docs/brc-124-frame-format.md) — 92-byte header,
+  HashKey/SeqNum per-flow sequencing, backward compatibility
+- [BRC-126 Retransmission Protocol](docs/brc-126-retransmission-protocol.md) —
+  NACK/ACK/MISS wire formats, ADVERT beacon, tier/preference model
+- [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md) —
+  SubtreeAnnounce wire format, proxy forwarding, listener integration
+- [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md) — EF payload
+  format, detection, infrastructure impact
+- [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md)
+  — IPv6 address scheme, control-plane indices, beacon groups
+- [BRC-130 Fragmentation](docs/brc-130-fragmentation.md) — fragment header
+  layout, fragDataSize, per-fragment NACK, reassembly algorithm, metrics
+- [BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md)
+  — block frame header, BlockAnnounce + CoinbaseTx payloads, control-group
+  routing, proxy/listener/retry-endpoint changes
+- [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md) — frame
+  header layout, HashesOnly/FullNodes payload formats, fragmentation rules,
+  Merkle verification, proxy/listener/retry-endpoint changes
+- [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)
+  — coinbase frame wire format, MsgType constants, proxy/listener/retry-endpoint
+  changes
+- [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)
+  — anchor frame wire format, FrameVerV6, proxy/listener/retry-endpoint changes
+- [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) —
+  standalone block header split, FrameVerV7, emitter-originated sequencing
+- [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
+  pipeline diagrams, escalation state machine, flood prevention
 
 **Services:**
 
@@ -958,7 +1231,8 @@ All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
 
 ### Conceptual Attribution
 
-The IPv6 multicast transaction broadcast architecture from which this software draws inspiration was articulated by Dr. Craig S. Wright:
+The IPv6 multicast transaction broadcast architecture from which this software
+draws inspiration was articulated by Dr. Craig S. Wright:
 
 - [Multicast Within Multicast: Anycast, Sharded Resends, and Hierarchical Distribution for Transaction and Block Propagation](https://singulargrit.substack.com/p/multicast-within-multicast-anycast)
 - [Multicast as the Only Viable Architecture](https://singulargrit.substack.com/p/multicast-as-the-only-viable-architecture)
@@ -1023,5 +1297,5 @@ The IPv6 multicast transaction broadcast architecture from which this software d
 
 ---
 
-_Document Version: 1.12_  
+_Document Version: 1.13_  
 _Last Updated: 2026-05-20_
