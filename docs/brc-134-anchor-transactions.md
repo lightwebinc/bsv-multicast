@@ -1,4 +1,4 @@
-# BRC-134 — Chained Anchor Transaction Frames
+# BRC-134 — Chained Anchor Transaction Frame Format
 
 BRC-134 defines a new frame version (`0x06`) for distributing chained anchor
 transactions over the multicast fabric. An anchor transaction is the root

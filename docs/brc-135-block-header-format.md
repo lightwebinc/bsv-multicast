@@ -1,4 +1,4 @@
-# BRC-135 — Multicast Block Header Format
+# BRC-135 — Multicast Block Header Frame Format
 
 BRC-135 defines a new frame version (`0x07`) for distributing standalone 80-byte
 BSV block headers over the multicast fabric. Block header frames are produced as
