@@ -28,6 +28,7 @@ This document provides a comprehensive design overview of the entire multicast e
 - [Subtree Data Frame Format (BRC-132)](#subtree-data-frame-format-brc-132)
 - [Coinbase Transaction Frame Format (BRC-133)](#coinbase-transaction-frame-format-brc-133)
 - [Anchor Transaction Frame Format (BRC-134)](#anchor-transaction-frame-format-brc-134)
+- [Block Header Format (BRC-135)](#block-header-format-brc-135)
 - [Testing and Validation](#testing-and-validation)
 - [Deployment Considerations](#deployment-considerations)
 
@@ -373,6 +374,10 @@ Key fields: Network magic, Protocol version, Frame version, Transaction ID, Hash
 **BRC-134 (Anchor Transaction):** BRC-134 defines Frame Version `0x06` for distributing chained anchor transactions — the root transaction of a dependent chain — over the control plane. Because all subsequent chain transactions reference the anchor as an input, every subscriber must receive it regardless of shard assignment. The 92-byte header is layout-identical to BRC-124 with `FrameVer=0x06`; the TxID field carries the SHA256d of the anchor transaction. Frames are delivered on `CtrlGroupControl` (`FF0E::B:FFFE`). BRC-130 fragmentation is not defined for BRC-134. Gap tracking and NACK retransmission are identical to BRC-131.
 
 **→ [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)**
+
+**BRC-135 (Block Header Format):** BRC-135 defines Frame Version `0x07` for distributing standalone 80-byte BSV block headers. BRC-135 frames are produced by an emitter (any node that receives a BRC-131 `BlockAnnounce`) by extracting the raw 80-byte header and wrapping it in a minimal 172-byte frame. The emitter stamps its own `HashKey`/`SeqNum` and sends the frame to its configured egress (unicast or multicast). BRC-135 frames are not re-injected onto the primary fabric. No fragmentation is required.
+
+**→ [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md)**
 
 ---
 
@@ -744,6 +749,16 @@ Sequence tracking and NACK retransmission are identical to BRC-131 and BRC-133: 
 
 ---
 
+## Block Header Format (BRC-135)
+
+BRC-135 defines Frame Version `0x07` for distributing standalone 80-byte BSV block headers as a lightweight derivative of BRC-131 `BlockAnnounce` frames. Any node that receives a `BlockAnnounce` can act as an _emitter_: it extracts the 80-byte header from the announce payload, wraps it in a 172-byte BRC-135 frame (92-byte header + 80-byte payload), stamps its own `HashKey`/`SeqNum`, and sends it to downstream consumers via unicast or multicast egress.
+
+BRC-135 frames are emitter-originated and are NOT re-injected onto the primary fabric (`FF0E::B:FFFE`). They target downstream consumers that need only block headers (SPV clients, header-chain validators, mining coordinators). At 172 bytes total, no fragmentation is required. BRC-135 frames are not covered by the primary-fabric BRC-126 NACK path; recovery relies on redundant emitters, upstream BRC-131 NACK retransmission, or application-level retry.
+
+**→ [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md)** — header layout, FrameVerV7 constant, payload format, sequencing, retransmission strategy
+
+---
+
 ## Testing and Validation
 
 ### bitcoin-subtx-generator
@@ -926,6 +941,7 @@ All services handle SIGINT/SIGTERM identically: set draining flag (`/readyz` →
 - [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md) — frame header layout, HashesOnly/FullNodes payload formats, fragmentation rules, Merkle verification, proxy/listener/retry-endpoint changes
 - [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md) — coinbase frame wire format, MsgType constants, proxy/listener/retry-endpoint changes
 - [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md) — anchor frame wire format, FrameVerV6, proxy/listener/retry-endpoint changes
+- [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) — standalone block header split, FrameVerV7, emitter-originated sequencing
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end pipeline diagrams, escalation state machine, flood prevention
 
 **Services:**

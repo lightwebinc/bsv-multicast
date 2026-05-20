@@ -31,6 +31,7 @@ A high-throughput, horizontally-scalable transaction distribution system for Bit
 - [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md) — Subtree data distribution with Merkle roots
 - [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md) — Coinbase transaction wire format on the control channel
 - [BRC-134 Anchor Transaction Frames](docs/brc-134-anchor-transactions.md) — Chained anchor transaction distribution
+- [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) — Standalone 80-byte block header split; emitter-originated
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end pipeline diagrams
 
 ## License
