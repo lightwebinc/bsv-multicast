@@ -1,4 +1,4 @@
-# BRC-131 — Block Announcement Protocol
+# BRC-131 — Block Announcement Frame Format
 
 BRC-131 defines a new frame version (0x04) for distributing block-level metadata over the multicast fabric. Block announcements and coinbase transactions are delivered to all subscribers via a dedicated control-plane multicast group, independently of the shard groups used for transaction distribution.
 

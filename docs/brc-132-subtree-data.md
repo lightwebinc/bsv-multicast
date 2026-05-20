@@ -1,4 +1,4 @@
-# BRC-132 — Subtree Data Multicast Protocol
+# BRC-132 — Subtree Data Frame Format
 
 BRC-132 defines a new frame version (0x05) for distributing complete subtree data payloads (transaction hashes and metadata) over the multicast fabric. Subtree data is delivered to all subscribers via the dedicated `CtrlGroupSubtreeAnnounce` multicast group (`FF0X::B:FFFB`), independently of the shard groups used for individual transaction distribution.
 

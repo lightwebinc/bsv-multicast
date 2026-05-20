@@ -8,13 +8,13 @@ A high-throughput, horizontally-scalable transaction distribution system for Bit
 
 | Repository | Purpose |
 | ---------- | ------- |
-| [bitcoin-shard-proxy](https://github.com/lightwebinc/bitcoin-shard-proxy) | Stateless ingress proxy; derives multicast group from TxID, forwards verbatim |
-| [bitcoin-shard-listener](https://github.com/lightwebinc/bitcoin-shard-listener) | Multicast subscriber; shard/subtree filtering, unicast/multicast egress, NACK gap recovery |
-| [bitcoin-retry-endpoint](https://github.com/lightwebinc/bitcoin-retry-endpoint) | Caches frames, retransmits on NACK; beacon discovery |
-| [bitcoin-shard-common](https://github.com/lightwebinc/bitcoin-shard-common) | Shared protocol primitives: `frame`, `shard`, `seqhash`, `sequence` |
-| [bitcoin-subtx-generator](https://github.com/lightwebinc/bitcoin-subtx-generator) | Traffic generator for load and functional testing |
-| [bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test) | Integration test harness; LXD lab, scenario suite, deploy scripts |
-| [bitcoin-ingress](https://github.com/lightwebinc/bitcoin-ingress) | Ansible/Terraform for proxy deployment |
+| [bitcoin-shard-proxy](https://github.com/lightwebinc/bitcoin-shard-proxy) | Stateless ingress proxy; receives frames, derives multicast group, forwards verbatim |
+| [bitcoin-shard-listener](https://github.com/lightwebinc/bitcoin-shard-listener) | Multicast subscriber; filters by shard/subtree, forwards to unicast and multicast consumers |
+| [bitcoin-retry-endpoint](https://github.com/lightwebinc/bitcoin-retry-endpoint) | Caches frames, retransmits on NACK requests |
+| [bitcoin-shard-common](https://github.com/lightwebinc/bitcoin-shard-common) | Protocol primitives shared across services: `frame`, `shard`, `seqhash`, `sequence` |
+| [bitcoin-subtx-generator](https://github.com/lightwebinc/bitcoin-subtx-generator) | Traffic generator for load/functional testing |
+| [bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test) | Integration test harness; scenario suite, lab setup, deploy |
+| [bitcoin-ingress](https://github.com/lightwebinc/bitcoin-ingress) | Ansible/Terraform for ingress proxy deployment |
 | [bitcoin-listener](https://github.com/lightwebinc/bitcoin-listener) | Ansible/Terraform for listener deployment |
 | [bitcoin-retransmission](https://github.com/lightwebinc/bitcoin-retransmission) | Ansible/Terraform for retry endpoint deployment |
 
@@ -27,9 +27,9 @@ A high-throughput, horizontally-scalable transaction distribution system for Bit
 - [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md) — BRC-30 EF payloads within BRC-124 frames
 - [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md) — IPv6 address scheme, control-plane indices
 - [BRC-130 Fragmentation](docs/brc-130-fragmentation.md) — Large-transaction fragmentation; per-fragment NACK; listener reassembly
-- [BRC-131 Block Announcement Protocol](docs/brc-131-block-announcements.md) — BlockAnnounce/CoinbaseTx frame types; control-group routing
-- [BRC-132 Subtree Data Multicast Protocol](docs/brc-132-subtree-data.md) — Subtree data distribution with Merkle roots
-- [BRC-133 Coinbase Transaction Delivery](docs/brc-133-coinbase-delivery.md) — Coinbase transaction wire format on the control channel
+- [BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md) — BlockAnnounce/CoinbaseTx frame types; control-group routing
+- [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md) — Subtree data distribution with Merkle roots
+- [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md) — Coinbase transaction wire format on the control channel
 - [BRC-134 Anchor Transaction Frames](docs/brc-134-anchor-transactions.md) — Chained anchor transaction distribution
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end pipeline diagrams
 

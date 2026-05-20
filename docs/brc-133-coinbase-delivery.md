@@ -1,4 +1,4 @@
-# BRC-133 — Coinbase Transaction Delivery
+# BRC-133 — Coinbase Transaction Frame Format
 
 BRC-133 defines the policy and wire mechanism for distributing coinbase
 transactions over the multicast fabric. Coinbase transactions are carried as a
