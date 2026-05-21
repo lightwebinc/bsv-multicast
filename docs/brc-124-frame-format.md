@@ -1,6 +1,6 @@
 # BRC-124 — Data-Plane Frame Format
 
-BRC-124 defines the wire format for transporting BSV transactions over IPv6 multicast and TCP/UDP unicast. This document is the canonical reference for the 92-byte BRC-124 header and the 44-byte legacy BRC-12 header.
+BRC-124 defines the wire format for transporting BSV transactions over IPv6 multicast and TCP/UDP unicast. This document is a reference for the 92-byte BRC-124 header and the 44-byte legacy BRC-12 header.
 
 > **Canonical BRC:** [BRC-124](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0124.md)
 
