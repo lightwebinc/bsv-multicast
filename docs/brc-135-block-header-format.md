@@ -7,6 +7,8 @@ consumers that require only block headers (SPV wallets, header-chain validators,
 mining coordinators) to receive a minimal 172-byte datagram instead of the full
 announce payload.
 
+> **Canonical BRC:** [BRC-135](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0135.md)
+
 ---
 
 ## Purpose
@@ -203,3 +205,4 @@ A consumer receiving BRC-135 frames:
   — `EncodeBlockHeader`, `DecodeBlockHeader`, `IsBlockHeaderFrame`, `FrameVerV7`
 - [bitcoin-shard-listener/listener](https://github.com/lightwebinc/bitcoin-shard-listener/tree/main/listener)
   — reference emitter implementation
+- [BRC-135: Multicast Block Header Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0135.md) — published BRC

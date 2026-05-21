@@ -6,6 +6,8 @@ dedicated message type within BRC-131 block control frames, delivered to all
 subscribers via the control-plane multicast group independently of the shard
 groups used for ordinary transaction distribution.
 
+> **Canonical BRC:** [BRC-133](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0133.md)
+
 ---
 
 ## Purpose
@@ -160,3 +162,4 @@ objects.
   — full BRC-131 header format and BlockAnnounce payload
 - [BRC-134: Chained Anchor Transaction Frames](brc-134-anchor-transactions.md) —
   another control-group transaction type
+- [BRC-133: Multicast Coinbase Transaction Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0133.md) — published BRC

@@ -2,6 +2,8 @@
 
 BRC-127 defines the protocol for dynamically advertising SubtreeID–GroupID bindings over the multicast fabric. Producers send periodic `SubtreeAnnounce` datagrams to the proxy via TCP; the proxy forwards them to the `CtrlGroupSubtreeGroupAnnounce` multicast group (`FF05::B:FFFC`). Listeners subscribe to this group and populate a dynamic registry used at the subtree filter layer.
 
+> **Canonical BRC:** [BRC-127](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0127.md)
+
 ---
 
 ## Purpose
@@ -163,3 +165,9 @@ When both `-announce-addr` and `-subtree-group` are set, `subtx-gen` maintains a
 | Filter integration (`groupReg`)                | `bitcoin-shard-listener/filter/filter.go`                         |
 | Listener config flags                          | `bitcoin-shard-listener/config/config.go`                         |
 | Producer sender                                | `bitcoin-subtx-generator/internal/announce/sender.go`             |
+
+---
+
+## References
+
+- [BRC-127: Multicast Subtree Group Announcement Protocol](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0127.md) — published BRC

@@ -2,6 +2,8 @@
 
 BRC-129 defines the IPv6 multicast group address scheme for the BSV transaction sharding pipeline, including data-plane shard groups, control-plane beacon groups, and reserved indices. The scheme is aligned with IANA's IPv6 multicast address allocation practice and the IANA-assigned Bitcoin group `FF0X::B`.
 
+> **Canonical BRC:** [BRC-129](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md)
+
 ---
 
 ## IANA Allocation
@@ -117,3 +119,9 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 - **Control group helper:** `bitcoin-shard-common/shard/control.go` — `ControlGroupAddr(scopePrefix, groupID, index uint16)` (standalone; not bound to Engine scope).
 - **Constants:** `CtrlGroupSubtreeAnnounce = 0xFFFB`, `CtrlGroupSubtreeGroupAnnounce = 0xFFFC`, `CtrlGroupBeacon = 0xFFFD`, `CtrlGroupControl = 0xFFFE`.
 - **Default group-id:** `shard.DefaultGroupID = 0x000B` (IANA Bitcoin).
+
+---
+
+## References
+
+- [BRC-129: IPv6 Multicast Group Address Assignments](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md) — published BRC

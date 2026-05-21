@@ -6,6 +6,8 @@ transactions over the multicast fabric. An anchor transaction is the root
 transactions in the chain reference the anchor as an input, every subscriber
 must receive it regardless of which shard its TxID would otherwise hash to.
 
+> **Canonical BRC:** [BRC-134](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0134.md)
+
 ---
 
 ## Purpose
@@ -179,3 +181,4 @@ becomes necessary it will be defined in a future revision.
   — `ProcessAnchor`
 - [bitcoin-shard-listener/listener](https://github.com/lightwebinc/bitcoin-shard-listener/tree/main/listener)
   — `processAnchorFrame`
+- [BRC-134: Multicast Anchor Transaction Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0134.md) — published BRC

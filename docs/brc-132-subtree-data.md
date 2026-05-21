@@ -2,6 +2,8 @@
 
 BRC-132 defines a new frame version (0x05) for distributing complete subtree data payloads (transaction hashes and metadata) over the multicast fabric. Subtree data is delivered to all subscribers via the dedicated `CtrlGroupSubtreeAnnounce` multicast group (`FF0X::B:FFFB`), independently of the shard groups used for individual transaction distribution.
 
+> **Canonical BRC:** [BRC-132](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0132.md)
+
 ---
 
 ## Purpose
@@ -226,3 +228,4 @@ After reassembly, optional Merkle-root recomputation verifies the SubtreeID:
 - [bitcoin-shard-listener/listener](https://github.com/lightwebinc/bitcoin-shard-listener/tree/main/listener) — `processSubtreeDataFrame`
 - [bitcoin-retry-endpoint/ingress](https://github.com/lightwebinc/bitcoin-retry-endpoint/tree/main/ingress) — `processSubtreeDataFrame`
 - [bitcoin-retry-endpoint/retransmit](https://github.com/lightwebinc/bitcoin-retry-endpoint/tree/main/retransmit) — V5-aware retransmit routing
+- [BRC-132: Multicast Subtree Data Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0132.md) — published BRC

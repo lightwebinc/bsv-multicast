@@ -2,6 +2,8 @@
 
 BRC-130 is a fragmentation extension to BRC-124. When a BSV transaction payload exceeds the path MTU, the proxy decomposes it into a sequence of fixed-size fragment datagrams. Listeners reassemble the fragments and verify the reconstructed payload against the TxID before forwarding.
 
+> **Canonical BRC:** [BRC-130](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0130.md)
+
 ---
 
 ## Fragment Header Format (104 bytes)
@@ -126,3 +128,4 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 - [bitcoin-shard-proxy/forwarder](https://github.com/lightwebinc/bitcoin-shard-proxy/tree/main/forwarder) — proxy-side fragmentation
 - [bitcoin-shard-listener/reassembly](https://github.com/lightwebinc/bitcoin-shard-listener/tree/main/reassembly) — listener-side reassembly
 - [BRC-132: Subtree Data Multicast Protocol](brc-132-subtree-data.md) — `OrigFrameVer=0x05` usage
+- [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0130.md) — published BRC

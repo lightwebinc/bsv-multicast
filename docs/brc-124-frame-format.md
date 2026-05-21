@@ -2,6 +2,8 @@
 
 BRC-124 defines the wire format for transporting BSV transactions over IPv6 multicast and TCP/UDP unicast. This document is the canonical reference for the 92-byte BRC-124 header and the 44-byte legacy BRC-12 header.
 
+> **Canonical BRC:** [BRC-124](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0124.md)
+
 ---
 
 ## BRC-124 Frame Format (92-byte header)
@@ -87,3 +89,9 @@ Accepted and forwarded verbatim for backward compatibility.
 
 - **Canonical source:** `bitcoin-shard-common/frame/frame.go`
 - **Constants:** `MagicBSV = 0xE3E1F3E8`, `ProtoVer = 0x02BF`, `FrameVerV1 = 0x01`, `FrameVerV2 = 0x02`, `HeaderSizeLegacy = 44`, `HeaderSize = 92`
+
+---
+
+## References
+
+- [BRC-124: Multicast Transaction Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0124.md) — published BRC
