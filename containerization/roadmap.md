@@ -178,6 +178,62 @@ Deliverables:
 
 This phase is scoped for cloud portability but intentionally deferred. It does not affect LXD or multicast deployments.
 
+### Phase 7b — Local socket transport (collapsed proxy + listener)
+
+**Target: `bitcoin-shard-proxy`, `bitcoin-shard-listener`, both Helm charts**
+
+**Use case:** a single-host deployment that collapses the proxy and the listener into one pod (or one VM) and exposes a **full-duplex local API to client processes** on that host. The fabric NIC, MLD joins, and multicast plumbing become an implementation detail of the pod; the client speaks only AF_UNIX. This unlocks:
+- **Edge / single-tenant deployments** where one consumer process attaches to the feed without any IPv6 multicast configuration.
+- **Sidecar pattern** in Kubernetes: a workload pod runs the listener as a sidecar, shares an `emptyDir` mount for the socket dir, and consumes frames over `/run/bsl/data.sock` — no `hostNetwork`, no Multus.
+- **Client-side NACK / control flow** over a paired ingress socket on the same host, providing duplex semantics without exposing a UDP port to the local node.
+
+#### Viability assessment
+
+| Concern | Verdict | Notes |
+|---|---|---|
+| Message framing | ✅ Already abstracted | Listener `egress/egress.go` (`Sender`) and proxy ingress reader both treat the transport as a stream of complete frames. AF_UNIX `SOCK_DGRAM` preserves message boundaries 1:1 with UDP; `SOCK_SEQPACKET` adds connection state and ordering. Either drops in behind the existing `EGRESS_PROTO` switch with no frame-format change. |
+| Throughput | ✅ Higher than UDP loopback | AF_UNIX dgram skips the IP stack and routing decision; measured ~2–3× the small-packet throughput of `udp` to `[::1]` on Linux, with lower jitter. No fragmentation budget needed. |
+| Fan-out (multiple clients) | ⚠️ Manual | AF_UNIX dgram is unicast. The listener already supports a single downstream egress target — for >1 local consumer, the listener writes to a list of sockets (`EGRESS_TARGETS=unix:/run/bsl/a.sock,unix:/run/bsl/b.sock`) replicating the per-listener fan-out that the proxy does for multicast. Acceptable up to ~16 local consumers; beyond that, use a shared-memory ring (out of scope for Phase 7b). |
+| Backpressure | ✅ Bounded | `SO_SNDBUF` / `SO_RCVBUF` on AF_UNIX dgram are tunable; on overflow the kernel returns `ENOBUFS` (dgram) or blocks (seqpacket). Listener's existing per-worker `Sender` already handles write errors and accounts them via `egress_errors_total`. |
+| Filesystem lifecycle | ⚠️ Operator | Socket path must be in a writable mount (`emptyDir`, `hostPath`, or tmpfs). `unlink()` on shutdown handled by the binary; charts must set `socketDir` and mount it on both the producer and the consumer container. |
+| Security | ✅ Filesystem ACL | No network ACL needed — `chmod`/`chown` on the socket path. Charts expose `socketMode` (default `0660`) and `socketGroup`. |
+| Full-duplex (client → proxy ingress) | ✅ Symmetric | Proxy's UDP frame ingress (`UDP_LISTEN_PORT`, `worker/worker.go`) and TCP ingress (`TCP_LISTEN_PORT`, `worker/tcp.go`) both read complete frames from a `net.PacketConn` / `net.Listener`. Adding `UNIX_LISTEN_PATH` + `UNIX_TCP_LISTEN_PATH` (seqpacket) follows the same pattern. **Separate sockets per direction** keeps the duplex flows independent — client publishes via `/run/bsp/ingress.sock`, consumes via `/run/bsl/egress.sock`. |
+| Retry endpoint / NACK | ➖ Out of scope | NACK plane stays on IPv6 unicast inside the pod. Collapsed deployments may also collapse the retry endpoint, but that is independent of the data-plane transport. |
+| Beacon discovery | ➖ Unchanged | Beacons remain multicast on the fabric NIC owned by the collapsed pod; the client never sees them. |
+| Helm / chart surface | ✅ Additive | New values: `egress.mode: udp|tcp|unix-dgram|unix-seqpacket`, `egress.socketPath`, `egress.socketMode`, `egress.socketGroup`. `networking.mode: collapsed` shortcut wires the proxy and listener into a single Deployment with a shared `emptyDir`. |
+
+**Concluding viability: high.** All required hooks already exist in the codebase (`Sender` proto switch, proxy UDP/TCP ingress workers, distroless image, non-root user). The change is a transport addition, not a protocol or frame-format change.
+
+#### Deliverables
+
+- `bitcoin-shard-listener`:
+  - `Sender` (egress/egress.go) gains `unix-dgram` and `unix-seqpacket` proto branches via `net.DialUnix` (auto-reconnect on `ECONNREFUSED`, same retry semantics as the existing TCP path).
+  - `EGRESS_ADDR` accepts `unix:/path/to/sock` in addition to `host:port`; `EGRESS_PROTO=unix-dgram|unix-seqpacket` validated in `config/config.go`.
+  - Optional multi-target list (`EGRESS_TARGETS`) for local fan-out to multiple client sockets.
+  - `HEADER_EGRESS_*` mirror the same surface so the SPV header stream can also run over AF_UNIX.
+- `bitcoin-shard-proxy`:
+  - `UNIX_LISTEN_PATH` (`SOCK_DGRAM`) and `UNIX_SEQPACKET_LISTEN_PATH` configs added to the UDP / TCP worker constructors; reuses `forwarder.Process` unchanged.
+  - Startup creates parent dirs, `unlink()`s stale sockets, applies `socketMode`/`socketGroup`.
+- Helm charts:
+  - `bitcoin-shard-listener-helm`: `egress.mode`, `egress.socketPath`, `egress.socketMode`, `egress.socketGroup`; renders an `emptyDir` mount when the mode is AF_UNIX.
+  - `bitcoin-shard-proxy-helm`: `ingress.unix` and `ingress.unixSeqpacket` value blocks.
+  - New `bitcoin-collapsed-helm` chart (or composite values in proxy chart) bundling proxy + listener in one Deployment with the socket dir shared via `emptyDir`. Multicast fabric attachment (`networking.mode: multus|host`) still required at the pod boundary.
+- Harness:
+  - `harness/driver/docker` gains a `volumes:` mount for the socket dir between two collapsed containers.
+  - New scenario `harness/scenarios/scenarioNN_collapsed_unix_test.go`: proxy + listener on the same docker network with AF_UNIX data plane, verifies duplex (frames downstream, NACK / control upstream) and metric parity with the multicast baseline.
+  - Microbench (`harness/perf/`) comparing `udp` loopback vs `unix-dgram` at 1 M fps.
+- Documentation:
+  - `bitcoin-multicast/containerization/composition-spec.md` — new "Collapsed local-socket profile" section.
+  - `bitcoin-shard-listener/docs/configuration.md` — `EGRESS_PROTO` table extended.
+  - `bitcoin-shard-proxy/docs/configuration.md` — `UNIX_LISTEN_PATH` documented.
+
+Dependencies: Phase 1 (canonical image is the deployment unit). Independent of Phase 7 unicast-egress work — the two modes can ship in either order.
+
+Out of scope for Phase 7b (candidates for a later phase):
+- Shared-memory ring transport (mmap + atomic head/tail) for >16 local consumers or zero-copy receive.
+- AF_UNIX between proxy and a co-located retry endpoint (current NACK plane is IPv6 unicast and works unmodified inside a single pod).
+- Windows / non-Linux support (AF_UNIX dgram semantics differ).
+
 ---
 
 ## Timeline estimate
@@ -193,5 +249,6 @@ This phase is scoped for cloud portability but intentionally deferred. It does n
 | 5 | 2–3 sessions | Phase 4.5 |
 | 6 | **partial** (charts done; images pending approval + Phase 5) | Phase 5 |
 | 7 | 3–5 sessions | user decision |
+| 7b | 2–3 sessions | Phase 1 (independent of Phase 7) |
 
-Phases 1, 3 and 4 can proceed in parallel. Phase 4.5 unblocks the BGP scenarios and the k0s Multus default.
+Phases 1, 3 and 4 can proceed in parallel. Phase 4.5 unblocks the BGP scenarios and the k0s Multus default. Phase 7b (local socket transport) is independent of Phase 7 and can ship first.
