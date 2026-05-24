@@ -62,18 +62,24 @@ Dependencies: Phase 2.
 
 ## Phase 4 — Helm charts (scaffold + lint CI)
 
-**Target: four new `-helm` repos.** Each chart now exposes the `networking.mode` toggle (`multus` | `host` | `unicast`) and an optional `metrics.serviceMonitor.enabled` switch.
+**Status: complete (2026-05).** Four `-helm` repos scaffolded, linted, and rendering across all networking modes / workload types. See [helm-charts.md](helm-charts.md) for the per-chart values surface.
 
-Deliverables:
-- `bitcoin-shard-proxy-helm/` — Chart.yaml, values.yaml, templates/
-- `bitcoin-shard-listener-helm/` — same; DaemonSet support; NUM_WORKERS enforced = 1
-- `bitcoin-retry-endpoint-helm/` — same; NACK_ADDR template warning
-- `bitcoin-subtx-generator-helm/` — Deployment + Job modes
-- `helm lint` + `helm template` CI on every push (GH Actions hosted runner)
-- `release.yml` scaffold present but workflow_dispatch-gated with `RELEASE` confirmation
-- OCI push target configured but not enabled
+Shipped:
+- `bitcoin-shard-proxy-helm/` — Deployment; full `.config` flag surface; HPA/PDB/ServiceMonitor/NetworkPolicy gated
+- `bitcoin-shard-listener-helm/` — Deployment **or** DaemonSet via `workloadType`; `NUM_WORKERS=1` hardcoded to avoid SO_REUSEPORT multicast duplication
+- `bitcoin-retry-endpoint-helm/` — Deployment; `config.nackAddr` required (effectively); no Redis subchart bundled (operator-managed)
+- `bitcoin-subtx-generator-helm/` — Deployment **or** Job via `workloadType`; CLI args renderer (binaries are flag-only) covering all four `cmd/` modes
+- All charts: `Chart.yaml` (`kubeVersion >= 1.27.0-0`, ArtifactHub annotations), `values.schema.json`, `_helpers.tpl`, `NOTES.txt`, `serviceaccount.yaml`, `service.yaml`, optional `hpa.yaml` / `pdb.yaml` / `servicemonitor.yaml` / `networkpolicy.yaml`, and `templates/tests/test-metrics-endpoint.yaml`
+- `networking.mode` toggle (`multus` | `host` | `unicast`) wired on every workload template
+- `.github/workflows/lint.yml` runs `helm lint --strict` + multi-permutation `helm template` smoke renders on every push/PR (hosted runner)
+- `.github/workflows/release.yml` scaffolded but **gated**: `workflow_dispatch` only, requires `RELEASE` confirm input, pinned to `production` GitHub Environment
+- `cr.yaml` chart-releaser config + OCI push target configured but **not enabled** (Phase 6)
+- `LICENSE` (Apache-2.0, Lightweb Inc.) + `NOTICE` per chart repo
+- Component repos cross-link the charts from `README.md` and `docs/configuration.md`
 
-Dependencies: Phase 1 (Dockerfiles needed to define correct image references).
+Caveat: `image.repository` defaults for `bitcoin-retry-endpoint` and `bitcoin-subtx-generator` reference images that do not exist until Phase 1 ships their canonical Dockerfiles. Charts lint and template successfully; runtime `helm install` requires Phase 1.
+
+Dependencies: Phase 1 (Dockerfiles needed to define correct image references) — **deferred**, charts shipped first.
 
 ---
 
@@ -155,7 +161,7 @@ This phase is scoped for cloud portability but intentionally deferred. It does n
 | 1 | 2–3 sessions | — |
 | 2 | **done** | — |
 | 3 | 1–2 sessions | — (harness ships, Dagger wrapping only) |
-| 4 | 2–3 sessions | Phase 1 |
+| 4 | **done** | Phase 1 (deferred) |
 | 4.5 | 2–4 sessions | Phase 4 |
 | 5 | 2–3 sessions | Phase 4.5 |
 | 6 | 1 session + approval | Phase 5 |
