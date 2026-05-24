@@ -97,8 +97,8 @@ Shipped:
 - All charts: `Chart.yaml` (`kubeVersion >= 1.27.0-0`, ArtifactHub annotations), `values.schema.json`, `_helpers.tpl`, `NOTES.txt`, `serviceaccount.yaml`, `service.yaml`, optional `hpa.yaml` / `pdb.yaml` / `servicemonitor.yaml` / `networkpolicy.yaml`, and `templates/tests/test-metrics-endpoint.yaml`
 - `networking.mode` toggle (`multus` | `host` | `unicast`) wired on every workload template
 - `.github/workflows/lint.yml` runs `helm lint --strict` + multi-permutation `helm template` smoke renders on every push/PR (hosted runner)
-- `.github/workflows/release.yml` scaffolded but **gated**: `workflow_dispatch` only, requires `RELEASE` confirm input, pinned to `production` GitHub Environment
-- `cr.yaml` chart-releaser config + OCI push target configured but **not enabled** (Phase 6)
+- `.github/workflows/release.yml` — `workflow_dispatch` gated (`RELEASE` confirm, `production` environment); chart-releaser/GH Pages step **removed** (OCI-only approach)
+- `cr.yaml` retained (GH Pages restore reference); OCI push to `ghcr.io/lightwebinc/charts` **enabled and shipped** — see Phase 6
 - `LICENSE` (Apache-2.0, Lightweb Inc.) + `NOTICE` per chart repo
 - Component repos cross-link the charts from `README.md` and `docs/configuration.md`
 
@@ -145,13 +145,15 @@ Dependencies: Phase 4.5.
 
 ## Phase 6 — Gated publish (image + chart) — requires explicit approval
 
-**Target: GHCR + GitHub Pages**
+**Status: partial (2026-05).** Helm chart OCI release shipped. Docker image publish pending.
 
-Deliverables:
-- OCI image push to `ghcr.io/lightwebinc/bitcoin-shard-proxy`, etc.
-- Helm chart publish via chart-releaser to GitHub Pages
-- Helm OCI push to `ghcr.io/lightwebinc/` (same registry, different path)
-- Semantic versioning: `v0.1.0` initial release tag
+**Done:**
+- Helm OCI push to `oci://ghcr.io/lightwebinc/charts/<name>:0.1.0` — all four charts released via `workflow_dispatch` (`RELEASE` confirm)
+- GH Pages / chart-releaser approach dropped in favour of OCI-only
+
+**Remaining:**
+- OCI image push to `ghcr.io/lightwebinc/bitcoin-shard-proxy`, etc. (Docker images, not charts)
+- Semantic versioning: `v0.1.0` image tag applied to component repos
 - All triggered only by `workflow_dispatch` with `confirm: RELEASE`
 
 **This phase does not start without explicit approval.** No automated tag-based trigger.
@@ -189,7 +191,7 @@ This phase is scoped for cloud portability but intentionally deferred. It does n
 | 4 | **done** | Phase 1 |
 | 4.5 | 2–4 sessions | Phase 4 |
 | 5 | 2–3 sessions | Phase 4.5 |
-| 6 | 1 session + approval | Phase 5 |
+| 6 | **partial** (charts done; images pending approval + Phase 5) | Phase 5 |
 | 7 | 3–5 sessions | user decision |
 
 Phases 1, 3 and 4 can proceed in parallel. Phase 4.5 unblocks the BGP scenarios and the k0s Multus default.
