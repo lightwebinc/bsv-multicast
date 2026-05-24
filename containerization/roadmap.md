@@ -10,19 +10,44 @@
 
 ---
 
-## Phase 1 — Canonical Dockerfile + Dagger CI for missing components
+## Phase 1 — Canonical Dockerfile + Dagger CI
 
-**Status: not started.** Note: the Go harness already builds working images via host cross-compile + distroless bake (`harness/build/build.go`). This phase delivers **canonical per-repo Dockerfiles** for OCI publishing and Helm `appVersion` pinning.
+**Status: complete (2026-05).** All four component repos now ship a canonical multi-stage Dockerfile and a Dagger-driven CI pipeline. The Go harness in `bitcoin-multicast-test/harness/build/build.go` continues to bake images via host cross-compile for fast E2E loops; the canonical Dockerfiles are the publish-ready artefact (Phase 6).
 
-**Targets: `bitcoin-retry-endpoint`, `bitcoin-subtx-generator`**
+Shipped per repo (`bitcoin-shard-proxy`, `bitcoin-shard-listener`, `bitcoin-retry-endpoint`, `bitcoin-subtx-generator`):
+- `Dockerfile` — `golang:1.25-alpine` builder with module/build cache mounts → `gcr.io/distroless/static:nonroot` runtime, `USER nonroot:nonroot`, no in-image `ENV` defaults. Buildx multi-arch ready (`TARGETOS`/`TARGETARCH`).
+- `bitcoin-shard-proxy`: dropped `ubuntu:24.04` + `apt-get` layer; binary at `/usr/local/bin/bitcoin-shard-proxy`.
+- `bitcoin-shard-listener`: distroless retained; binary moved to `/usr/local/bin/bitcoin-shard-listener` (chart relies on `ENTRYPOINT`, no breakage).
+- `bitcoin-retry-endpoint`: new Dockerfile; binary at `/usr/local/bin/bitcoin-retry-endpoint`.
+- `bitcoin-subtx-generator`: single image bundling all four `cmd/` binaries (`subtx-gen`, `send-anchor-frame`, `send-block-announce`, `send-subtree-data`) — **no `ENTRYPOINT`**; consumer (Helm chart `mode`, `docker run --entrypoint`) selects the binary.
+- `.dockerignore` per repo, omitting `.git`, `ci/`, docs, `*.md`, etc.
 
-Deliverables:
-- `Dockerfile` in each repo (multi-stage, distroless runtime)
-- `ci/main.go` (Dagger pipeline: unit, lint, build subcommands) in each repo
-- Image build verified on self-hosted runner; no push
-- `NACK_ADDR` explicit config in retry-endpoint noted in README
+Dagger pipeline (`ci/` subdirectory in each repo, separate Go module pinned to `dagger.io/dagger v0.20.8`):
+- Subcommands: `unit`, `lint`, `vuln`, `tidy`, `build`, `image`, `all`, `dev-shell`. The `image` subcommand reuses the canonical `Dockerfile` via Dagger's `Directory.DockerBuild()` (single image source of truth) and supports `-export=<path>` for OCI tarballs and `-address=<ref>` for registry publish.
+- Shared Go module/build/golangci-lint cache volumes across stages.
+- Reproduces the existing `replace github.com/lightwebinc/bitcoin-shard-common=…` dance inside the container without mutating the host repo.
 
-Dependencies: none. Can start immediately.
+Makefile (additive — existing host-side `build`, `test`, `lint`, `test-e2e`, `install-source`, `hooks` targets preserved):
+- `make ci` (full), `ci-unit`, `ci-lint`, `ci-vuln`, `ci-tidy`, `ci-build`, `ci-image`, `ci-export`, `ci-publish`, `ci-shell`, `fmt`, `help`.
+- Variables: `VERSION`, `TAG`, `IMAGE`, `COMMON`. `make ci-publish IMAGE=ghcr.io/foo/bar TAG=v0.1.0` ready for Phase 6.
+- Pipeline runs via `GOWORK=off go run .` from `ci/` so the parent `go.work` is not pulled in.
+
+GitHub Actions:
+- `ci.yml` collapsed to a single `make ci` step calling Dagger (with sibling `bitcoin-shard-common` checkout). Per-repo, ~120 lines of YAML reduced to ~30.
+- Listener and proxy keep a separate `e2e` job for host-side multicast smoke (`make test-e2e`).
+- `release.yml` and `codeql.yml` unchanged.
+
+README updates:
+- `bitcoin-retry-endpoint/README.md`: prominent **NACK_ADDR (required in production)** section explaining the SLAAC source-address mismatch failure mode and the listener-side ACK rejection.
+- `bitcoin-subtx-generator/README.md`: **Container image** section listing all four binaries and the no-`ENTRYPOINT` contract.
+- Proxy and listener READMEs: short Container image notes (distroless/nonroot, no in-image `ENV` defaults).
+
+Caveats:
+- Image build not yet pushed anywhere (Phase 6 gate).
+- `bitcoin-shard-proxy` image dropped its in-image `ENV` defaults; bare `docker run` users must now pass env explicitly. Helm chart sets all values, so the chart-driven path is unchanged.
+- Dagger CLI itself is not required on the runner — the SDK launches the engine on connect (Docker required, present on `ubuntu-latest`).
+
+Dependencies satisfied: none.
 
 ---
 
@@ -77,9 +102,9 @@ Shipped:
 - `LICENSE` (Apache-2.0, Lightweb Inc.) + `NOTICE` per chart repo
 - Component repos cross-link the charts from `README.md` and `docs/configuration.md`
 
-Caveat: `image.repository` defaults for `bitcoin-retry-endpoint` and `bitcoin-subtx-generator` reference images that do not exist until Phase 1 ships their canonical Dockerfiles. Charts lint and template successfully; runtime `helm install` requires Phase 1.
+Phase 1 has now shipped the canonical Dockerfiles, so `helm install` is unblocked once images are published (Phase 6).
 
-Dependencies: Phase 1 (Dockerfiles needed to define correct image references) — **deferred**, charts shipped first.
+Dependencies: Phase 1 — **satisfied**.
 
 ---
 
@@ -158,10 +183,10 @@ This phase is scoped for cloud portability but intentionally deferred. It does n
 | Phase | Effort | Blocking |
 |---|---|---|
 | 0 | 1 session | — |
-| 1 | 2–3 sessions | — |
+| 1 | **done** | — |
 | 2 | **done** | — |
 | 3 | 1–2 sessions | — (harness ships, Dagger wrapping only) |
-| 4 | **done** | Phase 1 (deferred) |
+| 4 | **done** | Phase 1 |
 | 4.5 | 2–4 sessions | Phase 4 |
 | 5 | 2–3 sessions | Phase 4.5 |
 | 6 | 1 session + approval | Phase 5 |
