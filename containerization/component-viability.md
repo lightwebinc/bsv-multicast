@@ -10,7 +10,7 @@
 | `bitcoin-subtx-generator` | Stateless | Client/sender | **Very High** | **High** (Job/CronJob) | No Dockerfile yet — Phase 2 deliverable |
 | `bitcoin-shard-common` | Library | — | n/a | n/a | Built into other images |
 | Infra repos (ingress/listener/retransmission) | Ansible/Terraform | — | n/a (host-level) | Future: NetworkPolicy | Keep as-is for VM/baremetal |
-| `bitcoin-multicast-test` | Test scenarios (bash + LXD) | Harness | New Go harness layer | n/a | `scenarios/` (bash, LXD-native) |
+| `bitcoin-multicast-test` | Test scenarios (Go + Docker, bash + LXD) | Harness | `harness/` Go + Docker (primary) | n/a | `vm-lab/scenarios/` (bash, LXD-native, legacy) |
 
 ---
 

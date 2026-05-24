@@ -168,7 +168,7 @@ jobs:
         with:
           repository: lightwebinc/bitcoin-multicast-test
       - name: Run all scenarios
-        run: bash scenarios/run-all.sh
+        run: bash vm-lab/scenarios/run-all.sh
         timeout-minutes: 60
 ```
 

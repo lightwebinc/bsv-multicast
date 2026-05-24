@@ -25,7 +25,7 @@ VMs (ubuntu-small-mcast profile: eth0=lxdbr0, eth1=lxdbr1):
   metrics   (.142)       Prometheus + Grafana (external)
 ```
 
-Scenarios: `scenarios/00` through `scenarios/53` and `99`, run via `bash scenarios/run-all.sh` or individually.
+Scenarios: `vm-lab/scenarios/00` through `vm-lab/scenarios/53` and `99`, run via `bash vm-lab/scenarios/run-all.sh` or individually.
 
 ---
 
@@ -112,7 +112,7 @@ concurrency:
 
 ## Preserving existing bash scenarios
 
-No changes to `bitcoin-multicast-test/scenarios/`. The new Go harness is additive in `bitcoin-multicast-test/harness/`. The `run-all.sh` at the root of `scenarios/` is unchanged and continues to work standalone.
+The bash scenarios live under `bitcoin-multicast-test/vm-lab/scenarios/` and were preserved verbatim. The Go harness is additive in `bitcoin-multicast-test/harness/`. The `vm-lab/scenarios/run-all.sh` continues to work standalone against the LXD lab.
 
 The Go harness scenarios are registered in `harness/scenarios/` as Go files and run via `go test`. They do not replace or depend on the bash scenarios — they are independent test coverage.
 

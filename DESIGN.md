@@ -150,7 +150,7 @@ responsibility:
 | Repository                                                                        | Purpose                                                     |
 | --------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | [bitcoin-subtx-generator](https://github.com/lightwebinc/bitcoin-subtx-generator) | Traffic generator for load/functional testing               |
-| [bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test)   | Integration test harness; scenario suite, lab setup, deploy |
+| [bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test)   | Integration test harness: Go + Docker scenarios (`harness/`) and legacy LXD VM lab (`vm-lab/`) |
 
 ### Meta Repository
 
@@ -1032,32 +1032,36 @@ make test-e2e
 
 ### Integration Test Scenarios (bitcoin-multicast-test)
 
-**Purpose:** Full-stack integration testing across all components in an
-LXD-based lab environment.
+**Purpose:** Full-stack integration testing across all components.
 
 The
 [bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test)
-repository provides:
+repository provides two parallel test frameworks:
 
-- **Lab setup scripts** — automated LXD VM provisioning (source, proxy,
-  listeners, retry endpoints, metrics)
-- **Ansible deploy** — single-command deployment of all services via
-  `run-deploy.sh`
-- **Scenario suite** — numbered test scenarios covering functional validation,
-  shard/subtree filtering, multicast egress bridging, NACK retransmission, rate
-  limiting, beacon discovery, MISS escalation, BRC-127 group announcements, and
-  BRC-131 block announcement delivery and retransmission
-- **`run-all.sh`** — sequential execution of all scenarios with pass/fail
-  summary
+1. **Go Docker harness (`harness/`)** — primary. 40 scenario tests driven by
+   `go test`. Spawns ephemeral Docker containers on an isolated IPv6 multicast
+   bridge (`fd10::/64`). Covers functional, NACK retransmission, fragmentation,
+   BRC-127 group announcements, BRC-131/132/134 control-plane delivery, TxID
+   dedup with Redis, and rate-limit defenses.
+2. **LXD VM lab (`vm-lab/`)** — legacy. Persistent Ubuntu/FreeBSD VMs on
+   `fd20::/64` with Ansible deploy and bash `run.sh` scenario scripts. Useful
+   for end-to-end soak tests, BGP, and dashboard validation.
 
-**Getting Started:**
+**Getting Started (Go Docker harness):**
 
 ```bash
 cd bitcoin-multicast-test
-bash lab/01-network.sh      # Create LXD networks and VM profiles
-bash lab/03-launch.sh       # Launch VMs
-bash ansible/run-deploy.sh  # Deploy all services
-bash scenarios/run-all.sh   # Run full scenario suite
+make test          # all 40 scenarios (~30 min, requires Docker + sudo)
+make test-quick    # tier-1 filter scenarios (~60s)
+make help          # show all targets
+```
+
+**Getting Started (LXD VM lab):**
+
+```bash
+cd bitcoin-multicast-test/vm-lab
+bash deploy.sh                 # provision VMs + Ansible deploy
+bash scenarios/run-all.sh      # run full scenario suite
 ```
 
 ---

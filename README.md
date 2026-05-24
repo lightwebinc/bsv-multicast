@@ -34,8 +34,8 @@ and anchor transactions over reserved control groups.
 | [bitcoin-retry-endpoint](https://github.com/lightwebinc/bitcoin-retry-endpoint)   | Retransmission          | Caches frames, retransmits on NACK requests; beacon-advertised                              |
 | [bitcoin-retransmission](https://github.com/lightwebinc/bitcoin-retransmission)   | Retransmission (deploy) | Ansible/Terraform automation for `bitcoin-retry-endpoint` nodes                             |
 | [bitcoin-shard-common](https://github.com/lightwebinc/bitcoin-shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `seqhash`, `sequence`                                |
-| [bitcoin-subtx-generator](https://github.com/lightwebinc/bitcoin-subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132 senders                      |
-| [bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test)   | Testing                 | Integration test harness; scenario suite, LXD lab setup, deploy                             |
+| [bitcoin-subtx-generator](https://github.com/lightwebinc/bitcoin-subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 senders                  |
+| [bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test)   | Testing                 | Integration test harness: Go + Docker scenarios (`harness/`) and legacy LXD VM lab (`vm-lab/`) |
 | [bitcoin-multicast](https://github.com/lightwebinc/bitcoin-multicast)             | Documentation           | This repository; project overview, design, and BRC specifications                           |
 
 ## Documentation
