@@ -1,15 +1,18 @@
 # Roadmap
 
-## Phase 0 — Documentation (current)
+## Phase 0 — Documentation
 
-**Status: in progress**
+**Status: complete (revised 2026-05 to match shipped harness + adopt Multus default).**
 
 - [x] `containerization/` doc tree in `bitcoin-multicast`
-- [ ] Review and sign-off
+- [x] Revision pass aligning docs with implemented `bitcoin-multicast-test/harness/`
+- [x] Multus designated as default k0s networking mode
 
 ---
 
-## Phase 1 — Dockerfile + Dagger CI for missing components
+## Phase 1 — Canonical Dockerfile + Dagger CI for missing components
+
+**Status: not started.** Note: the Go harness already builds working images via host cross-compile + distroless bake (`harness/build/build.go`). This phase delivers **canonical per-repo Dockerfiles** for OCI publishing and Helm `appVersion` pinning.
 
 **Targets: `bitcoin-retry-endpoint`, `bitcoin-subtx-generator`**
 
@@ -25,18 +28,19 @@ Dependencies: none. Can start immediately.
 
 ## Phase 2 — Go harness + Docker E2E scenarios
 
-**Target: `bitcoin-multicast-test/harness/`**
+**Status: complete.** Implemented in `bitcoin-multicast-test/harness/`. 40 scenarios pass via `make test`. BGP scenarios 40–42 ship as `t.Skip` stubs pending Phase 4.5.
 
-Deliverables:
-- `harness/driver/` — `Driver` interface + Docker implementation
-- `harness/topology/` — declarative node/link graph
-- `harness/scenario/` — `Env`, metrics assertions, gap injection
-- Initial scenario coverage: 01, 09/99, 10, 11, 13 (functional + NACK/RL core)
-- `harness/cmd/run-scenario/` CLI
-- `go test ./harness/...` runnable locally and on self-hosted runner
-- MLD bridge setup utility (host sysfs writes)
+Shipped:
+- `harness/driver/driver.go` + `harness/driver/docker/` (bridge + container lifecycle in Go)
+- `harness/env/` — `Env`, `tc netem`, `ip6tables` primitives
+- `harness/metrics/` — `expfmt` scrape + ratio/threshold assertions
+- `harness/build/` — cross-compile via `go.work` + distroless bake
+- 40 scenarios in `harness/scenarios/` driven by `make test`
 
-Dependencies: Phase 1 (needs retry-endpoint and subtx-gen Dockerfiles).
+Not implemented (intentional deltas vs. original plan):
+- No `docker-compose` files. `docker run` from Go is sufficient.
+- No LXD driver. See [lxd-coexistence.md](lxd-coexistence.md).
+- No `cmd/run-scenario/` CLI — `go test ./harness/scenarios/...` is the entry point.
 
 ---
 
@@ -58,7 +62,7 @@ Dependencies: Phase 2.
 
 ## Phase 4 — Helm charts (scaffold + lint CI)
 
-**Target: four new `-helm` repos**
+**Target: four new `-helm` repos.** Each chart now exposes the `networking.mode` toggle (`multus` | `host` | `unicast`) and an optional `metrics.serviceMonitor.enabled` switch.
 
 Deliverables:
 - `bitcoin-shard-proxy-helm/` — Chart.yaml, values.yaml, templates/
@@ -73,20 +77,38 @@ Dependencies: Phase 1 (Dockerfiles needed to define correct image references).
 
 ---
 
-## Phase 5 — k0s reference deployment
+## Phase 4.5 — Multus enablement + BGP scenarios
+
+**Targets: `bitcoin-multicast-test/harness/`, `*-helm` charts, k0s lab.**
+
+Deliverables:
+- Multus install verified on the k0s lab cluster (`helm install multus ...`).
+- `mcast-fabric`, `bgp-transit`, `bgp-ibgp` `NetworkAttachmentDefinition`s applied.
+- Each chart's `networking.mode: multus` path smoke-tested end-to-end.
+- Harness gains additional Docker user-defined networks (`bgp-transit`, `bgp-ibgp`) and FRR + BIRD2 sidecar container images.
+- BGP scenarios 40–42 lifted out of `t.Skip` and made green in the harness.
+- BGP scenarios continue to run in `vm-lab/` as fidelity reference.
+
+Dependencies: Phase 4 (charts must expose `networking.mode`).
+
+---
+
+## Phase 5 — k0s reference deployment (Multus default)
 
 **Target: lab host (co-located with LXD)**
 
 Deliverables:
 - k0s controller + worker nodes deployed on lab host or dedicated VMs
+- Multus + NADs applied (from Phase 4.5)
 - Node labels applied: `bitcoin-mcast/role`, `bitcoin-mcast/node`, `bitcoin-mcast/fabric-iface`
-- Helmfile-based composition wiring all four charts
-- Verified: end-to-end multicast delivery via hostNetwork pods on real fabric
+- Helmfile-based composition wiring all four charts with `networking.mode: multus`
+- Verified: end-to-end multicast delivery via macvlan `net1` on real fabric
 - Verified: NACK recovery + beacon discovery in k0s environment
-- External Prometheus updated to scrape k0s pod endpoints
-- LXD scenarios continue passing in parallel
+- External Prometheus reconfigured to scrape primary-CNI pod IPs (k8s SD) or Service ClusterIPs
+- `vm-lab/` scenarios continue passing in parallel
+- Optional: smoke-test `networking.mode: host` fallback path on a single-NIC worker
 
-Dependencies: Phase 4.
+Dependencies: Phase 4.5.
 
 ---
 
@@ -131,11 +153,12 @@ This phase is scoped for cloud portability but intentionally deferred. It does n
 |---|---|---|
 | 0 | 1 session | — |
 | 1 | 2–3 sessions | — |
-| 2 | 3–5 sessions | Phase 1 |
-| 3 | 1–2 sessions | Phase 2 |
+| 2 | **done** | — |
+| 3 | 1–2 sessions | — (harness ships, Dagger wrapping only) |
 | 4 | 2–3 sessions | Phase 1 |
-| 5 | 2–3 sessions | Phase 4 |
+| 4.5 | 2–4 sessions | Phase 4 |
+| 5 | 2–3 sessions | Phase 4.5 |
 | 6 | 1 session + approval | Phase 5 |
 | 7 | 3–5 sessions | user decision |
 
-Phases 1 and 4 can proceed in parallel.
+Phases 1, 3 and 4 can proceed in parallel. Phase 4.5 unblocks the BGP scenarios and the k0s Multus default.

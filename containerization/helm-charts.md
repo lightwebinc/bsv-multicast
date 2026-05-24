@@ -81,8 +81,16 @@ serviceAccount:
 podAnnotations: {}
 podSecurityContext: {}
 
-hostNetwork: true             # REQUIRED for multicast — do not disable
-dnsPolicy: ClusterFirstWithHostNet   # required when hostNetwork: true
+networking:
+  mode: multus              # multus (default) | host | unicast (future)
+  multus:
+    # Per-release pod IPv6 on the dedicated mcast NIC. Required when mode=multus.
+    networkName: mcast-fabric
+    namespace: bitcoin-mcast
+    fabricIPv6: ""          # e.g. "fd20::21/64" — must be unique per pod
+    interface: net1
+  host:
+    dnsPolicy: ClusterFirstWithHostNet
 
 resources: {}
 nodeSelector: {}
@@ -119,6 +127,10 @@ metrics:
   enabled: true               # expose /metrics
   path: /metrics
   port: 9100
+  serviceMonitor:
+    enabled: false            # opt-in; requires kube-prometheus-stack CRDs
+    interval: 30s
+    labels: {}                # e.g. { release: kube-prometheus-stack }
 ```
 
 ### bitcoin-shard-listener values
@@ -222,18 +234,37 @@ job:
 
 ---
 
-## Deployment template — hostNetwork pod spec (proxy example)
+## Deployment template — networking.mode dispatch (proxy example)
+
+The template selects pod-spec fields based on `.Values.networking.mode`. Sketch:
 
 ```yaml
+metadata:
+  {{- if eq .Values.networking.mode "multus" }}
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [{
+        "name": {{ .Values.networking.multus.networkName | quote }},
+        "namespace": {{ .Values.networking.multus.namespace | quote }},
+        "ips": [ {{ .Values.networking.multus.fabricIPv6 | quote }} ],
+        "interface": {{ .Values.networking.multus.interface | quote }}
+      }]
+  {{- end }}
 spec:
-  hostNetwork: {{ .Values.hostNetwork }}
-  dnsPolicy: {{ .Values.dnsPolicy | default "ClusterFirstWithHostNet" }}
+  {{- if eq .Values.networking.mode "host" }}
+  hostNetwork: true
+  dnsPolicy: {{ .Values.networking.host.dnsPolicy | default "ClusterFirstWithHostNet" }}
+  {{- end }}
   containers:
     - name: {{ .Chart.Name }}
       image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
       env:
         - name: MULTICAST_IF
+          {{- if eq .Values.networking.mode "multus" }}
+          value: {{ .Values.networking.multus.interface | quote }}
+          {{- else }}
           value: {{ .Values.config.multicastIf | quote }}
+          {{- end }}
         - name: UDP_LISTEN_PORT
           value: {{ .Values.config.udpListenPort | quote }}
         # ... remaining env vars ...
@@ -260,9 +291,9 @@ spec:
 
 ---
 
-## Node labeling for hostNetwork pods
+## Node labeling
 
-Each node that runs a multicast-capable pod must be labeled with the fabric NIC name so it can be selected:
+Independent of `networking.mode`, label each node with the dedicated fabric NIC so pods land on a node where the NIC actually exists. With `multus` the macvlan `master` parameter in the `NetworkAttachmentDefinition` must name a NIC present on the node; with `host` the same constraint applies via `MULTICAST_IF`.
 
 ```bash
 kubectl label node fabric-node-1 bitcoin-mcast/fabric-iface=enp5s0
@@ -275,7 +306,7 @@ nodeSelector:
   bitcoin-mcast/fabric-iface: enp5s0
 ```
 
-This ensures the pod lands on a node where the declared `MULTICAST_IF` actually exists. See [k0s-deployment.md](k0s-deployment.md) for full node labeling strategy.
+See [k0s-deployment.md](k0s-deployment.md) for full node labeling strategy and `NetworkAttachmentDefinition` examples.
 
 ---
 

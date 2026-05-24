@@ -7,7 +7,7 @@
 - Built-in containerd; no separate runtime install
 - Familiar `kubectl` + Helm workflow
 - Self-hosted; stays fully on-prem
-- No Multus required: `hostNetwork: true` gives pods direct access to host NICs
+- Multus add-on installs cleanly via a single Helm release — keeps the primary CNI for control/metrics and gives multicast pods a dedicated secondary attachment on the fabric NIC. `hostNetwork: true` remains supported as a single-NIC fallback.
 
 ---
 
@@ -26,6 +26,98 @@ k0s controller (management node)
 ```
 
 In the initial lab deployment, all roles can run on the same physical machines already hosting the LXD VMs — k0s workers run directly on Ubuntu 24.04 hosts or inside their own LXD VMs alongside the existing service VMs.
+
+---
+
+## Networking modes
+
+The four Helm charts expose a single toggle `networking.mode` taking values:
+
+| Mode | Pod sees | When to choose |
+|---|---|---|
+| `multus` (default) | Primary CNI eth0 for control/metrics; macvlan `net1` on the dedicated multicast NIC | Operator dedicates one (or more) NICs to multicast — even back-to-back between two boxes. Recommended. |
+| `host` | All host interfaces (`hostNetwork: true`) | Single-NIC operators; smallest install footprint; no Multus dependency |
+| `unicast` (future) | Primary CNI only; proxy uses `EGRESS_MODE=unicast-list` to fan out unicast UDP to listener addresses | Any standard CNI deployment; required for cloud-managed K8s once that path is needed. Not implemented yet (proxy work pending). |
+
+The rest of this document assumes `multus`. The fallback paths are noted inline.
+
+### Install Multus on k0s
+
+k0s does not bundle Multus; install via Helm into `kube-system`:
+
+```bash
+helm repo add k8snetworkplumbingwg https://k8snetworkplumbingwg.github.io/helm-charts
+helm install multus k8snetworkplumbingwg/multus -n kube-system
+```
+
+Verify the DaemonSet:
+
+```bash
+kubectl -n kube-system get ds multus
+kubectl get crd network-attachment-definitions.k8s.cni.cncf.io
+```
+
+### NetworkAttachmentDefinitions
+
+One `NetworkAttachmentDefinition` per dedicated NIC / logical fabric. Apply once per cluster.
+
+```yaml
+# mcast-fabric NAD — macvlan over the dedicated multicast NIC
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: mcast-fabric
+  namespace: bitcoin-mcast
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "enp5s0",
+      "mode": "bridge",
+      "ipam": {
+        "type": "static"
+      }
+    }
+```
+
+For BGP-ECMP scenarios (40–42) declare two additional NADs over the transit and iBGP NICs:
+
+```yaml
+# bgp-transit NAD (one per transit interface)
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata: { name: bgp-transit, namespace: bitcoin-mcast }
+spec:
+  config: |
+    { "cniVersion": "0.3.1", "type": "macvlan",
+      "master": "enp6s0", "mode": "bridge",
+      "ipam": { "type": "static" } }
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata: { name: bgp-ibgp, namespace: bitcoin-mcast }
+spec:
+  config: |
+    { "cniVersion": "0.3.1", "type": "macvlan",
+      "master": "enp7s0", "mode": "bridge",
+      "ipam": { "type": "static" } }
+```
+
+### Pod attachment
+
+Multus annotations request the secondary interface(s):
+
+```yaml
+metadata:
+  annotations:
+    k8s.v1.cni.cncf.io/networks: |
+      [{ "name": "mcast-fabric",
+         "ips": ["fd20::21/64"],
+         "interface": "net1" }]
+```
+
+Inside the pod: `net1` is the dedicated mcast interface. The chart sets `MULTICAST_IF=net1` automatically when `networking.mode: multus`.
 
 ---
 
@@ -66,7 +158,7 @@ spec:
   serviceCIDR: "10.96.0.0/12"
 ```
 
-`hostNetwork: true` pods bypass the pod CIDR entirely — they see the host's real interfaces. The CNI choice only affects non-`hostNetwork` pods (e.g., `subtx-generator` or Redis).
+With `networking.mode: multus` the primary CNI carries control and metrics traffic only; multicast data rides the Multus `net1` macvlan attached to the dedicated NIC. With `networking.mode: host` pods bypass the pod CIDR entirely and see the host's real interfaces.
 
 ---
 
@@ -107,7 +199,9 @@ workloadType: DaemonSet    # listener chart supports DaemonSet | Deployment
 
 ## Per-node env var overrides (NACK_ADDR)
 
-`bitcoin-retry-endpoint` needs `NACK_ADDR` set to each node's individual fabric IPv6. This cannot be a single chart value across replicas. Two approaches:
+`bitcoin-retry-endpoint` needs `NACK_ADDR` set to each node's individual fabric IPv6 — the listeners filter ACK/MISS replies by source address. This cannot be a single chart value across replicas. With Multus the `NACK_ADDR` value matches the `ips:` field in the pod's `k8s.v1.cni.cncf.io/networks` annotation; with hostNetwork it matches the node's fabric NIC address.
+
+Two deployment patterns regardless of mode:
 
 ### Option A — Per-node Helm release
 
@@ -148,7 +242,7 @@ A lightweight init container resolves: `ip -6 addr show enp5s0 scope global | aw
 | Component | Workload type | Rationale |
 |---|---|---|
 | `bitcoin-shard-proxy` | `Deployment` (replicas=1) | Single ingress point per site; or per-site DaemonSet if multiple proxy nodes |
-| `bitcoin-shard-listener` | `DaemonSet` | One listener per fabric node; `hostNetwork` + node label selector restricts which nodes |
+| `bitcoin-shard-listener` | `DaemonSet` | One listener per fabric node; Multus `mcast-fabric` attachment with per-pod IPv6, or `hostNetwork` fallback with node label selector |
 | `bitcoin-retry-endpoint` | `Deployment` (replicas=1 per release) | Per-node installs via Option A above |
 | `bitcoin-subtx-generator` | `Deployment` or `Job` | Load test: Job. Continuous: Deployment. Not fabric-node-bound. |
 
@@ -156,7 +250,7 @@ A lightweight init container resolves: `ip -6 addr show enp5s0 scope global | aw
 
 ## Multicast kernel parameter requirements
 
-On each k0s worker that joins multicast groups, ensure:
+Applies to **every** networking mode — macvlan attachments still rely on the host kernel for MLD. On each k0s worker that joins multicast groups, ensure:
 
 ```bash
 # IPv6 enabled
@@ -182,23 +276,52 @@ These are the same parameters configured by the existing Ansible `common` role. 
 
 ## Metrics scraping in k0s
 
-The metrics stack remains external. The external Prometheus instance is configured to scrape `hostNetwork` pod endpoints by node IP:
+The metrics stack remains **external** — these charts do not ship Prometheus, Grafana, or `kube-prometheus-stack`. Each chart exposes `/metrics` on the primary-CNI interface and ships an *optional* `ServiceMonitor` (disabled by default, `metrics.serviceMonitor.enabled: false`).
+
+### `networking.mode: multus` (default)
+
+The metrics endpoint binds the primary CNI interface only. Two equivalent scrape paths:
 
 ```yaml
-# prometheus.yml
+# Option 1 — external Prometheus federates a single in-cluster scraper
+# (or uses kube-apiserver proxy to reach pod IPs on the primary CNI)
+scrape_configs:
+  - job_name: bitcoin-mcast
+    kubernetes_sd_configs:
+      - role: pod
+        api_server: https://k0s.example.lan:6443
+        bearer_token_file: /etc/prometheus/k0s.token
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace]
+        action: keep
+        regex: bitcoin-mcast
+```
+
+```yaml
+# Option 2 — the simpler `static_configs` route via Service ClusterIP / NodePort
+scrape_configs:
+  - job_name: bitcoin-mcast-proxy
+    static_configs:
+      - targets: ['proxy.bitcoin-mcast.svc.cluster.lan:9100']
+```
+
+`net1` (the Multus macvlan) is carrying multicast data only — do not scrape it. The chart's `containerPort` and Service point at the primary-CNI interface.
+
+### `networking.mode: host` (fallback)
+
+Pods share the host network namespace and `/metrics` binds the host's management IP. The original node-IP scrape pattern applies:
+
+```yaml
 scrape_configs:
   - job_name: k0s-proxy
     static_configs:
-      - targets: ['192.168.0.20:9100']   # proxy node mgmt IP
+      - targets: ['192.168.0.20:9100']
   - job_name: k0s-listener
     static_configs:
       - targets: ['192.168.0.31:9200', '192.168.0.32:9200', '192.168.0.33:9200']
-  - job_name: k0s-retry
-    static_configs:
-      - targets: ['192.168.0.34:9400', '192.168.0.35:9400', '192.168.0.36:9400']
 ```
 
-Since pods use `hostNetwork`, the metrics ports are bound on the host's management IP — no in-cluster `ServiceMonitor` is needed.
+In either mode, no in-cluster `ServiceMonitor` resource is needed unless the operator chooses to deploy `kube-prometheus-stack` separately.
 
 ---
 

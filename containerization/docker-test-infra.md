@@ -1,255 +1,175 @@
 # Docker Test Infrastructure
 
-## Goal
+## Status: implemented
 
-A self-contained, reproducible test environment using Docker that:
-- Runs IPv6 multicast end-to-end without a physical NIC or LXD
-- Supports the same scenario taxonomy as the existing bash/LXD suite
-- Is driveable from a **Go test harness** using `go test`
-- Runs on the developer workstation and on a self-hosted CI runner
+The Go test harness lives in [`bitcoin-multicast-test/harness/`](../../bitcoin-multicast-test/harness/) and is the **primary** test infrastructure for all containerizable components. It covers 40 scenarios from `TestScenario00` through `TestScenario99` (BGP scenarios 40–42 are present as `t.Skip` stubs pending Multus / multi-network support — see [k0s-deployment.md](k0s-deployment.md)).
 
-## Multicast in Docker — bridge configuration
+This document reflects what is actually in the tree. The earlier draft described a `docker-compose` + `overlays/` design that was never implemented and is not needed; the harness orchestrates containers directly from Go.
 
-Linux bridge `docker0` blocks MLD by default. Creating a user-defined bridge with MLD snooping enabled and an MLD querier restores IPv6 multicast delivery between containers.
+---
+
+## High-level architecture
+
+```
+bitcoin-multicast-test/
+├── Makefile                 # make test / test-quick / test-retransmit / test-frag
+├── harness/
+│   ├── build/build.go       # cross-compile + distroless image bake (uses go.work)
+│   ├── driver/
+│   │   ├── driver.go        # Driver interface (Start/Stop/Exec/Addr/MetricsURL/WaitExit)
+│   │   └── docker/
+│   │       ├── bridge.go    # CreateMcastBridge — fd10::/64 + MLD snooping + querier
+│   │       └── docker.go    # docker run / inspect / stop wrapper
+│   ├── env/
+│   │   ├── env.go           # Env binds Driver + NodeConfigs + t.Cleanup
+│   │   ├── netem.go         # tc netem (loss/delay) on container veth
+│   │   └── iptables.go      # ip6tables DROP for ingress block / "apply_listener_loss"
+│   ├── metrics/
+│   │   ├── scrape.go        # expfmt direct HTTP scrape; map[string]float64
+│   │   └── assert.go        # ratio + threshold assertions
+│   └── scenarios/
+│       ├── main_test.go     # TestMain — bridge create + global cleanup
+│       ├── topology_helpers_test.go
+│       └── scenarioNN_test.go  # one file per scenario
+└── vm-lab/                  # Legacy LXD bash suite (see lxd-coexistence.md)
+```
+
+No `docker-compose.yml`, no `overlays/`, no shell scripts for orchestration. Everything is `go test`.
+
+---
+
+## Network: `mcast-fabric` user-defined bridge
+
+`harness/driver/docker/bridge.go` creates a Docker user-defined IPv6 bridge once per test session:
+
+```
+NetworkName = "mcast-fabric"
+BridgeName  = "brmcast0"
+Subnet      = "fd10::/64"
+```
+
+After creating the Docker network, the harness enables MLD snooping and the IPv6 querier on the backing Linux bridge from Go:
+
+```go
+ip link set dev brmcast0 type bridge mcast_snooping 1
+ip link set dev brmcast0 type bridge mcast_querier  1
+echo 1 > /sys/class/net/brmcast0/bridge/mcast_querier6   // direct sysfs
+```
+
+A 3-second settle delay is applied after first creation so the MLD querier completes its first query cycle before containers join groups. Subsequent test runs reuse the existing bridge and skip the delay.
+
+Tests run as root (or under `sudo`) — `make test` invokes `sudo go test`. Sysfs writes require either root or `CAP_NET_ADMIN`.
+
+---
+
+## Container lifecycle
+
+Each scenario test uses `env.New(t, dockerDriver)` to wire up nodes:
+
+```go
+e := env.New(t, docker.New())
+e.AddNode(driver.NodeConfig{
+    Name:        "proxy",
+    Image:       "bitcoin-shard-proxy:harness",
+    IPv6:        "fd10::2",
+    Env:         map[string]string{...},
+    MetricsPort: 9100,
+    Role:        driver.RoleProxy,
+})
+// ... add listener1..3, retry1..3, source ...
+e.StartAll(ctx)
+t.Cleanup(func() { e.StopAll(context.Background()) })
+```
+
+The Docker driver issues `docker run -d --network mcast-fabric --ip6 <addr> --cap-add NET_ADMIN -e K=V ... <image>`. There is no host port mapping — `/metrics` is scraped over the container's IPv6 directly on the bridge.
+
+Every container runs with `--cap-add NET_ADMIN` for `setsockopt(IPV6_MULTICAST_IF)` / MLD join. No `network_mode: host` is used; bridge mode works reliably with MLD snooping + querier on the user-defined bridge.
+
+---
+
+## Image build
+
+`harness/build/build.go` cross-compiles each component's binary on the host and packages it into a minimal Docker image:
+
+1. Resolves `bitcoin-shard-common` via `go.work` (preferred — workspace lives in the parent of all repos) or via a temporary `replace` directive in `go.mod`.
+2. `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -trimpath` on the host.
+3. Bakes the static binary into a `distroless/static:nonroot` image with a one-shot `docker build` from a tiny in-memory Dockerfile template.
+4. Tag convention: `<component>:harness`.
+
+This bypasses any per-component `Dockerfile` (the harness does not depend on them being present or correct). The same build pipeline is used by `make test` and is therefore the ground truth for the binary versions exercised by every scenario.
+
+For k0s the per-repo `Dockerfile` is still the publishing target — see [helm-charts.md](helm-charts.md) and [roadmap.md](roadmap.md) Phase 1.
+
+---
+
+## Network emulation primitives
+
+`harness/env/netem.go` and `harness/env/iptables.go` replace the bash-era `apply_listener_loss` nftables hack and `lxc exec ... iptables` calls. Both run on the host (the harness has `NET_ADMIN`) against the container's veth or namespace.
+
+| Primitive | Implementation | Replaces (bash era) |
+|---|---|---|
+| `ApplyLoss(node, pct)` / `RemoveLoss(node)` | `tc qdisc add dev <veth> root netem loss <pct>%` on the host-side veth | `nft add rule ... limit rate over ... drop` on the LXD VM |
+| `BlockIngress(node, src)` / `UnblockIngress(node, src)` | `ip6tables -I DOCKER-USER ...` (host) | `nft add rule ip6 input ip6 saddr ... drop` on the VM |
+
+Loss is declarative per-scenario; cleanup is guaranteed by `t.Cleanup` even on test panic.
+
+---
+
+## Metrics scrape — no Prometheus required
+
+`harness/metrics/scrape.go` performs HTTP scrapes directly against each container's `/metrics` endpoint and parses the Prometheus text exposition format via `github.com/prometheus/common/expfmt`. Returned as `map[string]float64` (summed across label sets) or filtered by label.
+
+```go
+m, _ := metrics.Scrape("http://[fd10::21]:9200/metrics")
+got := m["bsl_frames_forwarded_total"]
+
+dropped, _ := metrics.ScrapeWithLabel(url, "bsl_frames_dropped_total", "reason", "shard_filter")
+
+v, ok := metrics.WaitFor(url, "bre_cache_hits_total",
+    func(x float64) bool { return x >= 10 }, 30*time.Second, 200*time.Millisecond)
+```
+
+Implications:
+
+- The harness **never starts Prometheus or Grafana**. Test pass/fail does not depend on any external metrics infrastructure.
+- Developers who want a Grafana view of an in-progress test run can point an external Prometheus at the container IPv6 addresses on `fd10::/64`. This is manual and out-of-band; the harness does not coordinate with it.
+- This is the same direct-scrape model the plan called for. It is also the model `vm-lab/` uses for assertions (`snapshot_metrics` in `vm-lab/scenarios/lib/common.sh`), but `vm-lab` *additionally* keeps a long-running external Prometheus VM for visualisation. See [lxd-coexistence.md](lxd-coexistence.md).
+
+---
+
+## Scenario structure
+
+Each scenario is a `func TestScenarioNN_Name(t *testing.T)` in `harness/scenarios/scenarioNN_test.go`. Shared topology builders live in `topology_helpers_test.go`. The Makefile selects subsets via Go test filters:
 
 ```bash
-docker network create \
-  --driver bridge \
-  --ipv6 \
-  --subnet fd10::/64 \
-  --opt com.docker.network.bridge.name=brmcast0 \
-  mcast-fabric
-
-# After creation, enable MLD snooping and querier on the bridge
-echo 1 > /sys/class/net/brmcast0/bridge/mcast_snooping
-echo 1 > /sys/class/net/brmcast0/bridge/mcast_querier
-echo 1 > /sys/class/net/brmcast0/bridge/mcast_querier6
+make test            # all 40 scenarios (~30 min)
+make test-quick      # functional tier 1
+make test-retransmit # NACK / retransmit scenarios
+make test-frag       # fragmentation scenarios
+sudo go test ./harness/scenarios/... -v -run TestScenario13
 ```
 
-These `sysfs` writes must be issued on the host (not inside the container). The Go harness issues them via `exec.Command("sh", "-c", "echo 1 > ...")` or via the docker SDK + `nsenter` before starting any service containers.
-
-**Fallback for environments that cannot create custom bridges:** set `MC_SCOPE=link` (FF02::/16) — Linux loopback delivers link-local multicast to all sockets in the same network namespace. This is used by the existing E2E tests in `bitcoin-shard-listener` (unicast injection pattern avoids even that dependency).
-
-## Compose stack topology
-
-```
-subtx-gen → proxy  →  [mcast-fabric]  →  listener1
-                   →                 →  listener2
-                   →                 →  listener3
-                                     →  retry1
-                                     →  retry2
-```
-
-All nodes attach to `mcast-fabric` (user-defined IPv6 bridge). Each container uses:
-
-```yaml
-networks:
-  mcast-fabric:
-    ipv6_address: fd10::X
-```
-
-Because the containers share a single Linux bridge, `network_mode: host` is **not required** for the compose stack. However all containers need:
-
-```yaml
-cap_add:
-  - NET_ADMIN   # for setsockopt IPV6_MULTICAST_IF, IP_ADD_MEMBERSHIP
-sysctls:
-  net.ipv6.conf.all.disable_ipv6: "0"
-```
-
-### Proxy container
-
-```yaml
-proxy:
-  image: bitcoin-shard-proxy:dev
-  networks:
-    mcast-fabric:
-      ipv6_address: fd10::2
-  cap_add: [NET_ADMIN]
-  environment:
-    UDP_LISTEN_PORT: "9000"
-    MULTICAST_IF: "eth0"    # eth0 = mcast-fabric inside the container
-    EGRESS_PORT: "9001"
-    SHARD_BITS: "2"
-    MC_SCOPE: "site"
-    METRICS_ADDR: ":9100"
-  ports:
-    - "9000:9000/udp"       # expose to harness for frame injection
-    - "9100:9100"           # metrics scrape
-```
-
-### Listener container (replicated)
-
-```yaml
-listener1:
-  image: bitcoin-shard-listener:dev
-  networks:
-    mcast-fabric:
-      ipv6_address: fd10::11
-  cap_add: [NET_ADMIN]
-  environment:
-    MULTICAST_IF: "eth0"
-    LISTEN_PORT: "9001"
-    SHARD_BITS: "2"
-    MC_SCOPE: "site"
-    EGRESS_ADDR: "127.0.0.1:9100"  # loopback sink or real downstream
-    RETRY_ENDPOINTS: "[fd10::21]:9300,[fd10::22]:9300"
-    BEACON_ENABLED: "true"
-    NUM_WORKERS: "1"          # MUST be 1 — see component-viability.md
-    METRICS_ADDR: ":9200"
-  ports:
-    - "9201:9200"             # metrics (distinct host port per listener)
-```
-
-### Retry-endpoint container
-
-```yaml
-retry1:
-  image: bitcoin-retry-endpoint:dev
-  networks:
-    mcast-fabric:
-      ipv6_address: fd10::21
-  cap_add: [NET_ADMIN]
-  environment:
-    MC_IFACE: "eth0"
-    LISTEN_PORT: "9001"
-    SHARD_BITS: "2"
-    MC_SCOPE: "site"
-    EGRESS_IFACE: "eth0"
-    NACK_PORT: "9300"
-    NACK_ADDR: "fd10::21"   # REQUIRED — explicit unicast addr for ACK/MISS
-    BEACON_ENABLED: "true"
-    BEACON_TIER: "0"
-    METRICS_ADDR: ":9400"
-  ports:
-    - "9401:9400"
-```
+`TestMain` (`scenarios/main_test.go`) calls `docker.CreateMcastBridge` once per `go test` invocation. Per-test cleanup is via `t.Cleanup` on the `env.Env`.
 
 ---
 
-## Go test harness architecture
+## Known limitations / deferred work
 
-The harness lives inside `bitcoin-multicast-test` under a new `harness/` package tree. It provides:
-
-```
-harness/
-  driver/
-    driver.go          # interface Driver { Start, Stop, Exec, Addr }
-    docker/
-      docker.go        # Driver implementation via Docker SDK
-    lxd/
-      lxd.go           # Driver implementation via LXD CLI (wraps existing bash)
-  topology/
-    topology.go        # Declarative graph: nodes + links + role assignments
-  scenario/
-    runner.go          # Execute a scenario against a running topology
-    metrics.go         # Scrape Prometheus endpoints, assert counters
-  cmd/
-    run-scenario/
-      main.go          # CLI entry point: run-scenario -driver docker -scenario 01
-```
-
-### Driver interface
-
-```go
-type Driver interface {
-    // Start launches a named node with the given role and env vars.
-    Start(ctx context.Context, name string, cfg NodeConfig) error
-    // Stop halts and removes the node.
-    Stop(ctx context.Context, name string) error
-    // Exec runs a command inside the node; returns stdout.
-    Exec(ctx context.Context, name, cmd string, args ...string) (string, error)
-    // Addr returns the accessible IPv6 address of a named node.
-    Addr(ctx context.Context, name string) (net.IP, error)
-    // MetricsURL returns the HTTP URL to scrape Prometheus metrics.
-    MetricsURL(ctx context.Context, name string) (string, error)
-}
-```
-
-### Topology declaration
-
-```go
-topo := topology.New().
-    Node("source",    topology.RoleSubtxGen).
-    Node("proxy",     topology.RoleProxy).
-    Node("listener1", topology.RoleListener).
-    Node("listener2", topology.RoleListener).
-    Node("retry1",    topology.RoleRetryEndpoint).
-    Link("mcast-fabric", "proxy", "listener1", "listener2", "retry1")
-```
-
-### Scenario execution pattern
-
-Each scenario is a Go function matching:
-
-```go
-func ScenarioFn(t *testing.T, env *scenario.Env)
-```
-
-`scenario.Env` exposes:
-- `env.Send(frames int, gapRate float64)` — drives subtx-gen to inject traffic with optional artificial gaps
-- `env.Metrics(node string) prometheus.Gatherer` — snapshot metrics from node
-- `env.Assert(cond scenario.Condition)` — structured assertion with rich failure output
-- `env.WaitForMetric(node, metric string, op scenario.Op, val float64, timeout time.Duration)`
-
-### Metrics assertions
-
-The harness scrapes `/metrics` via the Prometheus text exposition format (no Prometheus server required — harness decodes directly using `github.com/prometheus/common/expfmt`).
-
-Example:
-
-```go
-env.WaitForMetric("listener1", `bsl_frames_forwarded_total`, scenario.GTE, float64(frames), 30*time.Second)
-env.WaitForMetric("retry1",    `bre_cache_hits_total`,        scenario.GTE, 10, 30*time.Second)
-```
-
-### Scenario registration
-
-```go
-var Scenarios = map[string]scenario.ScenarioFn{
-    "01-functional-all-shards":  Scenario01FunctionalAllShards,
-    "09-nack-retransmit":        Scenario09NACKRetransmit,
-    "13-miss-escalation-tier":   Scenario13MissEscalationTier,
-    // ...
-}
-```
-
-`go test ./harness/... -run TestScenario/01` runs scenario `01` using the selected driver.
+- **`NUM_WORKERS=1` for listeners** — required by SO_REUSEPORT multicast delivery semantics. Harness `NodeConfig` for `RoleListener` enforces it.
+- **`NACK_ADDR` must be set** for each retry endpoint — the harness wires it automatically from `driver.Addr(name)`.
+- **BGP scenarios (40–42) are stubbed** — they need additional Docker networks (`bgp-transit`, `bgp-ibgp`) and FRR + BIRD sidecar containers. This is the same multi-network requirement Multus addresses in k0s. Scoped for Phase 4.5 in [roadmap.md](roadmap.md).
+- **Root required.** Tests cannot run as an unprivileged user because the harness writes `mcast_querier6` via sysfs and manipulates host tc/ip6tables.
+- **Single host.** The harness is single-host by design; cross-host multicast belongs in `vm-lab/` (LXD) or eventually k0s.
 
 ---
 
-## Gap injection strategy
+## Why no docker-compose
 
-The harness uses the existing `subtx-gen` flag `-seq-gap-delay` combined with `iptables`/`nftables` DROP rules applied via `driver.Exec` (or equivalent LXD exec) to simulate configurable packet loss.
+The original plan called for `stack.compose.yml` + per-scenario `overlays/`. In practice:
 
-For Docker:
+- The harness needs typed Go config (`NodeConfig`) anyway, to pass into the Driver interface; compose YAML would be a redundant second source.
+- `docker compose -p <project>` adds a layer of indirection between the test and the container without any test-level benefit; `docker run --network mcast-fabric` is sufficient.
+- `tc netem` / `ip6tables` primitives operate on host veths, not inside compose abstractions.
+- Multi-driver portability (originally cited as a reason for compose) didn't materialise — the LXD driver was never built (LXD scenarios stayed bash-native).
 
-```go
-env.Driver.Exec(ctx, "proxy", "nft", "add", "rule", "ip6", "output", "udp", "dport", "9001", "limit", "rate", "over", "90/second", "drop")
-```
-
-This is safer than patching the binary and exercises the actual NACK recovery path.
-
----
-
-## Metrics stack coexistence
-
-The test harness does **not** start Prometheus or Grafana. Service containers expose `/metrics` endpoints. The harness scrapes them directly over HTTP after each test phase. This keeps the test environment minimal and avoids port conflicts with the external metrics stack running on the `metrics` VM.
-
-If a developer wants to visualise a test run, they can point the external Prometheus instance to the running containers:
-
-```yaml
-# prometheus.yml scrape_configs addition (manual, not automated by harness)
-- job_name: docker-test
-  static_configs:
-    - targets: ['localhost:9100', 'localhost:9201', 'localhost:9202', 'localhost:9203', 'localhost:9401']
-```
-
----
-
-## Known limitations
-
-- **`NUM_WORKERS=1` for listeners:** The listener must use a single SO_REUSEPORT socket or the multicast delivery will be N-fold duplicated. Set explicitly; the harness enforces it in `NodeConfig` for `RoleListener`.
-- **MLD querier latency:** After bridge setup, wait 2–3 seconds for the first MLD query cycle before sending multicast traffic. The harness `Start()` call includes a 3-second settle delay.
-- **Privileged bridge setup:** `echo 1 > /sys/class/net/...` requires root on the Docker host. On CI self-hosted runners this is expected. On shared runners it may be unavailable — use the link-scope (FF02) fallback.
-- **Source address pinning:** `NACK_ADDR` must be set to the exact container IPv6 for retry endpoints. The harness injects this automatically from `driver.Addr()`.
+If a future need ever arises to declaratively share a topology with an external tool, dump `NodeConfig`s to compose YAML from Go — not the other way around.

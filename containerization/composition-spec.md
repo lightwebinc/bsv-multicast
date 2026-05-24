@@ -18,6 +18,9 @@ All charts must agree on these values. Capture them once in your composition lay
 | Listener `RETRY_ENDPOINTS` | comma-separated `[addr]:port` of all retry nodes | listener |
 | Retry `NACK_ADDR` | per-node fabric IPv6 | retry-endpoint (per-release) |
 | `BEACON_PORT` | `9300` | listener, retry-endpoint |
+| `networking.mode` | `multus` (default) / `host` / `unicast` | proxy, listener, retry-endpoint |
+| Multus NAD name | `mcast-fabric` | listener, retry-endpoint (proxy if egress on Multus) |
+| Per-pod fabric IPv6 | `fd20::21/64`, `fd20::24/64`, ... — must match listener's `RETRY_ENDPOINTS` and each retry pod's `NACK_ADDR` | listener, retry-endpoint |
 
 ---
 
@@ -258,7 +261,11 @@ All components run under their chart's `ServiceAccount`. No cross-namespace comm
 - Redis (if `cacheBackend=redis` for retry endpoint)
 - External Prometheus scrape (out of band — no cluster RBAC needed)
 
-Minimal `NetworkPolicy` for `hostNetwork` pods: because `hostNetwork` pods share the host network namespace, Kubernetes `NetworkPolicy` does not apply to them. Network segmentation must be handled at the host level (nftables, firewall rules) as it is in the existing Ansible roles.
+`NetworkPolicy` applicability depends on `networking.mode`:
+
+- `multus` (default): `NetworkPolicy` applies to the **primary CNI** interface only (metrics, control). The macvlan `net1` attachment is not under `NetworkPolicy` enforcement — segregate the multicast fabric at the NIC / switch.
+- `host`: pods share the host namespace, `NetworkPolicy` is advisory; segregate at the host (nftables / firewall) as in the Ansible roles.
+- `unicast` (future): pure primary CNI, full `NetworkPolicy` applies.
 
 ---
 

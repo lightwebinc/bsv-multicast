@@ -122,16 +122,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod }
-      - name: Setup IPv6 bridge
+      - name: Run E2E (bridge + MLD set up by the harness itself)
         run: |
-          docker network create --driver bridge --ipv6 \
-            --subnet fd10::/64 mcast-fabric 2>/dev/null || true
-          BRIDGE=$(docker network inspect mcast-fabric \
-            --format '{{.Options}}' | grep -oP 'bridge.name=\K\S+')
-          echo 1 | sudo tee /sys/class/net/$BRIDGE/bridge/mcast_snooping
-          echo 1 | sudo tee /sys/class/net/$BRIDGE/bridge/mcast_querier6
-      - name: Run E2E
-        run: go run ./ci/ e2e
+          # bitcoin-multicast-test/harness/driver/docker/bridge.go creates
+          # mcast-fabric (fd10::/64) and enables mcast_snooping + mcast_querier6
+          # at TestMain time. The runner only needs Docker + root.
+          go run ./ci/ e2e
 ```
 
 ### Tier 3 — self-hosted runner (integration with real multicast)
@@ -151,7 +147,9 @@ jobs:
       - name: Run integration scenarios
         run: |
           cd bitcoin-multicast-test
-          go test ./harness/... -driver docker -timeout 30m -v
+          # The Docker driver is the only implemented driver. There is no
+          # -driver flag; selection happens at TestMain time.
+          sudo go test ./harness/scenarios/... -timeout 45m -v
 ```
 
 ### Tier 4 — LXD full-stack (nightly)
@@ -168,7 +166,7 @@ jobs:
         with:
           repository: lightwebinc/bitcoin-multicast-test
       - name: Run all scenarios
-        run: bash vm-lab/scenarios/run-all.sh
+        run: bash vm-lab/scenarios/run-all.sh    # legacy LXD bash suite — see lxd-coexistence.md
         timeout-minutes: 60
 ```
 
@@ -178,7 +176,7 @@ jobs:
 
 | Runner label | Host requirements |
 |---|---|
-| `[self-hosted, linux, docker]` | Docker ≥ 24, Go ≥ 1.25, sudo for bridge sysfs writes |
+| `[self-hosted, linux, docker]` | Docker ≥ 24, Go ≥ 1.25, root or passwordless sudo (harness writes `/sys/class/net/brmcast0/bridge/mcast_querier6` and runs `tc`/`ip6tables`) |
 | `[self-hosted, linux, mcast-fabric]` | All of the above + fabric NIC + MLD-capable switch |
 | `[self-hosted, linux, lxd]` | LXD ≥ 5.x, existing lab profiles, `lxc` in PATH |
 

@@ -2,7 +2,7 @@
 
 ## Principle
 
-The existing LXD test lab and its 40+ scenario suite are **unchanged**. New Docker/k0s infrastructure is additive. Both coexist on the same physical host.
+The LXD lab is now **legacy** under `bitcoin-multicast-test/vm-lab/`. The Go Docker harness in `harness/` is the primary test path and supersedes the LXD bash suite for everything except switch/BGP fidelity. Both can run on the same host; they share no state.
 
 ---
 
@@ -25,7 +25,7 @@ VMs (ubuntu-small-mcast profile: eth0=lxdbr0, eth1=lxdbr1):
   metrics   (.142)       Prometheus + Grafana (external)
 ```
 
-Scenarios: `vm-lab/scenarios/00` through `vm-lab/scenarios/53` and `99`, run via `bash vm-lab/scenarios/run-all.sh` or individually.
+Scenarios: `vm-lab/scenarios/00` through `vm-lab/scenarios/53` and `99`, run via `bash vm-lab/scenarios/run-all.sh` or individually. These are kept for switch-level MLD snooping fidelity, BGP/anycast routing (scenarios 40–42), and as a regression reference against the harness.
 
 ---
 
@@ -38,53 +38,35 @@ No IP overlap, no bridge bridging. Both can run simultaneously.
 ### Parallel run rules
 
 - If a scenario needs specific multicast groups (FF05::FF:000B:0000–0003 for shard_bits=2), Docker test containers use the same groups on the Docker bridge — but because the bridges are separate Linux bridges, MLD snooping is per-bridge. There is no cross-bridge multicast leakage.
-- The same host UDP ports **can conflict** if both stacks use default ports simultaneously. Recommended approach: assign distinct host-side port mappings in Docker compose files (e.g., Docker proxy listens on host port `19000` vs. LXD proxy on host port `9000`). The Go harness NodeConfig sets `HostPort` overrides for Docker containers.
+- The harness does **not** publish host ports — metrics are scraped via the container's IPv6 on `fd10::/64`. So there is no host-port collision with the LXD lab (which binds VM ports on `lxdbr0` / `lxdbr1`). The two stacks are fully independent on the same host.
 
 ---
 
-## Go harness — LXD driver
+## No Go-harness LXD driver
 
-The harness `Driver` interface supports LXD via a thin wrapper over `lxc exec`:
+The original plan proposed an `harness/driver/lxd/` to let Go-authored scenarios target LXD VMs. **This was not built and is not on the roadmap.** Reasons:
 
-```go
-// lxd/lxd.go
+- The LXD scenarios (`vm-lab/scenarios/*.sh`) already cover LXD comprehensively in bash.
+- The Docker driver is the only test-driving path that produces hermetic, parallel-safe runs.
+- Re-implementing scenario logic on top of an LXD driver would duplicate effort with no fidelity gain.
 
-type LXDDriver struct {
-    Profile string   // LXD profile name, e.g. "ubuntu-small-mcast"
-}
-
-func (d *LXDDriver) Start(ctx context.Context, name string, cfg NodeConfig) error {
-    // lxc launch ubuntu:24.04 <name> --profile <profile>
-    // lxc exec <name> -- systemctl start <service>
-    // ...
-}
-
-func (d *LXDDriver) Exec(ctx context.Context, name, cmd string, args ...string) (string, error) {
-    // lxc exec <name> -- <cmd> <args...>
-}
-
-func (d *LXDDriver) Addr(ctx context.Context, name string) (net.IP, error) {
-    // lxc exec <name> -- ip -6 addr show eth1 scope global | parse
-}
-```
-
-However, **the LXD driver is secondary**. The existing bash scenarios already cover LXD comprehensively. The LXD driver exists to allow harness-authored scenarios to optionally run on LXD VMs for fidelity comparison without rewriting the scenarios as bash.
+If a harness-authored scenario ever needs to target LXD for switch-level fidelity, the recommended path is to write that scenario as a bash file under `vm-lab/scenarios/` rather than extend the Go harness.
 
 ---
 
-## Scenario taxonomy and driver applicability
+## Scenario coverage map
 
-| Scenario group | Bash/LXD | Docker driver | LXD driver |
-|---|---|---|---|
-| 00–09 (functional) | ✅ existing | ✅ Phase 2 | optional |
-| 10–16 (NACK/ratelimit) | ✅ existing | ✅ Phase 2 | optional |
-| 20–26 (subtree/fragmentation) | ✅ existing | planned | optional |
-| 30–37 (block announce, anchor) | ✅ existing | planned | optional |
-| 40–42 (BGP ingress) | ✅ existing | not applicable (BGP needs real routing) | only |
-| 50–53 (txid-dedup/Redis) | ✅ existing | ✅ Phase 2 (Redis in Docker) | optional |
-| 99 (nack-retransmit perf) | ✅ existing | ✅ Phase 2 | optional |
+| Scenario group | LXD bash (`vm-lab/`) | Go harness (`harness/`) |
+|---|---|---|
+| 00–09 (functional) | ✅ reference | ✅ implemented |
+| 10–16 (NACK / ratelimit) | ✅ reference | ✅ implemented |
+| 20–26 (subtree / fragmentation) | ✅ reference | ✅ implemented |
+| 30–37 (block announce, anchor) | ✅ reference | ✅ implemented |
+| 40–42 (BGP ingress / failover / anycast) | ✅ only | ⏸ `t.Skip` — needs Multus-style multi-network + FRR/BIRD sidecars |
+| 50–53 (txid-dedup / Redis) | ✅ reference | ✅ implemented |
+| 99 (NACK retransmit perf) | ✅ reference | ✅ implemented |
 
-Scenarios 40–42 require real BGP routing (FRRouting/Bird on LXD VMs) and are **LXD-only** — the Docker driver cannot simulate BGP ECMP. This is not a gap; BGP is infrastructure-level and tested adequately in the LXD lab.
+BGP scenarios 40–42 remain LXD-only in practice. In k0s they re-enable once `bgp-transit` and `bgp-ibgp` NetworkAttachmentDefinitions are declared (see [k0s-deployment.md](k0s-deployment.md)); in Docker they require additional Docker user-defined networks and BGP-speaker sidecars and are gated on Phase 4.5 of the [roadmap](roadmap.md).
 
 ---
 
@@ -110,21 +92,9 @@ concurrency:
 
 ---
 
-## Preserving existing bash scenarios
+## Source of truth
 
-The bash scenarios live under `bitcoin-multicast-test/vm-lab/scenarios/` and were preserved verbatim. The Go harness is additive in `bitcoin-multicast-test/harness/`. The `vm-lab/scenarios/run-all.sh` continues to work standalone against the LXD lab.
+- Go harness scenarios under `harness/scenarios/` are the ground truth for **container** (Docker, k0s) behaviour.
+- LXD bash scenarios under `vm-lab/scenarios/` are the ground truth for **VM-level** and **switch-level** behaviour (BGP, real MLD snooping on real switches, large-scale `run-all.sh` regression).
 
-The Go harness scenarios are registered in `harness/scenarios/` as Go files and run via `go test`. They do not replace or depend on the bash scenarios — they are independent test coverage.
-
----
-
-## Migrating a bash scenario to Go (optional, future)
-
-If a bash scenario needs to be ported to the Go harness (e.g., to enable Docker driver support), the process is:
-
-1. Copy logic from `scenarios/NN-name/run.sh` into a new `harness/scenarios/nn_name_test.go`
-2. Replace `lxc exec <vm> -- <cmd>` with `env.Driver.Exec(ctx, node, cmd, args...)`
-3. Replace metric snapshot assertions (`snapshot_metrics.sh`) with `env.WaitForMetric(...)`
-4. The original bash scenario remains in place — both run independently
-
-The bash scenarios are the ground truth for LXD behavior. Go harness scenarios are the ground truth for Docker/k0s behavior.
+The two suites are independent. There is no shared scenario format and no test-level coupling.

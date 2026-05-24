@@ -2,15 +2,15 @@
 
 ## Summary table
 
-| Component | Stateful? | Multicast role | Docker viability | k0s viability | Existing assets |
+| Component | Stateful? | Multicast role | Docker viability | k0s viability (Multus default) | Existing assets |
 |---|---|---|---|---|---|
-| `bitcoin-shard-proxy` | Stateless | Egress sender | **High** | **High** (`hostNetwork`) | `Dockerfile`, `test/Dockerfile.e2e`, `test/docker-compose.yml` |
-| `bitcoin-shard-listener` | In-memory gap state | Ingress subscriber (MLD join) | **High** | **Medium-High** (`hostNetwork`) | `Dockerfile` (distroless), `test/Dockerfile.e2e`, `test/docker-compose.yml` |
-| `bitcoin-retry-endpoint` | In-memory freecache (+ optional Redis) | Ingress subscriber + egress retransmitter | **High** | **High** (`hostNetwork`) | No Dockerfile yet — Phase 2 deliverable |
-| `bitcoin-subtx-generator` | Stateless | Client/sender | **Very High** | **High** (Job/CronJob) | No Dockerfile yet — Phase 2 deliverable |
-| `bitcoin-shard-common` | Library | — | n/a | n/a | Built into other images |
-| Infra repos (ingress/listener/retransmission) | Ansible/Terraform | — | n/a (host-level) | Future: NetworkPolicy | Keep as-is for VM/baremetal |
-| `bitcoin-multicast-test` | Test scenarios (Go + Docker, bash + LXD) | Harness | `harness/` Go + Docker (primary) | n/a | `vm-lab/scenarios/` (bash, LXD-native, legacy) |
+| `bitcoin-shard-proxy` | Stateless | Egress sender | **High** — used by harness via cross-compile + distroless image | **High** — macvlan `net1` on fabric NIC, or `hostNetwork: true` fallback | `Dockerfile`, `test/Dockerfile.e2e` (harness builds its own minimal image via `harness/build`) |
+| `bitcoin-shard-listener` | In-memory gap state | Ingress subscriber (MLD join) | **High** — used by harness | **High** with Multus (DaemonSet); `hostNetwork` fallback | `Dockerfile` (distroless), `test/Dockerfile.e2e` |
+| `bitcoin-retry-endpoint` | In-memory freecache (+ optional Redis) | Ingress subscriber + egress retransmitter | **High** — image built on the fly by `harness/build` | **High** with Multus (per-node release for `NACK_ADDR`); `hostNetwork` fallback | No standalone `Dockerfile` in repo — harness produces a minimal image; Phase 1 still ships a canonical one for k0s |
+| `bitcoin-subtx-generator` | Stateless | Client/sender | **Very High** — used by harness | **High** — standard CNI is fine (UDP/TCP egress only); no Multus needed | Multi-binary repo; harness packages `subtx-gen`, `send-anchor-frame`, `send-block-announce`, `send-subtree-data` |
+| `bitcoin-shard-common` | Library | — | n/a | n/a | Built into other images via host `go.work` workspace |
+| Infra repos (ingress/listener/retransmission) | Ansible/Terraform | — | n/a (host-level) | Future: NetworkPolicy on primary CNI | Keep as-is for VM/baremetal |
+| `bitcoin-multicast-test` | Test scenarios (Go + Docker) | Harness | **Implemented:** `harness/` Go + Docker driver, 40 scenarios | n/a | `vm-lab/scenarios/` bash suite — **legacy**, LXD-only, switch/BGP fidelity reference |
 
 ---
 
@@ -18,8 +18,8 @@
 
 ### Existing Docker assets
 - `Dockerfile` — multi-stage Go build → ubuntu:24.04 runtime
-- `test/Dockerfile.e2e` — E2E test image (build context: parent dir, needs `bitcoin-shard-proxy` + tool binaries)
-- `test/docker-compose.yml` — uses `network_mode: host` + `cap_add: NET_ADMIN`
+- `test/Dockerfile.e2e` — unicast-injection E2E test image (build context: parent dir; bundles `send-test-frames`)
+- `test/docker-compose.yml` — repo-local E2E only; **not used by the multi-component Go harness**, which provisions containers directly via `docker run` from `harness/driver/docker/docker.go`
 
 ### Key env vars (all accepted by binary)
 
@@ -39,7 +39,7 @@
 | `DRAIN_TIMEOUT` | `0s` | Pre-SIGTERM drain |
 
 ### Containerization constraints
-- **Multicast egress requires host NIC access.** In Docker: `network_mode: host` or macvlan. In k0s: `hostNetwork: true` with `MULTICAST_IF` set to the fabric NIC.
+- **Multicast egress requires NIC-level access.** In Docker harness: user-defined bridge `mcast-fabric` (`fd10::/64`) with MLD snooping + querier; no `network_mode: host` needed. In k0s (default): Multus secondary attachment over macvlan on the dedicated fabric NIC; pod sees it as `net1` with `MULTICAST_IF=net1`. Fallback: `hostNetwork: true` with `MULTICAST_IF` set to the host NIC name.
 - **`IPV6_MULTICAST_IF` is set explicitly** by the binary via the interface name — no ambient kernel routing assumption.
 - **Multiple egress interfaces:** comma-separated `MULTICAST_IF` supported.
 - Stateless: safe to run N replicas without coordination.
@@ -77,7 +77,7 @@
 
 ### Containerization constraints
 - **`NUM_WORKERS` must be 1 when using SO_REUSEPORT on a shared multicast group.** Linux kernel delivers each multicast datagram to _all_ sockets in the reuseport group (no load balancing). Multiple workers cause N-fold frame duplication. This is enforced in the Helm chart template and should be the default in any compose file.
-- **MLD join requires host network or macvlan.** In Docker: `network_mode: host`. In k0s: `hostNetwork: true`.
+- **MLD join requires NIC-level membership.** Docker harness: works on the `mcast-fabric` user-defined bridge with MLD snooping + querier enabled (set by `harness/driver/docker/bridge.go`). In k0s (default): Multus macvlan attachment. Fallback: `hostNetwork: true`.
 - **Beacon UDP source address pinning.** Listener uses `net.ListenPacket` (unconnected) for NACK dispatch, accepting replies from any source address. No operator action needed.
 - Distroless runtime image: no shell. Debug via `docker exec` with a debug build or external log forwarding.
 
@@ -86,7 +86,7 @@
 ## bitcoin-retry-endpoint
 
 ### Existing Docker assets
-No `Dockerfile` yet. Phase 2 delivers it. Proposed structure:
+No canonical `Dockerfile` in the repo yet — the Go harness compiles a binary on the host with `GOWORK=go.work` and bakes it into a distroless image. For k0s, Phase 1 still ships a canonical Dockerfile for OCI publishing. Proposed structure:
 
 ```dockerfile
 FROM golang:1.25 AS builder
@@ -150,8 +150,9 @@ The entrypoint is operator-selected via the `command:` field in compose/Helm.
 
 ## Per-component firewall notes
 
-All three service binaries implement nftables/pf perimeter rules for VM deployments (via Ansible templates in the infra repos). **Containers do not use these templates.** Container networking is isolated to the compose network namespace or the pod network; perimeter rules are replaced by:
-- Docker: isolation via user-defined network + explicit port exposure
-- k0s: Kubernetes `NetworkPolicy` (advisory for `hostNetwork` pods; enforced for standard-CNI pods)
+All three service binaries implement nftables/pf perimeter rules for VM deployments (via Ansible templates in the infra repos). **Containers do not use these templates.** Container networking is isolated to the harness user-defined network or the pod network; perimeter rules are replaced by:
+- Docker harness: isolation via `mcast-fabric` user-defined network + direct IPv6 container addressing on `fd10::/64`. The harness applies `ip6tables` DROP rules (`harness/env/iptables.go`) and `tc netem` (`harness/env/netem.go`) per-veth for scenario-level loss injection.
+- k0s (Multus default): `NetworkPolicy` on the primary CNI for control/metrics traffic; Multus macvlan attachment has no `NetworkPolicy` enforcement — segregate at the switch / NIC.
+- k0s (hostNetwork fallback): `NetworkPolicy` is advisory only; segregate at the host.
 
-The only firewall concern in containers is MLD snooping — which is a Linux bridge behavior, not a service-level concern. See [docker-test-infra.md](docker-test-infra.md) for the bridge configuration approach.
+The only multicast-specific concern in containers is MLD snooping — a Linux bridge behaviour, configured automatically by the harness bridge setup. See [docker-test-infra.md](docker-test-infra.md).
