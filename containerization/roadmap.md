@@ -110,6 +110,10 @@ Dependencies: Phase 1 — **satisfied**.
 
 ## Phase 4.5 — Multus enablement + BGP scenarios
 
+**Status: in progress.** Multus + NAD wiring shipped under
+[`bitcoin-multicast-kube-infra`](https://github.com/lightwebinc/bitcoin-multicast-kube-infra)
+(`platform/multus/`, `platform/nads/`). Docker harness BGP scenarios remaining.
+
 **Targets: `bitcoin-multicast-test/harness/`, `*-helm` charts, k0s lab.**
 
 Deliverables:
@@ -125,6 +129,11 @@ Dependencies: Phase 4 (charts must expose `networking.mode`).
 ---
 
 ## Phase 5 — k0s reference deployment (Multus default)
+
+**Status: in progress.** Reference implementation lives in
+[`bitcoin-multicast-kube-infra`](https://github.com/lightwebinc/bitcoin-multicast-kube-infra) —
+distribution-agnostic repo with `distributions/k0s/` (k0sctl-driven), modular
+`platform/` (CNI, Multus, ESO, NADs), and Helmfile-based `apps/` composition.
 
 **Target: lab host (co-located with LXD)**
 

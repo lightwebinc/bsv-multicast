@@ -1,5 +1,11 @@
 # k0s Deployment Reference
 
+> **Canonical implementation**: [`bitcoin-multicast-kube-infra`](https://github.com/lightwebinc/bitcoin-multicast-kube-infra).
+> This document is the reference architecture; the `bitcoin-multicast-kube-infra`
+> repo is the maintained, automated, and distribution-agnostic implementation
+> (k0s today, EKS to follow). Operators should run that repo's `make all`
+> rather than transcribing the snippets below.
+
 ## Why k0s
 
 - Single binary, zero external dependencies — no kubeadm/etcd/containerd wiring beyond what k0s manages

@@ -24,6 +24,12 @@ All charts must agree on these values. Capture them once in your composition lay
 
 ---
 
+> **Maintained Helmfile**: the
+> [`bitcoin-multicast-kube-infra`](https://github.com/lightwebinc/bitcoin-multicast-kube-infra)
+> repo ships the production-grade Helmfile composition under `apps/helmfile.yaml.gotmpl`
+> with per-node retry-endpoint releases, Multus wiring, and ESO integration.
+> The example below remains a minimal reference.
+
 ## Option A — Helmfile
 
 ```yaml
