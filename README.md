@@ -65,6 +65,8 @@ and anchor transactions over reserved control groups.
   — Chained anchor transaction distribution
 - [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) —
   Standalone 80-byte block header split; emitter-originated
+- [BRC-137 Shard Manifest Announcement](docs/brc-137-shard-manifest.md) —
+  Periodic participant configuration announcement (shard_bits + joined groups)
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
 
