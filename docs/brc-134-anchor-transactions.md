@@ -62,7 +62,7 @@ same offsets.
 | 6      | 1    | —     | Frame Version | **`0x06`** — BRC-134 anchor transaction                   |
 | 7      | 1    | —     | Reserved      | `0x00`                                                    |
 | 8      | 32   | 8B    | TxID          | SHA256d of the anchor transaction (internal byte order)   |
-| 40     | 8    | 8B    | HashKey       | XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros); stamped by proxy      |
+| 40     | 8    | 8B    | HashKey       | XXH64(senderIPv6 ∥ 0xFFF9 ∥ zeros); stamped by proxy      |
 | 48     | 8    | 8B    | SeqNum        | Monotonic per-sender counter; stamped by proxy; 0 = unset |
 | 56     | 32   | 8B    | LayoutPad32   | All zeros (no subtree scope for anchor frames)            |
 | 88     | 4    | —     | PayloadLen    | Size of anchor transaction payload in bytes (uint32 BE)   |
@@ -86,11 +86,13 @@ input vector, output vector, locktime (4 bytes LE).
 BRC-134 frames participate in the same NACK-based reliability mechanism as
 BRC-124 shard frames:
 
-- The proxy stamps `HashKey = XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros)` and `SeqNum`
-  (monotonic per sender) in-place before forwarding. If the frame arrives
-  pre-stamped (`SeqNum != 0`), it is forwarded verbatim.
+- The proxy stamps `HashKey = XXH64(senderIPv6 ∥ 0xFFF9 ∥ zeros)` and `SeqNum`
+  (monotonic per sender) in-place before forwarding. The virtual index `0xFFF9`
+  gives anchor frames an independent flow identity from BRC-131 block frames,
+  both of which travel on the same `CtrlGroupControl` multicast address. If the
+  frame arrives pre-stamped (`SeqNum != 0`), it is forwarded verbatim.
 - Listeners observe
-  `(ctrlGroupIdx=0xFFFE, zeroSubtreeID, HashKey, SeqNum, TxID)` for gap
+  `(anchorGroupIdx=0xFFF9, zeroSubtreeID, HashKey, SeqNum, TxID)` for gap
   detection and dispatch BRC-126 NACKs to retry endpoints on gap.
 - Retry endpoints join `FF0E::B:FFFE` and cache BRC-134 frames by
   `HashKey ∥ SeqNum`. On NACK, the frame is retransmitted to `FF0E::B:FFFE` (not
@@ -105,7 +107,8 @@ BRC-124 shard frames:
 2. **Decode** — `frame.DecodeAnchor` validates Magic, FrameVer, and PayLen.
    Invalid frames are dropped.
 3. **Stamp** — If `SeqNum == 0`, stamp HashKey and SeqNum in-place using
-   `(senderIPv6, 0xFFFE, zeros)` flow key.
+   `(senderIPv6, 0xFFF9, zeros)` flow key. The virtual index `0xFFF9` ensures
+   independent flow identity from BRC-131 block frames.
 4. **Forward** — Write frame verbatim to `FF0E::B:FFFE:<egressPort>` on all
    egress interfaces.
 
@@ -124,7 +127,7 @@ becomes necessary it will be defined in a future revision.
 3. **Egress** — `egress.Sender.Send(raw, f)` forwards the frame (or payload only
    in strip-header mode) downstream.
 4. **Gap tracking** —
-   `Tracker.Observe(0xFFFE, zeroSubtreeID, HashKey, SeqNum, TxID)` when
+   `Tracker.Observe(anchorGroupIdx=0xFFF9, zeroSubtreeID, HashKey, SeqNum, TxID)` when
    `SeqNum != 0`.
 5. **Filtering** — Anchor frames bypass all shard/subtree filters; every
    subscriber receives every anchor frame.
@@ -137,7 +140,7 @@ becomes necessary it will be defined in a future revision.
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | bitcoin-shard-proxy    | UDP worker and TCP ingress: version `0x06` → `ProcessAnchor`; new `ProcessAnchor` method routes to `CtrlGroupControl` |
 | bitcoin-shard-listener | `IsAnchorFrame` dispatch; new `processAnchorFrame` method; gap tracking on ctrl flow                                  |
-| bitcoin-retry-endpoint | Joins `FF0E::B:FFFE`; must cache and retransmit FrameVerV6 frames (future work)                                       |
+| bitcoin-retry-endpoint | Joins `FF0E::B:FFFE`; caches BRC-134 frames by `HashKey ∥ SeqNum`; retransmits to `FF0E::B:FFFE` on NACK hit          |
 | bitcoin-shard-common   | `FrameVerV6 = 0x06` constant; `DecodeAnchor`; `IsAnchorFrame`                                                         |
 
 ---

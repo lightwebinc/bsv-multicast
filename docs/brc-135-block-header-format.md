@@ -42,12 +42,12 @@ fabric subscribers would receive the split frame on the control channel they
 already subscribe to).
 
 When multicast egress is enabled, the emitter sends BRC-135 frames to the
-`CtrlGroupControl` index (`0xFFFE`) on the **egress scope** (typically a
+`CtrlGroupBlockHeader` index (`0xFFFA`) on the **egress scope** (typically a
 different scope or group-id from the ingress fabric):
 
 | Index  | Scope           | Compressed Address        | Notes                            |
 | ------ | --------------- | ------------------------- | -------------------------------- |
-| 0xFFFE | egress (varies) | `FF05::<egress-gid>:FFFE` | Emitter multicast egress channel |
+| 0xFFFA | egress (varies) | `FF05::<egress-gid>:FFFA` | Emitter multicast egress channel |
 
 The egress group-id is set independently of the fabric group-id via
 `-mc-egress-group-id` (default: same as `-mc-group-id`). This ensures BRC-135
@@ -184,6 +184,7 @@ A consumer receiving BRC-135 frames:
 | `FrameVerV7`           | 7     | `0x07`   | BRC-135 block header frame version                |
 | `BlockHeaderPayload`   | 80    | `0x50`   | Fixed payload size (standard BSV block header)    |
 | `BlockHeaderFrameSize` | 172   | `0xAC`   | Total frame size (92 + 80)                        |
+| `CtrlGroupBlockHeader` | 65530 | `0xFFFA` | Block header egress channel (BRC-135 mc-egress)   |
 | `CtrlGroupControl`     | 65534 | `0xFFFE` | Control group index (shared with BRC-131/133/134) |
 | `HeaderSize`           | 92    | `0x5C`   | BRC-135 header size (identical to BRC-124)        |
 

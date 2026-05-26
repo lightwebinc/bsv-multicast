@@ -54,8 +54,9 @@ Indices `0x1000`–`0xF7FF` (56,832 indices) are unassigned and reserved for fut
 
 Network service groups occupy `0xF800`–`0xFFFF` (2,048 indices). Current protocol assignments are allocated from the top of this range; the remainder is reserved for future network services.
 
-| Index    | Purpose                              | Scope  | Full address (default group-id)           | Compressed     |
-| -------- | ------------------------------------ | ------ | ----------------------------------------- | -------------- |
+| Index    | Purpose                              | Scope  | Full address (default group-id)                       | Compressed                |
+| -------- | ------------------------------------ | ------ | ----------------------------------------------------- | ------------------------- |
+| `0xFFFA` | Block Header egress (BRC-135)        | varies | `FF0X:0000:0000:0000:0000:0000:<egress-gid>:FFFA`     | `FF05::<egress-gid>:FFFA` |
 | `0xFFFB` | Subtree Announcements (site)         | `FF05` | `FF05:0000:0000:0000:0000:0000:000B:FFFB` | `FF05::B:FFFB` |
 | `0xFFFB` | Subtree Announcements (org)          | `FF08` | `FF08:0000:0000:0000:0000:0000:000B:FFFB` | `FF08::B:FFFB` |
 | `0xFFFB` | Subtree Announcements (global)       | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFB` | `FF0E::B:FFFB` |
@@ -89,6 +90,12 @@ All group addresses — both shard and control-plane — inherit the same group-
 
 ---
 
+## Block Header Egress Channel
+
+`FF05::<egress-gid>:FFFA` (index `0xFFFA`) is used by listener nodes to re-emit standalone 80-byte block header frames (BRC-135) to downstream consumers such as SPV wallets and header-chain validators. The scope and group-id are configured via the listener's `-mc-egress-prefix` and `-mc-egress-group-id` flags, which default to the same values as the ingress fabric but can be set independently to isolate the egress domain. BRC-135 frames on this channel are NOT re-injected onto the primary `FF0E::B:FFFE` fabric to avoid feedback loops.
+
+---
+
 ## Beacon Groups
 
 Beacon groups support infrastructure service discovery across multiple scopes (site-local, organization-local, and global). Each beacon-enabled service instance advertises to exactly one group (set via `-beacon-scope`). Deployments requiring coverage across multiple scopes run separate instances at each scope. See the control-plane table above for complete scope and address details.
@@ -117,7 +124,7 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 
 - **Group derivation:** `bitcoin-shard-common/shard/shard.go` — `Engine.Addr(groupIndex uint32, port int)` (only the low 16 bits of `groupIndex` are used).
 - **Control group helper:** `bitcoin-shard-common/shard/control.go` — `ControlGroupAddr(scopePrefix, groupID, index uint16)` (standalone; not bound to Engine scope).
-- **Constants:** `CtrlGroupSubtreeAnnounce = 0xFFFB`, `CtrlGroupSubtreeGroupAnnounce = 0xFFFC`, `CtrlGroupBeacon = 0xFFFD`, `CtrlGroupControl = 0xFFFE`.
+- **Constants:** `CtrlGroupBlockHeader = 0xFFFA`, `CtrlGroupSubtreeAnnounce = 0xFFFB`, `CtrlGroupSubtreeGroupAnnounce = 0xFFFC`, `CtrlGroupBeacon = 0xFFFD`, `CtrlGroupControl = 0xFFFE`.
 - **Default group-id:** `shard.DefaultGroupID = 0x000B` (IANA Bitcoin).
 
 ---
