@@ -14,7 +14,7 @@ Craig S. Wright in
 ## Position
 
 The reference architecture treats IPv6 multicast as the only medium that can
-carry Bitcoin SV at billion-transactions-per-second scale: anycast-load-balanced
+carry BSV at billion-transactions-per-second scale: anycast-load-balanced
 ingress proxies deterministically shard transactions onto independent multicast
 groups, each subscriber receives only the shards it cares about, and lost
 packets are recovered through per-shard NACK requests to cache endpoints that
