@@ -1,9 +1,9 @@
-# BSV Multicast
+# BSV Layered Multicast
 
 ## Overview
 
-The BSV Multicast project is a high-throughput, horizontally-scalable
-transaction distribution system for Bitcoin SV (BSV) designed to pave the road
+The BSV Layered Multicast project is a high-throughput, horizontally-scalable
+transaction distribution system for BSV (Bitcoin SV) designed to pave the road
 towards 1 billion+ transactions per second. It uses IPv6 multicast to
 efficiently distribute transaction data across a fabric of subscribers (miners,
 exchanges, service providers) with deterministic sharding and NACK-based
