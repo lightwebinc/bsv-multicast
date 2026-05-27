@@ -33,9 +33,17 @@ and anchor transactions over reserved control groups.
 | [listener-infra](https://github.com/lightwebinc/listener-infra)               | Egress (deploy)         | Ansible/Terraform automation for `shard-listener` nodes                             |
 | [retry-endpoint](https://github.com/lightwebinc/retry-endpoint)   | Retransmission          | Caches frames, retransmits on NACK requests; beacon-advertised                              |
 | [retransmission-infra](https://github.com/lightwebinc/retransmission-infra)   | Retransmission (deploy) | Ansible/Terraform automation for `retry-endpoint` nodes                             |
-| [shard-common](https://github.com/lightwebinc/shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `seqhash`, `sequence`                                |
+| [shard-manifest](https://github.com/lightwebinc/shard-manifest)   | Manifest                | BRC-137 announcer; periodic `shard_bits` + joined-groups beacon                             |
+| [manifest-infra](https://github.com/lightwebinc/manifest-infra)   | Manifest (deploy)       | Ansible/Terraform automation for `shard-manifest` nodes                                     |
+| [shard-common](https://github.com/lightwebinc/shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `seqhash`, `sequence`, `txidset`                     |
 | [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 senders                  |
 | [multicast-test](https://github.com/lightwebinc/multicast-test)   | Testing                 | Integration test harness: Go + Docker scenarios (`harness/`) and legacy LXD VM lab (`vm-lab/`) |
+| [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes (deploy)     | k0s-reference + Helm composition of the full stack; distribution-agnostic                   |
+| [shard-proxy-helm](https://github.com/lightwebinc/shard-proxy-helm)             | Helm chart              | Chart for `shard-proxy`                                                                     |
+| [shard-listener-helm](https://github.com/lightwebinc/shard-listener-helm)       | Helm chart              | Chart for `shard-listener`                                                                  |
+| [retry-endpoint-helm](https://github.com/lightwebinc/retry-endpoint-helm)       | Helm chart              | Chart for `retry-endpoint`                                                                  |
+| [subtx-generator-helm](https://github.com/lightwebinc/subtx-generator-helm)     | Helm chart              | Chart for `subtx-generator`                                                                 |
+| [shard-manifest-helm](https://github.com/lightwebinc/shard-manifest-helm)       | Helm chart              | Chart for `shard-manifest`                                                                  |
 | [bsv-multicast](https://github.com/lightwebinc/bsv-multicast)             | Documentation           | This repository; project overview, design, and BRC specifications                           |
 
 ## Documentation

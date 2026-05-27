@@ -130,12 +130,13 @@ responsibility:
 | [shard-proxy](https://github.com/lightwebinc/shard-proxy)       | Stateless ingress proxy; receives frames, derives multicast group, forwards verbatim        |
 | [shard-listener](https://github.com/lightwebinc/shard-listener) | Multicast subscriber; filters by shard/subtree, forwards to unicast and multicast consumers |
 | [retry-endpoint](https://github.com/lightwebinc/retry-endpoint) | Caches frames, retransmits on NACK requests                                                 |
+| [shard-manifest](https://github.com/lightwebinc/shard-manifest) | BRC-137 manifest announcer; emits `shard_bits` + joined-groups beacons                      |
 
 ### Shared Libraries
 
-| Repository                                                                  | Purpose                                    | Packages                                |
-| --------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------- |
-| [shard-common](https://github.com/lightwebinc/shard-common) | Protocol primitives shared across services | `frame`, `shard`, `seqhash`, `sequence` |
+| Repository                                                                  | Purpose                                    | Packages                                          |
+| --------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------- |
+| [shard-common](https://github.com/lightwebinc/shard-common) | Protocol primitives shared across services | `frame`, `shard`, `seqhash`, `sequence`, `txidset` |
 
 ### Infrastructure Automation
 
@@ -144,6 +145,20 @@ responsibility:
 | [ingress-infra](https://github.com/lightwebinc/ingress-infra)               | Ansible/Terraform for ingress proxy deployment  | shard-proxy    |
 | [listener-infra](https://github.com/lightwebinc/listener-infra)             | Ansible/Terraform for listener deployment       | shard-listener |
 | [retransmission-infra](https://github.com/lightwebinc/retransmission-infra) | Ansible/Terraform for retry endpoint deployment | retry-endpoint |
+| [manifest-infra](https://github.com/lightwebinc/manifest-infra)             | Ansible/Terraform for manifest deployment       | shard-manifest |
+| [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes deployment (k0s reference, EKS stub) | full stack via Helm    |
+
+### Helm Charts
+
+Each service has a dedicated chart repository, consumed by `multicast-kube-infra`:
+
+| Repository                                                                      | Chart            |
+| ------------------------------------------------------------------------------- | ---------------- |
+| [shard-proxy-helm](https://github.com/lightwebinc/shard-proxy-helm)             | shard-proxy      |
+| [shard-listener-helm](https://github.com/lightwebinc/shard-listener-helm)       | shard-listener   |
+| [retry-endpoint-helm](https://github.com/lightwebinc/retry-endpoint-helm)       | retry-endpoint   |
+| [subtx-generator-helm](https://github.com/lightwebinc/subtx-generator-helm)     | subtx-generator  |
+| [shard-manifest-helm](https://github.com/lightwebinc/shard-manifest-helm)       | shard-manifest   |
 
 ### Testing and Tools
 
@@ -1070,11 +1085,18 @@ bash scenarios/run-all.sh      # run full scenario suite
 
 ### Platform Support
 
-| OS           | Service Manager | Network Config     | Proxy | Listener | Retry |
-| ------------ | --------------- | ------------------ | ----- | -------- | ----- |
-| Ubuntu 24.04 | systemd         | Netplan / ip       | ✓     | ✓        | ✓     |
-| FreeBSD 14   | rc.d            | rc.conf / ifconfig | ✓     | ✓        | ✓     |
-| AWS EC2      | systemd         | ENI + Terraform    | ✓     | ✓        | ✓     |
+| OS                   | Service Manager | Network Config         | Proxy | Listener | Retry | Manifest |
+| -------------------- | --------------- | ---------------------- | ----- | -------- | ----- | -------- |
+| Ubuntu 24.04         | systemd         | Netplan / ip           | ✓     | ✓        | ✓     | ✓        |
+| FreeBSD 14           | rc.d            | rc.conf / ifconfig     | ✓     | ✓        | ✓     | ✓        |
+| AWS EC2              | systemd         | ENI + Terraform        | ✓     | ✓        | ✓     | ✓        |
+| Kubernetes (k0s ref) | kubelet         | Multus macvlan         | ✓     | ✓        | ✓     | ✓        |
+
+Kubernetes deployment is provided by
+[multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra),
+which composes the per-service Helm charts (`shard-proxy-helm`,
+`shard-listener-helm`, `retry-endpoint-helm`, `subtx-generator-helm`,
+`shard-manifest-helm`).
 
 ### Networking Requirements
 
@@ -1171,11 +1193,12 @@ All services expose Prometheus metrics on dedicated ports:
 | shard-proxy    | :9100        | bsp\_  |
 | shard-listener | :9200        | bsl\_  |
 | retry-endpoint | :9400        | bre\_  |
+| shard-manifest | :9091        | bsm\_  |
 
 Key signals: `bsp_packets_dropped_total`, `bsl_gaps_detected_total`,
 `bsl_gaps_unrecovered_total`, `bre_cache_misses_total`,
-`bre_rate_limit_drops_total`. See each component's docs for full metric
-reference.
+`bre_rate_limit_drops_total`, `bsm_announcements_sent_total`. See each
+component's docs for full metric reference.
 
 ### Graceful Shutdown
 
