@@ -1,4 +1,4 @@
-# Bitcoin Multicast
+# BSV Multicast
 
 A high-throughput, horizontally-scalable transaction distribution system for
 Bitcoin SV (BSV) designed to pave the road towards 1 billion+ transactions per
