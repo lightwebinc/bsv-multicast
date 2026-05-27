@@ -1,6 +1,6 @@
 # NACK Retransmission Flow
 
-System-level design document describing the end-to-end NACK retransmission pipeline across all components. This is a cross-repo document covering `bitcoin-shard-proxy`, `bitcoin-shard-listener`, `bitcoin-retry-endpoint`, and the multicast fabric.
+System-level design document describing the end-to-end NACK retransmission pipeline across all components. This is a cross-repo document covering `shard-proxy`, `shard-listener`, `retry-endpoint`, and the multicast fabric.
 
 ---
 
@@ -10,11 +10,11 @@ System-level design document describing the end-to-end NACK retransmission pipel
                           multicast fabric (FF05::<shard>)
                          ┌──────────────────────────────────────────────────┐
                          │                                                  │
-BSV Source ──► bitcoin-shard-proxy ──┬──► listener-1 ──► downstream consumer
+BSV Source ──► shard-proxy ──┬──► listener-1 ──► downstream consumer
               (stamps HashKey/SeqNum) │
                                      ├──► listener-2 ──► downstream consumer
                                      │
-                                     └──► bitcoin-retry-endpoint (caches all frames)
+                                     └──► retry-endpoint (caches all frames)
 ```
 
 - **Proxy** receives transactions, stamps `HashKey` (XXH64 of sender+group+subtree) and `SeqNum` (monotonic per-flow counter), derives shard group from TxID, multicasts to `FF05::<shard>`.
@@ -144,7 +144,7 @@ Tier 1:
 ## 6. Beacon Discovery
 
 ```text
-bitcoin-retry-endpoint                    bitcoin-shard-listener
+retry-endpoint                    shard-listener
 ┌─────────────────────┐                  ┌─────────────────────┐
 │ beacon.Sender       │                  │ discovery.Beacon    │
 │                     │  ADVERT (56B)    │   Listener          │

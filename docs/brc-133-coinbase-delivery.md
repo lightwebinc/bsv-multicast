@@ -133,10 +133,10 @@ objects.
 
 | Component              | Change                                                                            |
 | ---------------------- | --------------------------------------------------------------------------------- |
-| bitcoin-shard-proxy    | `ProcessBlock` handles MsgType `0x02`; routes to `CtrlGroupControl`               |
-| bitcoin-shard-listener | `processBlockFrame` handles MsgType `0x02`; gap tracking on ctrl flow             |
-| bitcoin-retry-endpoint | Joins `FF0E::B:FFFE`; caches and retransmits BRC-131 frames regardless of MsgType |
-| bitcoin-shard-common   | `BlockMsgCoinbase = 0x02` constant; `DecodeBlock` validates MsgType               |
+| shard-proxy    | `ProcessBlock` handles MsgType `0x02`; routes to `CtrlGroupControl`               |
+| shard-listener | `processBlockFrame` handles MsgType `0x02`; gap tracking on ctrl flow             |
+| retry-endpoint | Joins `FF0E::B:FFFE`; caches and retransmits BRC-131 frames regardless of MsgType |
+| shard-common   | `BlockMsgCoinbase = 0x02` constant; `DecodeBlock` validates MsgType               |
 
 ---
 

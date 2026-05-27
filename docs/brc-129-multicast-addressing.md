@@ -122,8 +122,8 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 
 ## Implementation
 
-- **Group derivation:** `bitcoin-shard-common/shard/shard.go` — `Engine.Addr(groupIndex uint32, port int)` (only the low 16 bits of `groupIndex` are used).
-- **Control group helper:** `bitcoin-shard-common/shard/control.go` — `ControlGroupAddr(scopePrefix, groupID, index uint16)` (standalone; not bound to Engine scope).
+- **Group derivation:** `shard-common/shard/shard.go` — `Engine.Addr(groupIndex uint32, port int)` (only the low 16 bits of `groupIndex` are used).
+- **Control group helper:** `shard-common/shard/control.go` — `ControlGroupAddr(scopePrefix, groupID, index uint16)` (standalone; not bound to Engine scope).
 - **Constants:** `CtrlGroupBlockHeader = 0xFFFA`, `CtrlGroupSubtreeAnnounce = 0xFFFB`, `CtrlGroupSubtreeGroupAnnounce = 0xFFFC`, `CtrlGroupBeacon = 0xFFFD`, `CtrlGroupControl = 0xFFFE`.
 - **Default group-id:** `shard.DefaultGroupID = 0x000B` (IANA Bitcoin).
 

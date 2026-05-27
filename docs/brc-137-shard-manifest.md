@@ -14,7 +14,7 @@ All components of the multicast pipeline (proxy, listener, retry endpoint, trans
 2. Lets observers detect inconsistent configuration across peers.
 3. Provides identity, timestamp, TTL, and a `GenerationID` so future versions can implement automated, rate-limited shard-bit shifts safely.
 
-The service that emits these announcements is `bitcoin-shard-manifest` (defined separately). No retransmission and no listener-side acknowledgment are required.
+The service that emits these announcements is `shard-manifest` (defined separately). No retransmission and no listener-side acknowledgment are required.
 
 ---
 
@@ -142,7 +142,7 @@ Consumers SHOULD key registry entries on `(SrcIPv6, InstanceID)`. `SrcIPv6` is s
 
 ---
 
-## Producer Service (`bitcoin-shard-manifest`)
+## Producer Service (`shard-manifest`)
 
 A new standalone daemon emits ShardManifest datagrams. It does not subscribe to or interpret data-plane shard groups. Configuration:
 
@@ -217,11 +217,11 @@ A future revision MAY promote these to normative requirements with explicit reje
 
 | Component                                         | File                                                        |
 | ------------------------------------------------- | ----------------------------------------------------------- |
-| `MsgTypeShardManifest = 0x40`, `ShardManifestHeaderSize = 64` | `bitcoin-shard-common/frame/frame.go`            |
-| Wire format encode/decode                         | `bitcoin-shard-common/frame/shard_manifest.go`              |
-| Daemon                                            | `bitcoin-shard-manifest/{main.go, sender/, config/, metrics/}` |
-| Ansible deployment role                           | `bitcoin-manifest/ansible/roles/bitcoin-shard-manifest/`    |
-| Helm chart                                        | `bitcoin-shard-manifest-helm/`                              |
+| `MsgTypeShardManifest = 0x40`, `ShardManifestHeaderSize = 64` | `shard-common/frame/frame.go`            |
+| Wire format encode/decode                         | `shard-common/frame/shard_manifest.go`              |
+| Daemon                                            | `shard-manifest/{main.go, sender/, config/, metrics/}` |
+| Ansible deployment role                           | `manifest-infra/ansible/roles/shard-manifest/`    |
+| Helm chart                                        | `shard-manifest-helm/`                              |
 
 ---
 

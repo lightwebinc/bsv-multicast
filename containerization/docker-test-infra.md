@@ -2,7 +2,7 @@
 
 ## Status: implemented
 
-The Go test harness lives in [`bitcoin-multicast-test/harness/`](../../bitcoin-multicast-test/harness/) and is the **primary** test infrastructure for all containerizable components. It covers 40 scenarios from `TestScenario00` through `TestScenario99` (BGP scenarios 40–42 are present as `t.Skip` stubs pending Multus / multi-network support — see [k0s-deployment.md](k0s-deployment.md)).
+The Go test harness lives in [`multicast-test/harness/`](../../multicast-test/harness/) and is the **primary** test infrastructure for all containerizable components. It covers 40 scenarios from `TestScenario00` through `TestScenario99` (BGP scenarios 40–42 are present as `t.Skip` stubs pending Multus / multi-network support — see [k0s-deployment.md](k0s-deployment.md)).
 
 This document reflects what is actually in the tree. The earlier draft described a `docker-compose` + `overlays/` design that was never implemented and is not needed; the harness orchestrates containers directly from Go.
 
@@ -11,7 +11,7 @@ This document reflects what is actually in the tree. The earlier draft described
 ## High-level architecture
 
 ```
-bitcoin-multicast-test/
+multicast-test/
 ├── Makefile                 # make test / test-quick / test-retransmit / test-frag
 ├── harness/
 │   ├── build/build.go       # cross-compile + distroless image bake (uses go.work)
@@ -70,7 +70,7 @@ Each scenario test uses `env.New(t, dockerDriver)` to wire up nodes:
 e := env.New(t, docker.New())
 e.AddNode(driver.NodeConfig{
     Name:        "proxy",
-    Image:       "bitcoin-shard-proxy:harness",
+    Image:       "shard-proxy:harness",
     IPv6:        "fd10::2",
     Env:         map[string]string{...},
     MetricsPort: 9100,
@@ -91,7 +91,7 @@ Every container runs with `--cap-add NET_ADMIN` for `setsockopt(IPV6_MULTICAST_I
 
 `harness/build/build.go` cross-compiles each component's binary on the host and packages it into a minimal Docker image:
 
-1. Resolves `bitcoin-shard-common` via `go.work` (preferred — workspace lives in the parent of all repos) or via a temporary `replace` directive in `go.mod`.
+1. Resolves `shard-common` via `go.work` (preferred — workspace lives in the parent of all repos) or via a temporary `replace` directive in `go.mod`.
 2. `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -buildvcs=false -trimpath` on the host.
 3. Bakes the static binary into a `distroless/static:nonroot` image with a one-shot `docker build` from a tiny in-memory Dockerfile template.
 4. Tag convention: `<component>:harness`.

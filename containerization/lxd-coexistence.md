@@ -2,7 +2,7 @@
 
 ## Principle
 
-The LXD lab is now **legacy** under `bitcoin-multicast-test/vm-lab/`. The Go Docker harness in `harness/` is the primary test path and supersedes the LXD bash suite for everything except switch/BGP fidelity. Both can run on the same host; they share no state.
+The LXD lab is now **legacy** under `multicast-test/vm-lab/`. The Go Docker harness in `harness/` is the primary test path and supersedes the LXD bash suite for everything except switch/BGP fidelity. Both can run on the same host; they share no state.
 
 ---
 
@@ -14,14 +14,14 @@ Host: lax (Ubuntu 24.04)
   lxdbr1 (fabric, 10.10.11.0/24, fd20::/64)
 
 VMs (ubuntu-small-mcast profile: eth0=lxdbr0, eth1=lxdbr1):
-  source    (.10)        bitcoin-subtx-generator
-  proxy     (.20/.2)     bitcoin-shard-proxy
-  listener1 (.31/fd20::21) bitcoin-shard-listener
-  listener2 (.32/fd20::22) bitcoin-shard-listener
-  listener3 (.33/fd20::23) bitcoin-shard-listener
-  retry1    (.34/fd20::24) bitcoin-retry-endpoint  tier=0, pref=128
-  retry2    (.35/fd20::25) bitcoin-retry-endpoint  tier=0, pref=64
-  retry3    (.36/fd20::26) bitcoin-retry-endpoint  tier=1, pref=128
+  source    (.10)        subtx-generator
+  proxy     (.20/.2)     shard-proxy
+  listener1 (.31/fd20::21) shard-listener
+  listener2 (.32/fd20::22) shard-listener
+  listener3 (.33/fd20::23) shard-listener
+  retry1    (.34/fd20::24) retry-endpoint  tier=0, pref=128
+  retry2    (.35/fd20::25) retry-endpoint  tier=0, pref=64
+  retry3    (.36/fd20::26) retry-endpoint  tier=1, pref=128
   metrics   (.142)       Prometheus + Grafana (external)
 ```
 

@@ -27,16 +27,16 @@ and anchor transactions over reserved control groups.
 
 | Repository                                                                        | Role                    | Purpose                                                                                     |
 | --------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------- |
-| [bitcoin-shard-proxy](https://github.com/lightwebinc/bitcoin-shard-proxy)         | Ingress                 | Stateless ingress proxy; receives frames, derives multicast group, forwards verbatim        |
-| [bitcoin-ingress](https://github.com/lightwebinc/bitcoin-ingress)                 | Ingress (deploy)        | Ansible/Terraform automation for `bitcoin-shard-proxy` nodes                                |
-| [bitcoin-shard-listener](https://github.com/lightwebinc/bitcoin-shard-listener)   | Egress                  | Multicast subscriber; filters by shard/subtree, forwards to unicast and multicast consumers |
-| [bitcoin-listener](https://github.com/lightwebinc/bitcoin-listener)               | Egress (deploy)         | Ansible/Terraform automation for `bitcoin-shard-listener` nodes                             |
-| [bitcoin-retry-endpoint](https://github.com/lightwebinc/bitcoin-retry-endpoint)   | Retransmission          | Caches frames, retransmits on NACK requests; beacon-advertised                              |
-| [bitcoin-retransmission](https://github.com/lightwebinc/bitcoin-retransmission)   | Retransmission (deploy) | Ansible/Terraform automation for `bitcoin-retry-endpoint` nodes                             |
-| [bitcoin-shard-common](https://github.com/lightwebinc/bitcoin-shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `seqhash`, `sequence`                                |
-| [bitcoin-subtx-generator](https://github.com/lightwebinc/bitcoin-subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 senders                  |
-| [bitcoin-multicast-test](https://github.com/lightwebinc/bitcoin-multicast-test)   | Testing                 | Integration test harness: Go + Docker scenarios (`harness/`) and legacy LXD VM lab (`vm-lab/`) |
-| [bitcoin-multicast](https://github.com/lightwebinc/bitcoin-multicast)             | Documentation           | This repository; project overview, design, and BRC specifications                           |
+| [shard-proxy](https://github.com/lightwebinc/shard-proxy)         | Ingress                 | Stateless ingress proxy; receives frames, derives multicast group, forwards verbatim        |
+| [ingress-infra](https://github.com/lightwebinc/ingress-infra)                 | Ingress (deploy)        | Ansible/Terraform automation for `shard-proxy` nodes                                |
+| [shard-listener](https://github.com/lightwebinc/shard-listener)   | Egress                  | Multicast subscriber; filters by shard/subtree, forwards to unicast and multicast consumers |
+| [listener-infra](https://github.com/lightwebinc/listener-infra)               | Egress (deploy)         | Ansible/Terraform automation for `shard-listener` nodes                             |
+| [retry-endpoint](https://github.com/lightwebinc/retry-endpoint)   | Retransmission          | Caches frames, retransmits on NACK requests; beacon-advertised                              |
+| [retransmission-infra](https://github.com/lightwebinc/retransmission-infra)   | Retransmission (deploy) | Ansible/Terraform automation for `retry-endpoint` nodes                             |
+| [shard-common](https://github.com/lightwebinc/shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `seqhash`, `sequence`                                |
+| [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 senders                  |
+| [multicast-test](https://github.com/lightwebinc/multicast-test)   | Testing                 | Integration test harness: Go + Docker scenarios (`harness/`) and legacy LXD VM lab (`vm-lab/`) |
+| [bsv-multicast](https://github.com/lightwebinc/bsv-multicast)             | Documentation           | This repository; project overview, design, and BRC specifications                           |
 
 ## Documentation
 

@@ -4,17 +4,17 @@
 
 | Component | Stateful? | Multicast role | Docker viability | k0s viability (Multus default) | Existing assets |
 |---|---|---|---|---|---|
-| `bitcoin-shard-proxy` | Stateless | Egress sender | **High** — used by harness via cross-compile + distroless image | **High** — macvlan `net1` on fabric NIC, or `hostNetwork: true` fallback | `Dockerfile`, `test/Dockerfile.e2e` (harness builds its own minimal image via `harness/build`) |
-| `bitcoin-shard-listener` | In-memory gap state | Ingress subscriber (MLD join) | **High** — used by harness | **High** with Multus (DaemonSet); `hostNetwork` fallback | `Dockerfile` (distroless), `test/Dockerfile.e2e` |
-| `bitcoin-retry-endpoint` | In-memory freecache (+ optional Redis) | Ingress subscriber + egress retransmitter | **High** — image built on the fly by `harness/build` | **High** with Multus (per-node release for `NACK_ADDR`); `hostNetwork` fallback | No standalone `Dockerfile` in repo — harness produces a minimal image; Phase 1 still ships a canonical one for k0s |
-| `bitcoin-subtx-generator` | Stateless | Client/sender | **Very High** — used by harness | **High** — standard CNI is fine (UDP/TCP egress only); no Multus needed | Multi-binary repo; harness packages `subtx-gen`, `send-anchor-frame`, `send-block-announce`, `send-subtree-data` |
-| `bitcoin-shard-common` | Library | — | n/a | n/a | Built into other images via host `go.work` workspace |
+| `shard-proxy` | Stateless | Egress sender | **High** — used by harness via cross-compile + distroless image | **High** — macvlan `net1` on fabric NIC, or `hostNetwork: true` fallback | `Dockerfile`, `test/Dockerfile.e2e` (harness builds its own minimal image via `harness/build`) |
+| `shard-listener` | In-memory gap state | Ingress subscriber (MLD join) | **High** — used by harness | **High** with Multus (DaemonSet); `hostNetwork` fallback | `Dockerfile` (distroless), `test/Dockerfile.e2e` |
+| `retry-endpoint` | In-memory freecache (+ optional Redis) | Ingress subscriber + egress retransmitter | **High** — image built on the fly by `harness/build` | **High** with Multus (per-node release for `NACK_ADDR`); `hostNetwork` fallback | No standalone `Dockerfile` in repo — harness produces a minimal image; Phase 1 still ships a canonical one for k0s |
+| `subtx-generator` | Stateless | Client/sender | **Very High** — used by harness | **High** — standard CNI is fine (UDP/TCP egress only); no Multus needed | Multi-binary repo; harness packages `subtx-gen`, `send-anchor-frame`, `send-block-announce`, `send-subtree-data` |
+| `shard-common` | Library | — | n/a | n/a | Built into other images via host `go.work` workspace |
 | Infra repos (ingress/listener/retransmission) | Ansible/Terraform | — | n/a (host-level) | Future: NetworkPolicy on primary CNI | Keep as-is for VM/baremetal |
-| `bitcoin-multicast-test` | Test scenarios (Go + Docker) | Harness | **Implemented:** `harness/` Go + Docker driver, 40 scenarios | n/a | `vm-lab/scenarios/` bash suite — **legacy**, LXD-only, switch/BGP fidelity reference |
+| `multicast-test` | Test scenarios (Go + Docker) | Harness | **Implemented:** `harness/` Go + Docker driver, 40 scenarios | n/a | `vm-lab/scenarios/` bash suite — **legacy**, LXD-only, switch/BGP fidelity reference |
 
 ---
 
-## bitcoin-shard-proxy
+## shard-proxy
 
 ### Existing Docker assets
 - `Dockerfile` — multi-stage Go build → ubuntu:24.04 runtime
@@ -46,10 +46,10 @@
 
 ---
 
-## bitcoin-shard-listener
+## shard-listener
 
 ### Existing Docker assets
-- `Dockerfile` — multi-stage Go build → `gcr.io/distroless/static:nonroot` runtime; requires build context to include `../bitcoin-shard-proxy` (for `send-test-frames` test tool)
+- `Dockerfile` — multi-stage Go build → `gcr.io/distroless/static:nonroot` runtime; requires build context to include `../shard-proxy` (for `send-test-frames` test tool)
 - `test/Dockerfile.e2e` + `test/docker-compose.yml` — E2E uses unicast injection to `[::1]:port` to avoid Linux loopback multicast unreliability (confirmed pattern for CI)
 
 ### Key env vars
@@ -83,7 +83,7 @@
 
 ---
 
-## bitcoin-retry-endpoint
+## retry-endpoint
 
 ### Existing Docker assets
 No canonical `Dockerfile` in the repo yet — the Go harness compiles a binary on the host with `GOWORK=go.work` and bakes it into a distroless image. For k0s, Phase 1 still ships a canonical Dockerfile for OCI publishing. Proposed structure:
@@ -94,11 +94,11 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -buildvcs=false -o /bitcoin-retry-endpoint .
+RUN CGO_ENABLED=0 go build -trimpath -buildvcs=false -o /retry-endpoint .
 
 FROM gcr.io/distroless/static:nonroot
-COPY --from=builder /bitcoin-retry-endpoint /bitcoin-retry-endpoint
-ENTRYPOINT ["/bitcoin-retry-endpoint"]
+COPY --from=builder /retry-endpoint /retry-endpoint
+ENTRYPOINT ["/retry-endpoint"]
 ```
 
 ### Key env vars
@@ -130,7 +130,7 @@ ENTRYPOINT ["/bitcoin-retry-endpoint"]
 
 ---
 
-## bitcoin-subtx-generator
+## subtx-generator
 
 ### Existing Docker assets
 No `Dockerfile` yet. Phase 2 delivers it. Single multi-binary image containing:

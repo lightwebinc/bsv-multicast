@@ -4,28 +4,28 @@
 
 **Status: complete (revised 2026-05 to match shipped harness + adopt Multus default).**
 
-- [x] `containerization/` doc tree in `bitcoin-multicast`
-- [x] Revision pass aligning docs with implemented `bitcoin-multicast-test/harness/`
+- [x] `containerization/` doc tree in `bsv-multicast`
+- [x] Revision pass aligning docs with implemented `multicast-test/harness/`
 - [x] Multus designated as default k0s networking mode
 
 ---
 
 ## Phase 1 — Canonical Dockerfile + Dagger CI
 
-**Status: complete (2026-05).** All four component repos now ship a canonical multi-stage Dockerfile and a Dagger-driven CI pipeline. The Go harness in `bitcoin-multicast-test/harness/build/build.go` continues to bake images via host cross-compile for fast E2E loops; the canonical Dockerfiles are the publish-ready artefact (Phase 6).
+**Status: complete (2026-05).** All four component repos now ship a canonical multi-stage Dockerfile and a Dagger-driven CI pipeline. The Go harness in `multicast-test/harness/build/build.go` continues to bake images via host cross-compile for fast E2E loops; the canonical Dockerfiles are the publish-ready artefact (Phase 6).
 
-Shipped per repo (`bitcoin-shard-proxy`, `bitcoin-shard-listener`, `bitcoin-retry-endpoint`, `bitcoin-subtx-generator`):
+Shipped per repo (`shard-proxy`, `shard-listener`, `retry-endpoint`, `subtx-generator`):
 - `Dockerfile` — `golang:1.25-alpine` builder with module/build cache mounts → `gcr.io/distroless/static:nonroot` runtime, `USER nonroot:nonroot`, no in-image `ENV` defaults. Buildx multi-arch ready (`TARGETOS`/`TARGETARCH`).
-- `bitcoin-shard-proxy`: dropped `ubuntu:24.04` + `apt-get` layer; binary at `/usr/local/bin/bitcoin-shard-proxy`.
-- `bitcoin-shard-listener`: distroless retained; binary moved to `/usr/local/bin/bitcoin-shard-listener` (chart relies on `ENTRYPOINT`, no breakage).
-- `bitcoin-retry-endpoint`: new Dockerfile; binary at `/usr/local/bin/bitcoin-retry-endpoint`.
-- `bitcoin-subtx-generator`: single image bundling all four `cmd/` binaries (`subtx-gen`, `send-anchor-frame`, `send-block-announce`, `send-subtree-data`) — **no `ENTRYPOINT`**; consumer (Helm chart `mode`, `docker run --entrypoint`) selects the binary.
+- `shard-proxy`: dropped `ubuntu:24.04` + `apt-get` layer; binary at `/usr/local/bin/shard-proxy`.
+- `shard-listener`: distroless retained; binary moved to `/usr/local/bin/shard-listener` (chart relies on `ENTRYPOINT`, no breakage).
+- `retry-endpoint`: new Dockerfile; binary at `/usr/local/bin/retry-endpoint`.
+- `subtx-generator`: single image bundling all four `cmd/` binaries (`subtx-gen`, `send-anchor-frame`, `send-block-announce`, `send-subtree-data`) — **no `ENTRYPOINT`**; consumer (Helm chart `mode`, `docker run --entrypoint`) selects the binary.
 - `.dockerignore` per repo, omitting `.git`, `ci/`, docs, `*.md`, etc.
 
 Dagger pipeline (`ci/` subdirectory in each repo, separate Go module pinned to `dagger.io/dagger v0.20.8`):
 - Subcommands: `unit`, `lint`, `vuln`, `tidy`, `build`, `image`, `all`, `dev-shell`. The `image` subcommand reuses the canonical `Dockerfile` via Dagger's `Directory.DockerBuild()` (single image source of truth) and supports `-export=<path>` for OCI tarballs and `-address=<ref>` for registry publish.
 - Shared Go module/build/golangci-lint cache volumes across stages.
-- Reproduces the existing `replace github.com/lightwebinc/bitcoin-shard-common=…` dance inside the container without mutating the host repo.
+- Reproduces the existing `replace github.com/lightwebinc/shard-common=…` dance inside the container without mutating the host repo.
 
 Makefile (additive — existing host-side `build`, `test`, `lint`, `test-e2e`, `install-source`, `hooks` targets preserved):
 - `make ci` (full), `ci-unit`, `ci-lint`, `ci-vuln`, `ci-tidy`, `ci-build`, `ci-image`, `ci-export`, `ci-publish`, `ci-shell`, `fmt`, `help`.
@@ -33,18 +33,18 @@ Makefile (additive — existing host-side `build`, `test`, `lint`, `test-e2e`, `
 - Pipeline runs via `GOWORK=off go run .` from `ci/` so the parent `go.work` is not pulled in.
 
 GitHub Actions:
-- `ci.yml` collapsed to a single `make ci` step calling Dagger (with sibling `bitcoin-shard-common` checkout). Per-repo, ~120 lines of YAML reduced to ~30.
+- `ci.yml` collapsed to a single `make ci` step calling Dagger (with sibling `shard-common` checkout). Per-repo, ~120 lines of YAML reduced to ~30.
 - Listener and proxy keep a separate `e2e` job for host-side multicast smoke (`make test-e2e`).
 - `release.yml` and `codeql.yml` unchanged.
 
 README updates:
-- `bitcoin-retry-endpoint/README.md`: prominent **NACK_ADDR (required in production)** section explaining the SLAAC source-address mismatch failure mode and the listener-side ACK rejection.
-- `bitcoin-subtx-generator/README.md`: **Container image** section listing all four binaries and the no-`ENTRYPOINT` contract.
+- `retry-endpoint/README.md`: prominent **NACK_ADDR (required in production)** section explaining the SLAAC source-address mismatch failure mode and the listener-side ACK rejection.
+- `subtx-generator/README.md`: **Container image** section listing all four binaries and the no-`ENTRYPOINT` contract.
 - Proxy and listener READMEs: short Container image notes (distroless/nonroot, no in-image `ENV` defaults).
 
 Caveats:
 - Image build not yet pushed anywhere (Phase 6 gate).
-- `bitcoin-shard-proxy` image dropped its in-image `ENV` defaults; bare `docker run` users must now pass env explicitly. Helm chart sets all values, so the chart-driven path is unchanged.
+- `shard-proxy` image dropped its in-image `ENV` defaults; bare `docker run` users must now pass env explicitly. Helm chart sets all values, so the chart-driven path is unchanged.
 - Dagger CLI itself is not required on the runner — the SDK launches the engine on connect (Docker required, present on `ubuntu-latest`).
 
 Dependencies satisfied: none.
@@ -53,7 +53,7 @@ Dependencies satisfied: none.
 
 ## Phase 2 — Go harness + Docker E2E scenarios
 
-**Status: complete.** Implemented in `bitcoin-multicast-test/harness/`. 40 scenarios pass via `make test`. BGP scenarios 40–42 ship as `t.Skip` stubs pending Phase 4.5.
+**Status: complete.** Implemented in `multicast-test/harness/`. 40 scenarios pass via `make test`. BGP scenarios 40–42 ship as `t.Skip` stubs pending Phase 4.5.
 
 Shipped:
 - `harness/driver/driver.go` + `harness/driver/docker/` (bridge + container lifecycle in Go)
@@ -71,14 +71,14 @@ Not implemented (intentional deltas vs. original plan):
 
 ## Phase 3 — Self-hosted CI integration
 
-**Target: all component repos + `bitcoin-multicast-test`**
+**Target: all component repos + `multicast-test`**
 
 Deliverables:
 - Self-hosted runner registered with labels `[docker, mcast-fabric, lxd]`
 - `.github/workflows/ci.yml` updated in each component repo:
   - Tier 1 (hosted): unit + lint — already in place, no change
   - Tier 2 (self-hosted docker): Docker E2E via Dagger
-- `bitcoin-multicast-test` CI: nightly LXD run-all.sh + Docker harness
+- `multicast-test` CI: nightly LXD run-all.sh + Docker harness
 - Dagger `integration` subcommand wiring Go harness via Docker driver
 
 Dependencies: Phase 2.
@@ -90,10 +90,10 @@ Dependencies: Phase 2.
 **Status: complete (2026-05).** Four `-helm` repos scaffolded, linted, and rendering across all networking modes / workload types. See [helm-charts.md](helm-charts.md) for the per-chart values surface.
 
 Shipped:
-- `bitcoin-shard-proxy-helm/` — Deployment; full `.config` flag surface; HPA/PDB/ServiceMonitor/NetworkPolicy gated
-- `bitcoin-shard-listener-helm/` — Deployment **or** DaemonSet via `workloadType`; `NUM_WORKERS=1` hardcoded to avoid SO_REUSEPORT multicast duplication
-- `bitcoin-retry-endpoint-helm/` — Deployment; `config.nackAddr` required (effectively); no Redis subchart bundled (operator-managed)
-- `bitcoin-subtx-generator-helm/` — Deployment **or** Job via `workloadType`; CLI args renderer (binaries are flag-only) covering all four `cmd/` modes
+- `shard-proxy-helm/` — Deployment; full `.config` flag surface; HPA/PDB/ServiceMonitor/NetworkPolicy gated
+- `shard-listener-helm/` — Deployment **or** DaemonSet via `workloadType`; `NUM_WORKERS=1` hardcoded to avoid SO_REUSEPORT multicast duplication
+- `retry-endpoint-helm/` — Deployment; `config.nackAddr` required (effectively); no Redis subchart bundled (operator-managed)
+- `subtx-generator-helm/` — Deployment **or** Job via `workloadType`; CLI args renderer (binaries are flag-only) covering all four `cmd/` modes
 - All charts: `Chart.yaml` (`kubeVersion >= 1.27.0-0`, ArtifactHub annotations), `values.schema.json`, `_helpers.tpl`, `NOTES.txt`, `serviceaccount.yaml`, `service.yaml`, optional `hpa.yaml` / `pdb.yaml` / `servicemonitor.yaml` / `networkpolicy.yaml`, and `templates/tests/test-metrics-endpoint.yaml`
 - `networking.mode` toggle (`multus` | `host` | `unicast`) wired on every workload template
 - `.github/workflows/lint.yml` runs `helm lint --strict` + multi-permutation `helm template` smoke renders on every push/PR (hosted runner)
@@ -111,10 +111,10 @@ Dependencies: Phase 1 — **satisfied**.
 ## Phase 4.5 — Multus enablement + BGP scenarios
 
 **Status: in progress.** Multus + NAD wiring shipped under
-[`bitcoin-multicast-kube-infra`](https://github.com/lightwebinc/bitcoin-multicast-kube-infra)
+[`multicast-kube-infra`](https://github.com/lightwebinc/multicast-kube-infra)
 (`platform/multus/`, `platform/nads/`). Docker harness BGP scenarios remaining.
 
-**Targets: `bitcoin-multicast-test/harness/`, `*-helm` charts, k0s lab.**
+**Targets: `multicast-test/harness/`, `*-helm` charts, k0s lab.**
 
 Deliverables:
 - Multus install verified on the k0s lab cluster (`helm install multus ...`).
@@ -131,7 +131,7 @@ Dependencies: Phase 4 (charts must expose `networking.mode`).
 ## Phase 5 — k0s reference deployment (Multus default)
 
 **Status: in progress.** Reference implementation lives in
-[`bitcoin-multicast-kube-infra`](https://github.com/lightwebinc/bitcoin-multicast-kube-infra) —
+[`multicast-kube-infra`](https://github.com/lightwebinc/multicast-kube-infra) —
 distribution-agnostic repo with `distributions/k0s/` (k0sctl-driven), modular
 `platform/` (CNI, Multus, ESO, NADs), and Helmfile-based `apps/` composition.
 
@@ -140,7 +140,7 @@ distribution-agnostic repo with `distributions/k0s/` (k0sctl-driven), modular
 Deliverables:
 - k0s controller + worker nodes deployed on lab host or dedicated VMs
 - Multus + NADs applied (from Phase 4.5)
-- Node labels applied: `bitcoin-mcast/role`, `bitcoin-mcast/node`, `bitcoin-mcast/fabric-iface`
+- Node labels applied: `bsv-mcast/role`, `bsv-mcast/node`, `bsv-mcast/fabric-iface`
 - Helmfile-based composition wiring all four charts with `networking.mode: multus`
 - Verified: end-to-end multicast delivery via macvlan `net1` on real fabric
 - Verified: NACK recovery + beacon discovery in k0s environment
@@ -161,7 +161,7 @@ Dependencies: Phase 4.5.
 - GH Pages / chart-releaser approach dropped in favour of OCI-only
 
 **Remaining:**
-- OCI image push to `ghcr.io/lightwebinc/bitcoin-shard-proxy`, etc. (Docker images, not charts)
+- OCI image push to `ghcr.io/lightwebinc/shard-proxy`, etc. (Docker images, not charts)
 - Semantic versioning: `v0.1.0` image tag applied to component repos
 - All triggered only by `workflow_dispatch` with `confirm: RELEASE`
 
@@ -173,7 +173,7 @@ Dependencies: Phase 5 (k0s deployment verified), all CI tiers green.
 
 ## Phase 7 — Unicast egress mode (future)
 
-**Target: `bitcoin-shard-proxy`**
+**Target: `shard-proxy`**
 
 Deliverables:
 - `EGRESS_MODE=unicast-list` flag + `EGRESS_TARGETS=host:port,...`
@@ -189,7 +189,7 @@ This phase is scoped for cloud portability but intentionally deferred. It does n
 
 ### Phase 7b — Local socket transport (collapsed proxy + listener)
 
-**Target: `bitcoin-shard-proxy`, `bitcoin-shard-listener`, both Helm charts**
+**Target: `shard-proxy`, `shard-listener`, both Helm charts**
 
 **Use case:** a single-host deployment that collapses the proxy and the listener into one pod (or one VM) and exposes a **full-duplex local API to client processes** on that host. The fabric NIC, MLD joins, and multicast plumbing become an implementation detail of the pod; the client speaks only AF_UNIX. This unlocks:
 - **Edge / single-tenant deployments** where one consumer process attaches to the feed without any IPv6 multicast configuration.
@@ -215,26 +215,26 @@ This phase is scoped for cloud portability but intentionally deferred. It does n
 
 #### Deliverables
 
-- `bitcoin-shard-listener`:
+- `shard-listener`:
   - `Sender` (egress/egress.go) gains `unix-dgram` and `unix-seqpacket` proto branches via `net.DialUnix` (auto-reconnect on `ECONNREFUSED`, same retry semantics as the existing TCP path).
   - `EGRESS_ADDR` accepts `unix:/path/to/sock` in addition to `host:port`; `EGRESS_PROTO=unix-dgram|unix-seqpacket` validated in `config/config.go`.
   - Optional multi-target list (`EGRESS_TARGETS`) for local fan-out to multiple client sockets.
   - `HEADER_EGRESS_*` mirror the same surface so the SPV header stream can also run over AF_UNIX.
-- `bitcoin-shard-proxy`:
+- `shard-proxy`:
   - `UNIX_LISTEN_PATH` (`SOCK_DGRAM`) and `UNIX_SEQPACKET_LISTEN_PATH` configs added to the UDP / TCP worker constructors; reuses `forwarder.Process` unchanged.
   - Startup creates parent dirs, `unlink()`s stale sockets, applies `socketMode`/`socketGroup`.
 - Helm charts:
-  - `bitcoin-shard-listener-helm`: `egress.mode`, `egress.socketPath`, `egress.socketMode`, `egress.socketGroup`; renders an `emptyDir` mount when the mode is AF_UNIX.
-  - `bitcoin-shard-proxy-helm`: `ingress.unix` and `ingress.unixSeqpacket` value blocks.
-  - New `bitcoin-collapsed-helm` chart (or composite values in proxy chart) bundling proxy + listener in one Deployment with the socket dir shared via `emptyDir`. Multicast fabric attachment (`networking.mode: multus|host`) still required at the pod boundary.
+  - `shard-listener-helm`: `egress.mode`, `egress.socketPath`, `egress.socketMode`, `egress.socketGroup`; renders an `emptyDir` mount when the mode is AF_UNIX.
+  - `shard-proxy-helm`: `ingress.unix` and `ingress.unixSeqpacket` value blocks.
+  - New `collapsed-helm` chart (or composite values in proxy chart) bundling proxy + listener in one Deployment with the socket dir shared via `emptyDir`. Multicast fabric attachment (`networking.mode: multus|host`) still required at the pod boundary.
 - Harness:
   - `harness/driver/docker` gains a `volumes:` mount for the socket dir between two collapsed containers.
   - New scenario `harness/scenarios/scenarioNN_collapsed_unix_test.go`: proxy + listener on the same docker network with AF_UNIX data plane, verifies duplex (frames downstream, NACK / control upstream) and metric parity with the multicast baseline.
   - Microbench (`harness/perf/`) comparing `udp` loopback vs `unix-dgram` at 1 M fps.
 - Documentation:
-  - `bitcoin-multicast/containerization/composition-spec.md` — new "Collapsed local-socket profile" section.
-  - `bitcoin-shard-listener/docs/configuration.md` — `EGRESS_PROTO` table extended.
-  - `bitcoin-shard-proxy/docs/configuration.md` — `UNIX_LISTEN_PATH` documented.
+  - `bsv-multicast/containerization/composition-spec.md` — new "Collapsed local-socket profile" section.
+  - `shard-listener/docs/configuration.md` — `EGRESS_PROTO` table extended.
+  - `shard-proxy/docs/configuration.md` — `UNIX_LISTEN_PATH` documented.
 
 Dependencies: Phase 1 (canonical image is the deployment unit). Independent of Phase 7 unicast-egress work — the two modes can ship in either order.
 

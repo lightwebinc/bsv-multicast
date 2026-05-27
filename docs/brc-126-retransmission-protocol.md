@@ -114,12 +114,12 @@ Offset  Size  Field
 
 | Tier | Meaning                                            |
 | ---- | -------------------------------------------------- |
-| 0    | Same AS as `bitcoin-shard-proxy` (source-adjacent) |
+| 0    | Same AS as `shard-proxy` (source-adjacent) |
 | 1    | One AS boundary from source                        |
 | N    | N hops from source                                 |
 | 0xFF | Static seed (no beacon received; lowest priority)  |
 
-Operator assigns `-tier` (0–254) and `-preference` (0–255, default 128) on each `bitcoin-retry-endpoint`. Endpoints are sorted by `(Tier ASC, Preference DESC)` — higher-preference endpoints are tried first within a tier.
+Operator assigns `-tier` (0–254) and `-preference` (0–255, default 128) on each `retry-endpoint`. Endpoints are sorted by `(Tier ASC, Preference DESC)` — higher-preference endpoints are tried first within a tier.
 
 ### Escalation State Machine
 
@@ -177,9 +177,9 @@ Operator assigns `-tier` (0–254) and `-preference` (0–255, default 128) on e
 
 ## Implementation
 
-- **Listener:** `bitcoin-shard-listener/nack/wire.go` (NACK encode/decode), `bitcoin-shard-listener/discovery/` (ADVERT decode, registry, beacon listener)
-- **Endpoint:** `bitcoin-retry-endpoint/server/server.go` (NACK receive, ACK/MISS send), `bitcoin-retry-endpoint/beacon/` (ADVERT encode/send)
-- **Common:** `bitcoin-shard-common/frame/` (MsgType constants)
+- **Listener:** `shard-listener/nack/wire.go` (NACK encode/decode), `shard-listener/discovery/` (ADVERT decode, registry, beacon listener)
+- **Endpoint:** `retry-endpoint/server/server.go` (NACK receive, ACK/MISS send), `retry-endpoint/beacon/` (ADVERT encode/send)
+- **Common:** `shard-common/frame/` (MsgType constants)
 
 ---
 

@@ -40,7 +40,7 @@ SubtreeAnnounce datagrams are distributed on the control-plane group:
 | ---------- | ----- | ------------------ | --------------------------------- |
 | `0xFFFC` | FF05  | `FF05::B:FFFC`    | `CtrlGroupSubtreeGroupAnnounce` |
 
-Defined in `bitcoin-shard-common/shard/control.go`. Occupies the top of the 16-bit shard space and is orthogonal to all data-plane shard groups (`shardBits ≤ 12`). When the IANA group-id is overridden via `-mc-group-id`, the same group-id applies to this control group as to all other multicast addresses.
+Defined in `shard-common/shard/control.go`. Occupies the top of the 16-bit shard space and is orthogonal to all data-plane shard groups (`shardBits ≤ 12`). When the IANA group-id is overridden via `-mc-group-id`, the same group-id applies to this control group as to all other multicast addresses.
 
 ---
 
@@ -52,7 +52,7 @@ Producer (subtx-gen, block assembler)
     │  TCP connection to proxy (e.g. [::1]:9002)
     │  One 64-byte SubtreeAnnounce per (SubtreeID, GroupID) pair
     ▼
-bitcoin-shard-proxy  (TCP ingress, worker/tcp.go)
+shard-proxy  (TCP ingress, worker/tcp.go)
     │  Detects MsgType=0x30 at buf[6]
     │  Reads 64-byte datagram
     │  Calls ForwardControl(targets, buf, CtrlGroupSubtreeGroupAnnounce, egressPort)
@@ -60,7 +60,7 @@ bitcoin-shard-proxy  (TCP ingress, worker/tcp.go)
 IPv6 multicast fabric  →  FF05::B:FFFC:9001
     │
     ▼
-bitcoin-shard-listener
+shard-listener
     │  SubtreeAnnounceListener joins FF05::B:FFFC
     │  DecodeSubtreeAnnounce → subtreegroup.Registry.Add(GroupID, SubtreeID, TTL)
     ▼
@@ -137,7 +137,7 @@ If announcements cease, entries expire naturally. Frames with the affected Subtr
 
 ---
 
-## Producer: bitcoin-subtx-generator
+## Producer: subtx-generator
 
 The `subtx-gen` tool includes BRC-127 announcement support:
 
@@ -156,15 +156,15 @@ When both `-announce-addr` and `-subtree-group` are set, `subtx-gen` maintains a
 
 | Component                                      | File                                                              |
 | ---------------------------------------------- | ----------------------------------------------------------------- |
-| Wire format encode/decode                      | `bitcoin-shard-common/frame/subtree_announce.go`                  |
-| `MsgTypeSubtreeAnnounce = 0x30`, `SubtreeAnnounceSize = 64` | `bitcoin-shard-common/frame/frame.go`              |
-| `CtrlGroupSubtreeGroupAnnounce = 0xFFFC`     | `bitcoin-shard-common/shard/control.go`                           |
-| Proxy TCP detection + `ForwardControl`         | `bitcoin-shard-proxy/worker/tcp.go`, `forwarder/forwarder.go`     |
-| `SubtreeAnnounceListener`                      | `bitcoin-shard-listener/discovery/subtree_announce.go`            |
-| `subtreegroup.Registry`                        | `bitcoin-shard-listener/subtreegroup/registry.go`                 |
-| Filter integration (`groupReg`)                | `bitcoin-shard-listener/filter/filter.go`                         |
-| Listener config flags                          | `bitcoin-shard-listener/config/config.go`                         |
-| Producer sender                                | `bitcoin-subtx-generator/internal/announce/sender.go`             |
+| Wire format encode/decode                      | `shard-common/frame/subtree_announce.go`                  |
+| `MsgTypeSubtreeAnnounce = 0x30`, `SubtreeAnnounceSize = 64` | `shard-common/frame/frame.go`              |
+| `CtrlGroupSubtreeGroupAnnounce = 0xFFFC`     | `shard-common/shard/control.go`                           |
+| Proxy TCP detection + `ForwardControl`         | `shard-proxy/worker/tcp.go`, `forwarder/forwarder.go`     |
+| `SubtreeAnnounceListener`                      | `shard-listener/discovery/subtree_announce.go`            |
+| `subtreegroup.Registry`                        | `shard-listener/subtreegroup/registry.go`                 |
+| Filter integration (`groupReg`)                | `shard-listener/filter/filter.go`                         |
+| Listener config flags                          | `shard-listener/config/config.go`                         |
+| Producer sender                                | `subtx-generator/internal/announce/sender.go`             |
 
 ---
 

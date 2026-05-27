@@ -124,8 +124,8 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 
 - [BRC-124: Multicast Transaction Frame Format](brc-124-frame-format.md) — base frame format extended by BRC-130
 - [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md) — NACK/ACK/MISS used for per-fragment retransmission
-- [bitcoin-shard-common/frame](https://github.com/lightwebinc/bitcoin-shard-common/tree/main/frame) — `EncodeFragment`, `DecodeFragment`, `IsFragment`
-- [bitcoin-shard-proxy/forwarder](https://github.com/lightwebinc/bitcoin-shard-proxy/tree/main/forwarder) — proxy-side fragmentation
-- [bitcoin-shard-listener/reassembly](https://github.com/lightwebinc/bitcoin-shard-listener/tree/main/reassembly) — listener-side reassembly
+- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame) — `EncodeFragment`, `DecodeFragment`, `IsFragment`
+- [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder) — proxy-side fragmentation
+- [shard-listener/reassembly](https://github.com/lightwebinc/shard-listener/tree/main/reassembly) — listener-side reassembly
 - [BRC-132: Subtree Data Multicast Protocol](brc-132-subtree-data.md) — `OrigFrameVer=0x05` usage
 - [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0130.md) — published BRC

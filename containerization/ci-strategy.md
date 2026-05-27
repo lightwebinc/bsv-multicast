@@ -124,7 +124,7 @@ jobs:
         with: { go-version-file: go.mod }
       - name: Run E2E (bridge + MLD set up by the harness itself)
         run: |
-          # bitcoin-multicast-test/harness/driver/docker/bridge.go creates
+          # multicast-test/harness/driver/docker/bridge.go creates
           # mcast-fabric (fd10::/64) and enables mcast_snooping + mcast_querier6
           # at TestMain time. The runner only needs Docker + root.
           go run ./ci/ e2e
@@ -142,11 +142,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: lightwebinc/bitcoin-multicast-test
-          path: bitcoin-multicast-test
+          repository: lightwebinc/multicast-test
+          path: multicast-test
       - name: Run integration scenarios
         run: |
-          cd bitcoin-multicast-test
+          cd multicast-test
           # The Docker driver is the only implemented driver. There is no
           # -driver flag; selection happens at TestMain time.
           sudo go test ./harness/scenarios/... -timeout 45m -v
@@ -164,7 +164,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: lightwebinc/bitcoin-multicast-test
+          repository: lightwebinc/multicast-test
       - name: Run all scenarios
         run: bash vm-lab/scenarios/run-all.sh    # legacy LXD bash suite — see lxd-coexistence.md
         timeout-minutes: 60
@@ -183,7 +183,7 @@ jobs:
 The lab host satisfies all three labels simultaneously. Register it once with all labels:
 
 ```bash
-./config.sh --url https://github.com/lightwebinc/bitcoin-shard-proxy \
+./config.sh --url https://github.com/lightwebinc/shard-proxy \
             --token <token> \
             --labels self-hosted,linux,docker,mcast-fabric,lxd
 ```
@@ -196,7 +196,7 @@ Developers can run any tier locally without GH Actions:
 
 ```bash
 # In any component repo
-cd bitcoin-shard-proxy
+cd shard-proxy
 
 # Unit tests
 go run ./ci/ unit
@@ -258,26 +258,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: |
-          docker build -t ghcr.io/lightwebinc/bitcoin-shard-proxy:${{ github.sha }} .
-          docker push ghcr.io/lightwebinc/bitcoin-shard-proxy:${{ github.sha }}
+          docker build -t ghcr.io/lightwebinc/shard-proxy:${{ github.sha }} .
+          docker push ghcr.io/lightwebinc/shard-proxy:${{ github.sha }}
 ```
 
 Adding a GitHub Environment (`production`) with required reviewer approval adds a second human-in-the-loop confirmation on top of the `RELEASE` string.
 
 ---
 
-## Multi-repo CI for bitcoin-shard-listener
+## Multi-repo CI for shard-listener
 
-The listener's E2E already requires both `bitcoin-shard-listener` and `bitcoin-shard-proxy` checked out (for `send-test-frames`). The dual-checkout pattern used today:
+The listener's E2E already requires both `shard-listener` and `shard-proxy` checked out (for `send-test-frames`). The dual-checkout pattern used today:
 
 ```yaml
 - uses: actions/checkout@v4
   with:
-    repository: lightwebinc/bitcoin-shard-proxy
-    path: bitcoin-shard-proxy
+    repository: lightwebinc/shard-proxy
+    path: shard-proxy
 - uses: actions/checkout@v4
   with:
-    path: bitcoin-shard-listener
+    path: shard-listener
 ```
 
 The Dagger E2E function loads both directories via `client.Host().Directory()` and handles the relative path assumption in `Dockerfile.e2e`.

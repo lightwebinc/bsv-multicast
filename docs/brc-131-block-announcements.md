@@ -139,10 +139,10 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 
 | Component              | Change                                                                                        |
 | ---------------------- | --------------------------------------------------------------------------------------------- |
-| bitcoin-shard-proxy    | TCP case extended to `FrameVerV4`; new `ProcessBlock` + `fragmentBlock` methods              |
-| bitcoin-shard-listener | Joins `FF0E::B:FFFE`; `processBlockFrame` + `egress.SendBlock`; gap tracking on ctrl flow    |
-| bitcoin-retry-endpoint | Joins `FF0E::B:FFFE`; `processBlockFrame` in ingress; V4-aware retransmitter routing         |
-| bitcoin-shard-common   | `FrameVerV4`, `BlockMsgAnnounce`, `BlockMsgCoinbase` constants; `BlockFrame`, `BlockAnnouncePayload` structs; `OrigFrameVer` field in BRC-130 fragment header |
+| shard-proxy    | TCP case extended to `FrameVerV4`; new `ProcessBlock` + `fragmentBlock` methods              |
+| shard-listener | Joins `FF0E::B:FFFE`; `processBlockFrame` + `egress.SendBlock`; gap tracking on ctrl flow    |
+| retry-endpoint | Joins `FF0E::B:FFFE`; `processBlockFrame` in ingress; V4-aware retransmitter routing         |
+| shard-common   | `FrameVerV4`, `BlockMsgAnnounce`, `BlockMsgCoinbase` constants; `BlockFrame`, `BlockAnnouncePayload` structs; `OrigFrameVer` field in BRC-130 fragment header |
 | Firewall               | No additional rules — `FF0E::B:FFFE` uses the same port as shard groups                      |
 
 ---
@@ -180,9 +180,9 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 - [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md) — NACK/ACK/MISS used for block frame retransmission
 - [BRC-129: Multicast Group Address Assignments](brc-129-multicast-addressing.md) — control-plane group index allocations
 - [BRC-130: Fragmentation](brc-130-fragmentation.md) — BRC-130 extension for large block payloads; `OrigFrameVer=0x04`
-- [bitcoin-shard-common/frame](https://github.com/lightwebinc/bitcoin-shard-common/tree/main/frame) — `EncodeBlock`, `DecodeBlock`, `IsBlockFrame`, `EncodeBlockAnnounce`, `DecodeBlockAnnounce`
-- [bitcoin-shard-proxy/forwarder](https://github.com/lightwebinc/bitcoin-shard-proxy/tree/main/forwarder) — `ProcessBlock`, `fragmentBlock`
-- [bitcoin-shard-listener/listener](https://github.com/lightwebinc/bitcoin-shard-listener/tree/main/listener) — `processBlockFrame`, `egress.SendBlock`
-- [bitcoin-retry-endpoint/ingress](https://github.com/lightwebinc/bitcoin-retry-endpoint/tree/main/ingress) — `processBlockFrame`
-- [bitcoin-retry-endpoint/retransmit](https://github.com/lightwebinc/bitcoin-retry-endpoint/tree/main/retransmit) — V4-aware retransmit routing
+- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame) — `EncodeBlock`, `DecodeBlock`, `IsBlockFrame`, `EncodeBlockAnnounce`, `DecodeBlockAnnounce`
+- [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder) — `ProcessBlock`, `fragmentBlock`
+- [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener) — `processBlockFrame`, `egress.SendBlock`
+- [retry-endpoint/ingress](https://github.com/lightwebinc/retry-endpoint/tree/main/ingress) — `processBlockFrame`
+- [retry-endpoint/retransmit](https://github.com/lightwebinc/retry-endpoint/tree/main/retransmit) — V4-aware retransmit routing
 - [BRC-131: Multicast Block Announcement Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0131.md) — published BRC

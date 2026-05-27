@@ -6,10 +6,10 @@ One chart per component repo, `-helm` suffix on the repo name, independent relea
 
 | Chart repo | Chart name | App repo |
 |---|---|---|
-| `bitcoin-shard-proxy-helm` | `bitcoin-shard-proxy` | `bitcoin-shard-proxy` |
-| `bitcoin-shard-listener-helm` | `bitcoin-shard-listener` | `bitcoin-shard-listener` |
-| `bitcoin-retry-endpoint-helm` | `bitcoin-retry-endpoint` | `bitcoin-retry-endpoint` |
-| `bitcoin-subtx-generator-helm` | `bitcoin-subtx-generator` | `bitcoin-subtx-generator` |
+| `shard-proxy-helm` | `shard-proxy` | `shard-proxy` |
+| `shard-listener-helm` | `shard-listener` | `shard-listener` |
+| `retry-endpoint-helm` | `retry-endpoint` | `retry-endpoint` |
+| `subtx-generator-helm` | `subtx-generator` | `subtx-generator` |
 
 ### Why no umbrella chart
 
@@ -20,7 +20,7 @@ Operators are expected to manage composition through their own GitOps toolchain 
 ## Repo structure (per chart repo)
 
 ```
-bitcoin-shard-proxy-helm/
+shard-proxy-helm/
   Chart.yaml             # apiVersion v2, kubeVersion >= 1.27, maintainers, ArtifactHub annotations
   values.yaml            # full surface — every binary flag exposed under .config
   values.schema.json     # JSON Schema validation at `helm install` time
@@ -48,9 +48,9 @@ bitcoin-shard-proxy-helm/
 ```
 
 Per-chart deltas:
-- `bitcoin-shard-listener-helm/templates/` adds `daemonset.yaml`; switched via `workloadType`.
-- `bitcoin-subtx-generator-helm/templates/` has `deployment.yaml` and `job.yaml` (switched via `workloadType`); no `servicemonitor.yaml` / `hpa.yaml` / `test-metrics-endpoint.yaml` (binaries are flag-only, no metrics endpoint).
-- `bitcoin-retry-endpoint-helm/` has no Redis subchart — operator manages Redis externally and sets `config.redisAddr`.
+- `shard-listener-helm/templates/` adds `daemonset.yaml`; switched via `workloadType`.
+- `subtx-generator-helm/templates/` has `deployment.yaml` and `job.yaml` (switched via `workloadType`); no `servicemonitor.yaml` / `hpa.yaml` / `test-metrics-endpoint.yaml` (binaries are flag-only, no metrics endpoint).
+- `retry-endpoint-helm/` has no Redis subchart — operator manages Redis externally and sets `config.redisAddr`.
 
 ---
 
@@ -58,16 +58,16 @@ Per-chart deltas:
 
 ```yaml
 apiVersion: v2
-name: bitcoin-shard-proxy
+name: shard-proxy
 description: IPv6 multicast frame proxy for the Bitcoin transaction distribution network
 type: application
 version: 0.1.0          # chart semver — incremented independently of appVersion
 appVersion: "0.1.0"     # matches OCI image tag
 keywords: [bitcoin, multicast, brc-124, brc-128]
-home: https://github.com/lightwebinc/bitcoin-shard-proxy
+home: https://github.com/lightwebinc/shard-proxy
 sources:
-  - https://github.com/lightwebinc/bitcoin-shard-proxy
-  - https://github.com/lightwebinc/bitcoin-shard-proxy-helm
+  - https://github.com/lightwebinc/shard-proxy
+  - https://github.com/lightwebinc/shard-proxy-helm
 ```
 
 ---
@@ -82,7 +82,7 @@ All four charts share the same top-level key structure. Per-component notes are 
 replicaCount: 1
 
 image:
-  repository: ghcr.io/lightwebinc/bitcoin-shard-proxy   # adjust per chart
+  repository: ghcr.io/lightwebinc/shard-proxy   # adjust per chart
   pullPolicy: IfNotPresent
   tag: ""           # defaults to Chart.appVersion
 
@@ -102,7 +102,7 @@ networking:
   multus:
     # Per-release pod IPv6 on the dedicated mcast NIC. Required when mode=multus.
     networkName: mcast-fabric
-    namespace: bitcoin-mcast
+    namespace: bsv-mcast
     fabricIPv6: ""          # e.g. "fd20::21/64" — must be unique per pod
     interface: net1
   host:
@@ -114,9 +114,9 @@ tolerations: []
 affinity: {}
 ```
 
-### bitcoin-shard-proxy values
+### shard-proxy values
 
-Full `.config` surface mirrors every flag in `bitcoin-shard-proxy/config/config.go`:
+Full `.config` surface mirrors every flag in `shard-proxy/config/config.go`:
 `listenAddr`, `udpListenPort`, `tcpListenPort`, `multicastIf`, `egressPort`, `shardBits` (default `2`), `mcScope`, `mcGroupId`, `numWorkers`, `fragMtu`, `drainTimeout`, `debug`, `metricsAddr`, `instanceId`, `otlpEndpoint`, `otlpInterval`.
 
 Additional top-level keys:
@@ -141,9 +141,9 @@ networkPolicy: { enabled: false, ingressFrom: [] }
 extraEnv: []                  # passthrough for forward-compat
 ```
 
-### bitcoin-shard-listener values
+### shard-listener values
 
-Full `.config` surface mirrors every flag in `bitcoin-shard-listener/config/config.go`:
+Full `.config` surface mirrors every flag in `shard-listener/config/config.go`:
 - Core: `multicastIf`, `listenPort`, `shardBits` (default `2`), `mcScope`, `mcGroupId`, `shardInclude`, `subtreeInclude`, `subtreeExclude`, `egressAddr`, `egressProto`, `stripHeader`.
 - Multicast egress (BRC-128 bridging): `mcEgressEnabled`, `mcEgressIface`, `mcEgressPort`, `mcEgressScope`, `mcEgressGroupId`, `mcEgressHopLimit`.
 - Block header egress (BRC-131 SPV): `headerEgressEnabled`, `headerEgressAddr`, `headerEgressProto`, `headerMcEgressEnabled`, `headerMcEgressIface`, `headerMcEgressPort`, `headerMcEgressScope`, `headerMcEgressGroupId`, `headerMcEgressHopLimit`.
@@ -159,9 +159,9 @@ Additional top-level keys: `workloadType: Deployment | DaemonSet`, plus the same
 
 > **`numWorkers` is hardcoded to `1` in the rendered Deployment/DaemonSet template regardless of input.** Linux SO_REUSEPORT delivers each multicast datagram to all sockets in the reuseport group — multiple workers cause N-fold frame duplication. The `values.schema.json` rejects any other value.
 
-### bitcoin-retry-endpoint values
+### retry-endpoint values
 
-Full `.config` surface mirrors every flag in `bitcoin-retry-endpoint/config/config.go`:
+Full `.config` surface mirrors every flag in `retry-endpoint/config/config.go`:
 - Ingress: `mcIface`, `listenPort`, `shardBits` (default `2`, standardized across charts — binary defaults to `8`), `mcScope`, `mcGroupId`.
 - Egress: `egressIface`, `egressPort`, `dedupWindow`.
 - NACK server: `nackPort`, `nackAddr` (effectively required), `nackWorkers`.
@@ -176,7 +176,7 @@ No Redis subchart. Operators run Redis separately and set `config.redisAddr` whe
 
 > **`nackAddr` is effectively required.** The binary auto-detects from the egress interface, which may resolve to a SLAAC address that listeners' `RETRY_ENDPOINTS` lists do not match — ACK/MISS replies are then silently filtered. The chart emits a `helm.sh/chart-warnings` pod annotation and a `NOTES.txt` warning when `nackAddr` is empty.
 
-### bitcoin-subtx-generator values
+### subtx-generator values
 
 The four binaries (`subtx-gen`, `send-anchor-frame`, `send-block-announce`, `send-subtree-data`) accept **CLI flags only** — there are no environment variables. The chart selects a binary via `.Values.mode` and translates the matching per-mode args block into the container's `command` + `args`. Zero/empty values are omitted so each binary's native defaults apply.
 
@@ -191,7 +191,7 @@ subtxGen:                  # full surface of cmd/subtx-gen
   frameVersion: 2
   shardBits: 2
   subtrees: 8
-  subtreeSeed: "bitcoin-subtx-generator-default"
+  subtreeSeed: "subtx-generator-default"
   pps: 1000
   duration: "10s"
   count: 0
@@ -293,14 +293,14 @@ spec:
 Independent of `networking.mode`, label each node with the dedicated fabric NIC so pods land on a node where the NIC actually exists. With `multus` the macvlan `master` parameter in the `NetworkAttachmentDefinition` must name a NIC present on the node; with `host` the same constraint applies via `MULTICAST_IF`.
 
 ```bash
-kubectl label node fabric-node-1 bitcoin-mcast/fabric-iface=enp5s0
+kubectl label node fabric-node-1 bsv-mcast/fabric-iface=enp5s0
 ```
 
 Node selector in values:
 
 ```yaml
 nodeSelector:
-  bitcoin-mcast/fabric-iface: enp5s0
+  bsv-mcast/fabric-iface: enp5s0
 ```
 
 See [k0s-deployment.md](k0s-deployment.md) for full node labeling strategy and `NetworkAttachmentDefinition` examples.
@@ -317,8 +317,8 @@ Runs on every push and PR:
 
 - `helm lint` (default + `--strict`).
 - `helm template` smoke renders against multiple value permutations (Multus default, hostNetwork fallback, ServiceMonitor + PDB + NetworkPolicy + HPA enabled).
-- For `bitcoin-shard-listener-helm`, renders both `workloadType=Deployment` and `workloadType=DaemonSet`.
-- For `bitcoin-subtx-generator-helm`, renders all four `mode` values across both `Deployment` and `Job` workload types.
+- For `shard-listener-helm`, renders both `workloadType=Deployment` and `workloadType=DaemonSet`.
+- For `subtx-generator-helm`, renders all four `mode` values across both `Deployment` and `Job` workload types.
 
 ### `release.yml` (disabled by default)
 

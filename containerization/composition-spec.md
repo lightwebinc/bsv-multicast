@@ -25,7 +25,7 @@ All charts must agree on these values. Capture them once in your composition lay
 ---
 
 > **Maintained Helmfile**: the
-> [`bitcoin-multicast-kube-infra`](https://github.com/lightwebinc/bitcoin-multicast-kube-infra)
+> [`multicast-kube-infra`](https://github.com/lightwebinc/multicast-kube-infra)
 > repo ships the production-grade Helmfile composition under `apps/helmfile.yaml.gotmpl`
 > with per-node retry-endpoint releases, Multus wiring, and ESO integration.
 > The example below remains a minimal reference.
@@ -35,12 +35,12 @@ All charts must agree on these values. Capture them once in your composition lay
 ```yaml
 # helmfile.yaml
 repositories:
-  - name: bsp    # bitcoin-shard-proxy
-    url: https://lightwebinc.github.io/bitcoin-shard-proxy-helm
+  - name: bsp    # shard-proxy
+    url: https://lightwebinc.github.io/shard-proxy-helm
   - name: bsl
-    url: https://lightwebinc.github.io/bitcoin-shard-listener-helm
+    url: https://lightwebinc.github.io/shard-listener-helm
   - name: bre
-    url: https://lightwebinc.github.io/bitcoin-retry-endpoint-helm
+    url: https://lightwebinc.github.io/retry-endpoint-helm
 
 environments:
   production:
@@ -49,8 +49,8 @@ environments:
 
 releases:
   - name: proxy
-    namespace: bitcoin-mcast
-    chart: bsp/bitcoin-shard-proxy
+    namespace: bsv-mcast
+    chart: bsp/shard-proxy
     values:
       - config:
           multicastIf: {{ .Values.fabricIface }}
@@ -58,11 +58,11 @@ releases:
           mcScope: {{ .Values.mcScope }}
           egressPort: {{ .Values.dataPort }}
         nodeSelector:
-          bitcoin-mcast/role: proxy
+          bsv-mcast/role: proxy
 
   - name: listener
-    namespace: bitcoin-mcast
-    chart: bsl/bitcoin-shard-listener
+    namespace: bsv-mcast
+    chart: bsl/shard-listener
     values:
       - config:
           multicastIf: {{ .Values.fabricIface }}
@@ -72,11 +72,11 @@ releases:
           retryEndpoints: {{ .Values.retryEndpoints | join "," }}
         workloadType: DaemonSet
         nodeSelector:
-          bitcoin-mcast/role: listener
+          bsv-mcast/role: listener
 
   - name: retry-node-1
-    namespace: bitcoin-mcast
-    chart: bre/bitcoin-retry-endpoint
+    namespace: bsv-mcast
+    chart: bre/retry-endpoint
     values:
       - config:
           mcIface: {{ .Values.fabricIface }}
@@ -87,29 +87,29 @@ releases:
           beaconTier: 0
           beaconPreference: 128
         nodeSelector:
-          bitcoin-mcast/node: retry-1
+          bsv-mcast/node: retry-1
 
   - name: retry-node-2
-    namespace: bitcoin-mcast
-    chart: bre/bitcoin-retry-endpoint
+    namespace: bsv-mcast
+    chart: bre/retry-endpoint
     values:
       - config:
           nackAddr: {{ .Values.retry2FabricAddr }}
           beaconTier: 0
           beaconPreference: 64
         nodeSelector:
-          bitcoin-mcast/node: retry-2
+          bsv-mcast/node: retry-2
 
   - name: retry-node-3
-    namespace: bitcoin-mcast
-    chart: bre/bitcoin-retry-endpoint
+    namespace: bsv-mcast
+    chart: bre/retry-endpoint
     values:
       - config:
           nackAddr: {{ .Values.retry3FabricAddr }}
           beaconTier: 1
           beaconPreference: 128
         nodeSelector:
-          bitcoin-mcast/node: retry-3
+          bsv-mcast/node: retry-3
 ```
 
 `env/production.yaml`:
@@ -136,7 +136,7 @@ retry3FabricAddr: "fd20::26"
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: bitcoin-mcast-listeners
+  name: bsv-mcast-listeners
 spec:
   generators:
     - list:
@@ -152,8 +152,8 @@ spec:
       name: 'bsl-{{node}}'
     spec:
       source:
-        repoURL: https://lightwebinc.github.io/bitcoin-shard-listener-helm
-        chart: bitcoin-shard-listener
+        repoURL: https://lightwebinc.github.io/shard-listener-helm
+        chart: shard-listener
         targetRevision: "0.1.0"
         helm:
           values: |
@@ -163,10 +163,10 @@ spec:
               mcScope: site
               retryEndpoints: "[fd20::24]:9300,[fd20::25]:9300,[fd20::26]:9300"
             nodeSelector:
-              bitcoin-mcast/node: "{{node}}"
+              bsv-mcast/node: "{{node}}"
       destination:
         server: https://kubernetes.default.svc
-        namespace: bitcoin-mcast
+        namespace: bsv-mcast
       syncPolicy:
         automated:
           prune: true
@@ -180,10 +180,10 @@ spec:
 ```hcl
 resource "helm_release" "proxy" {
   name       = "proxy"
-  repository = "https://lightwebinc.github.io/bitcoin-shard-proxy-helm"
-  chart      = "bitcoin-shard-proxy"
+  repository = "https://lightwebinc.github.io/shard-proxy-helm"
+  chart      = "shard-proxy"
   version    = "0.1.0"
-  namespace  = "bitcoin-mcast"
+  namespace  = "bsv-mcast"
 
   set {
     name  = "config.multicastIf"
@@ -198,7 +198,7 @@ resource "helm_release" "proxy" {
     value = "site"
   }
   set {
-    name  = "nodeSelector.bitcoin-mcast/role"
+    name  = "nodeSelector.bsv-mcast/role"
     value = "proxy"
   }
 }
@@ -206,15 +206,15 @@ resource "helm_release" "proxy" {
 resource "helm_release" "retry" {
   for_each = var.retry_nodes     # map of {name, addr, tier, pref}
   name       = "retry-${each.key}"
-  repository = "https://lightwebinc.github.io/bitcoin-retry-endpoint-helm"
-  chart      = "bitcoin-retry-endpoint"
+  repository = "https://lightwebinc.github.io/retry-endpoint-helm"
+  chart      = "retry-endpoint"
   version    = "0.1.0"
-  namespace  = "bitcoin-mcast"
+  namespace  = "bsv-mcast"
 
   set { name = "config.nackAddr";         value = each.value.addr }
   set { name = "config.beaconTier";       value = each.value.tier }
   set { name = "config.beaconPreference"; value = each.value.pref }
-  set { name = "nodeSelector.bitcoin-mcast/node"; value = each.key }
+  set { name = "nodeSelector.bsv-mcast/node"; value = each.key }
 }
 ```
 
@@ -223,25 +223,25 @@ resource "helm_release" "retry" {
 ## Option D — Plain Helm (imperative)
 
 ```bash
-NS=bitcoin-mcast
+NS=bsv-mcast
 kubectl create namespace $NS
 
-helm install proxy bitcoin-shard-proxy-helm/ -n $NS \
+helm install proxy shard-proxy-helm/ -n $NS \
   --set config.multicastIf=enp5s0 \
   --set config.shardBits=8 \
-  --set nodeSelector."bitcoin-mcast/role"=proxy
+  --set nodeSelector."bsv-mcast/role"=proxy
 
-helm install listener bitcoin-shard-listener-helm/ -n $NS \
+helm install listener shard-listener-helm/ -n $NS \
   --set config.multicastIf=enp5s0 \
   --set config.shardBits=8 \
   --set config.retryEndpoints="[fd20::24]:9300\,[fd20::25]:9300" \
   --set workloadType=DaemonSet \
-  --set nodeSelector."bitcoin-mcast/role"=listener
+  --set nodeSelector."bsv-mcast/role"=listener
 
 for i in 1 2 3; do
-  helm install retry-node-$i bitcoin-retry-endpoint-helm/ -n $NS \
+  helm install retry-node-$i retry-endpoint-helm/ -n $NS \
     --set config.nackAddr="fd20::2$((i+3))" \
-    --set nodeSelector."bitcoin-mcast/node"="retry-$i"
+    --set nodeSelector."bsv-mcast/node"="retry-$i"
 done
 ```
 
@@ -277,7 +277,7 @@ All components run under their chart's `ServiceAccount`. No cross-namespace comm
 
 ## Future: unicast egress mode
 
-When `EGRESS_MODE=unicast-list` is added to `bitcoin-shard-proxy`, the proxy will send unicast UDP to an explicit list of listener addresses instead of multicast groups. This eliminates the `hostNetwork` requirement and allows standard CNI deployment:
+When `EGRESS_MODE=unicast-list` is added to `shard-proxy`, the proxy will send unicast UDP to an explicit list of listener addresses instead of multicast groups. This eliminates the `hostNetwork` requirement and allows standard CNI deployment:
 
 ```yaml
 # Future values.yaml addition

@@ -73,5 +73,5 @@ BRC-124 and BRC-128 frames coexist on the same multicast groups.
 - [BRC-12: Raw Transaction Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0012.md)
 - [BRC-30: Transaction Extended Format (EF)](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0030.md)
 - [BRC-124: Multicast Transaction Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0124.md)
-- **Canonical source:** `bitcoin-shard-common/frame/frame.go`
+- **Canonical source:** `shard-common/frame/frame.go`
 - [BRC-128: Multicast Extended Transaction Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0128.md) — published BRC

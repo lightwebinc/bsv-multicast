@@ -202,8 +202,8 @@ A consumer receiving BRC-135 frames:
   companion control-plane frame type
 - [BRC-134: Chained Anchor Transaction Frames](./brc-134-anchor-transactions.md)
   — companion control-plane frame type
-- [bitcoin-shard-common/frame](https://github.com/lightwebinc/bitcoin-shard-common/tree/main/frame)
+- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame)
   — `EncodeBlockHeader`, `DecodeBlockHeader`, `IsBlockHeaderFrame`, `FrameVerV7`
-- [bitcoin-shard-listener/listener](https://github.com/lightwebinc/bitcoin-shard-listener/tree/main/listener)
+- [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener)
   — reference emitter implementation
 - [BRC-135: Multicast Block Header Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0135.md) — published BRC

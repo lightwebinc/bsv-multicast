@@ -138,10 +138,10 @@ becomes necessary it will be defined in a future revision.
 
 | Component              | Change                                                                                                                |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| bitcoin-shard-proxy    | UDP worker and TCP ingress: version `0x06` → `ProcessAnchor`; new `ProcessAnchor` method routes to `CtrlGroupControl` |
-| bitcoin-shard-listener | `IsAnchorFrame` dispatch; new `processAnchorFrame` method; gap tracking on ctrl flow                                  |
-| bitcoin-retry-endpoint | Joins `FF0E::B:FFFE`; caches BRC-134 frames by `HashKey ∥ SeqNum`; retransmits to `FF0E::B:FFFE` on NACK hit          |
-| bitcoin-shard-common   | `FrameVerV6 = 0x06` constant; `DecodeAnchor`; `IsAnchorFrame`                                                         |
+| shard-proxy    | UDP worker and TCP ingress: version `0x06` → `ProcessAnchor`; new `ProcessAnchor` method routes to `CtrlGroupControl` |
+| shard-listener | `IsAnchorFrame` dispatch; new `processAnchorFrame` method; gap tracking on ctrl flow                                  |
+| retry-endpoint | Joins `FF0E::B:FFFE`; caches BRC-134 frames by `HashKey ∥ SeqNum`; retransmits to `FF0E::B:FFFE` on NACK hit          |
+| shard-common   | `FrameVerV6 = 0x06` constant; `DecodeAnchor`; `IsAnchorFrame`                                                         |
 
 ---
 
@@ -178,10 +178,10 @@ becomes necessary it will be defined in a future revision.
   — BRC-131 shares CtrlGroupControl
 - [BRC-133: Coinbase Transaction Delivery](brc-133-coinbase-delivery.md) —
   another control-group transaction type using BRC-131
-- [bitcoin-shard-common/frame](https://github.com/lightwebinc/bitcoin-shard-common/tree/main/frame)
+- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame)
   — `DecodeAnchor`, `IsAnchorFrame`, `FrameVerV6`
-- [bitcoin-shard-proxy/forwarder](https://github.com/lightwebinc/bitcoin-shard-proxy/tree/main/forwarder)
+- [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder)
   — `ProcessAnchor`
-- [bitcoin-shard-listener/listener](https://github.com/lightwebinc/bitcoin-shard-listener/tree/main/listener)
+- [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener)
   — `processAnchorFrame`
 - [BRC-134: Multicast Anchor Transaction Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0134.md) — published BRC

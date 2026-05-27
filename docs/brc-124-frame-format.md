@@ -56,20 +56,20 @@ Accepted and forwarded verbatim for backward compatibility.
 
 ## Frame Processing Rules
 
-### Proxy (`bitcoin-shard-proxy`)
+### Proxy (`shard-proxy`)
 
 - Decode header (BRC-12 or BRC-124); drop on bad magic or unknown version.
 - For BRC-124: stamp `HashKey` (bytes 40–47) as `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)` and `SeqNum` (bytes 48–55) as a monotonic per-flow counter, in-place.
 - Forward verbatim to all egress interfaces (no re-encoding).
 
-### Listener (`bitcoin-shard-listener`)
+### Listener (`shard-listener`)
 
 - Decode header; apply shard filter (group index).
 - Apply subtree filter (SubtreeID include/exclude).
 - For BRC-124 with non-zero `SeqNum`: track gaps per flow identified by `HashKey`; a gap is detected when `SeqNum` advances by more than 1.
 - Forward matching frames to egress address (UDP or TCP).
 
-### Retry Endpoint (`bitcoin-retry-endpoint`)
+### Retry Endpoint (`retry-endpoint`)
 
 - Receive multicast frames; decode header.
 - Store raw frame indexed by `HashKey ∥ SeqNum` (16-byte key) for single-key NACK lookup.
@@ -87,7 +87,7 @@ Accepted and forwarded verbatim for backward compatibility.
 
 ## Implementation
 
-- **Canonical source:** `bitcoin-shard-common/frame/frame.go`
+- **Canonical source:** `shard-common/frame/frame.go`
 - **Constants:** `MagicBSV = 0xE3E1F3E8`, `ProtoVer = 0x02BF`, `FrameVerV1 = 0x01`, `FrameVerV2 = 0x02`, `HeaderSizeLegacy = 44`, `HeaderSize = 92`
 
 ---

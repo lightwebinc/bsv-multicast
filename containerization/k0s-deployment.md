@@ -1,7 +1,7 @@
 # k0s Deployment Reference
 
-> **Canonical implementation**: [`bitcoin-multicast-kube-infra`](https://github.com/lightwebinc/bitcoin-multicast-kube-infra).
-> This document is the reference architecture; the `bitcoin-multicast-kube-infra`
+> **Canonical implementation**: [`multicast-kube-infra`](https://github.com/lightwebinc/multicast-kube-infra).
+> This document is the reference architecture; the `multicast-kube-infra`
 > repo is the maintained, automated, and distribution-agnostic implementation
 > (k0s today, EKS to follow). Operators should run that repo's `make all`
 > rather than transcribing the snippets below.
@@ -73,7 +73,7 @@ apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
   name: mcast-fabric
-  namespace: bitcoin-mcast
+  namespace: bsv-mcast
 spec:
   config: |
     {
@@ -93,7 +93,7 @@ For BGP-ECMP scenarios (40–42) declare two additional NADs over the transit an
 # bgp-transit NAD (one per transit interface)
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
-metadata: { name: bgp-transit, namespace: bitcoin-mcast }
+metadata: { name: bgp-transit, namespace: bsv-mcast }
 spec:
   config: |
     { "cniVersion": "0.3.1", "type": "macvlan",
@@ -102,7 +102,7 @@ spec:
 ---
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
-metadata: { name: bgp-ibgp, namespace: bitcoin-mcast }
+metadata: { name: bgp-ibgp, namespace: bsv-mcast }
 spec:
   config: |
     { "cniVersion": "0.3.1", "type": "macvlan",
@@ -174,24 +174,24 @@ Apply these labels to classify nodes by their fabric NIC and role:
 
 ```bash
 # For each fabric node — substitute actual NIC name
-kubectl label node <node-name> bitcoin-mcast/fabric-iface=enp5s0
-kubectl label node <node-name> bitcoin-mcast/role=proxy
-kubectl label node <node-name> bitcoin-mcast/role=listener   # multiple labels OK
-kubectl label node <node-name> bitcoin-mcast/role=retry-endpoint
+kubectl label node <node-name> bsv-mcast/fabric-iface=enp5s0
+kubectl label node <node-name> bsv-mcast/role=proxy
+kubectl label node <node-name> bsv-mcast/role=listener   # multiple labels OK
+kubectl label node <node-name> bsv-mcast/role=retry-endpoint
 ```
 
 Per-role `nodeSelector` in Helm values:
 
 ```yaml
-# bitcoin-shard-proxy values
+# shard-proxy values
 nodeSelector:
-  bitcoin-mcast/role: proxy
-  bitcoin-mcast/fabric-iface: enp5s0
+  bsv-mcast/role: proxy
+  bsv-mcast/fabric-iface: enp5s0
 
-# bitcoin-shard-listener values
+# shard-listener values
 nodeSelector:
-  bitcoin-mcast/role: listener
-  bitcoin-mcast/fabric-iface: enp5s0
+  bsv-mcast/role: listener
+  bsv-mcast/fabric-iface: enp5s0
 ```
 
 `DaemonSet` is appropriate for listener — one pod per labeled node automatically:
@@ -205,23 +205,23 @@ workloadType: DaemonSet    # listener chart supports DaemonSet | Deployment
 
 ## Per-node env var overrides (NACK_ADDR)
 
-`bitcoin-retry-endpoint` needs `NACK_ADDR` set to each node's individual fabric IPv6 — the listeners filter ACK/MISS replies by source address. This cannot be a single chart value across replicas. With Multus the `NACK_ADDR` value matches the `ips:` field in the pod's `k8s.v1.cni.cncf.io/networks` annotation; with hostNetwork it matches the node's fabric NIC address.
+`retry-endpoint` needs `NACK_ADDR` set to each node's individual fabric IPv6 — the listeners filter ACK/MISS replies by source address. This cannot be a single chart value across replicas. With Multus the `NACK_ADDR` value matches the `ips:` field in the pod's `k8s.v1.cni.cncf.io/networks` annotation; with hostNetwork it matches the node's fabric NIC address.
 
 Two deployment patterns regardless of mode:
 
 ### Option A — Per-node Helm release
 
 ```bash
-helm install retry-node-1 bitcoin-retry-endpoint-helm/ \
+helm install retry-node-1 retry-endpoint-helm/ \
   --set config.nackAddr=fd20::24 \
-  --set nodeSelector."bitcoin-mcast/node"=retry-1
+  --set nodeSelector."bsv-mcast/node"=retry-1
 
-helm install retry-node-2 bitcoin-retry-endpoint-helm/ \
+helm install retry-node-2 retry-endpoint-helm/ \
   --set config.nackAddr=fd20::25 \
-  --set nodeSelector."bitcoin-mcast/node"=retry-2
+  --set nodeSelector."bsv-mcast/node"=retry-2
 ```
 
-Label each node: `kubectl label node retry-1 bitcoin-mcast/node=retry-1`
+Label each node: `kubectl label node retry-1 bsv-mcast/node=retry-1`
 
 ### Option B — Downward API + startup wrapper
 
@@ -247,10 +247,10 @@ A lightweight init container resolves: `ip -6 addr show enp5s0 scope global | aw
 
 | Component | Workload type | Rationale |
 |---|---|---|
-| `bitcoin-shard-proxy` | `Deployment` (replicas=1) | Single ingress point per site; or per-site DaemonSet if multiple proxy nodes |
-| `bitcoin-shard-listener` | `DaemonSet` | One listener per fabric node; Multus `mcast-fabric` attachment with per-pod IPv6, or `hostNetwork` fallback with node label selector |
-| `bitcoin-retry-endpoint` | `Deployment` (replicas=1 per release) | Per-node installs via Option A above |
-| `bitcoin-subtx-generator` | `Deployment` or `Job` | Load test: Job. Continuous: Deployment. Not fabric-node-bound. |
+| `shard-proxy` | `Deployment` (replicas=1) | Single ingress point per site; or per-site DaemonSet if multiple proxy nodes |
+| `shard-listener` | `DaemonSet` | One listener per fabric node; Multus `mcast-fabric` attachment with per-pod IPv6, or `hostNetwork` fallback with node label selector |
+| `retry-endpoint` | `Deployment` (replicas=1 per release) | Per-node installs via Option A above |
+| `subtx-generator` | `Deployment` or `Job` | Load test: Job. Continuous: Deployment. Not fabric-node-bound. |
 
 ---
 
@@ -270,7 +270,7 @@ sysctl -w net.ipv6.conf.all.force_mld_version=2
 sysctl -w net.ipv6.conf.all.mc_forwarding=0
 echo 512 > /proc/sys/net/ipv6/conf/all/mc_fwd   # not normally needed
 
-# Persistent (add to /etc/sysctl.d/80-bitcoin-mcast.conf)
+# Persistent (add to /etc/sysctl.d/80-bsv-mcast.conf)
 net.ipv6.conf.all.disable_ipv6 = 0
 net.ipv6.conf.enp5s0.disable_ipv6 = 0
 net.ipv6.conf.all.force_mld_version = 2
@@ -292,7 +292,7 @@ The metrics endpoint binds the primary CNI interface only. Two equivalent scrape
 # Option 1 — external Prometheus federates a single in-cluster scraper
 # (or uses kube-apiserver proxy to reach pod IPs on the primary CNI)
 scrape_configs:
-  - job_name: bitcoin-mcast
+  - job_name: bsv-mcast
     kubernetes_sd_configs:
       - role: pod
         api_server: https://k0s.example.lan:6443
@@ -300,15 +300,15 @@ scrape_configs:
     relabel_configs:
       - source_labels: [__meta_kubernetes_namespace]
         action: keep
-        regex: bitcoin-mcast
+        regex: bsv-mcast
 ```
 
 ```yaml
 # Option 2 — the simpler `static_configs` route via Service ClusterIP / NodePort
 scrape_configs:
-  - job_name: bitcoin-mcast-proxy
+  - job_name: bsv-mcast-proxy
     static_configs:
-      - targets: ['proxy.bitcoin-mcast.svc.cluster.lan:9100']
+      - targets: ['proxy.bsv-mcast.svc.cluster.lan:9100']
 ```
 
 `net1` (the Multus macvlan) is carrying multicast data only — do not scrape it. The chart's `containerPort` and Service point at the primary-CNI interface.

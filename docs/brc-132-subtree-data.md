@@ -178,10 +178,10 @@ After reassembly, optional Merkle-root recomputation verifies the SubtreeID:
 
 | Component              | Change                                                                                                |
 | ---------------------- | ----------------------------------------------------------------------------------------------------- |
-| bitcoin-shard-common   | `FrameVerV5`, `SubtreeMsgHashesOnly`, `SubtreeMsgFullNodes`, `ErrBadSubtreeMsg` constants; `SubtreeDataFrame`, `SubtreeDataPayload` structs; `EncodeSubtreeData`, `DecodeSubtreeData`, `IsSubtreeDataFrame`, `EncodeSubtreeDataPayload`, `DecodeSubtreeDataPayload` |
-| bitcoin-shard-proxy    | `FrameVerV5` case in TCP `handleConn`; `ProcessSubtreeData` + `fragmentSubtreeData` methods          |
-| bitcoin-shard-listener | Joins `FF0X::B:FFFB`; `IsSubtreeDataFrame` detection; `processSubtreeDataFrame`; reassembly `OrigFrameVer=0x05` callback path; optional Merkle verification |
-| bitcoin-retry-endpoint | Joins `FF0X::B:FFFB`; `processSubtreeDataFrame` in ingress; `FrameVerV5`-aware retransmit routing   |
+| shard-common   | `FrameVerV5`, `SubtreeMsgHashesOnly`, `SubtreeMsgFullNodes`, `ErrBadSubtreeMsg` constants; `SubtreeDataFrame`, `SubtreeDataPayload` structs; `EncodeSubtreeData`, `DecodeSubtreeData`, `IsSubtreeDataFrame`, `EncodeSubtreeDataPayload`, `DecodeSubtreeDataPayload` |
+| shard-proxy    | `FrameVerV5` case in TCP `handleConn`; `ProcessSubtreeData` + `fragmentSubtreeData` methods          |
+| shard-listener | Joins `FF0X::B:FFFB`; `IsSubtreeDataFrame` detection; `processSubtreeDataFrame`; reassembly `OrigFrameVer=0x05` callback path; optional Merkle verification |
+| retry-endpoint | Joins `FF0X::B:FFFB`; `processSubtreeDataFrame` in ingress; `FrameVerV5`-aware retransmit routing   |
 | Firewall               | No additional rules — `FF0X::B:FFFB` uses the same port as other groups                              |
 
 ---
@@ -223,9 +223,9 @@ After reassembly, optional Merkle-root recomputation verifies the SubtreeID:
 - [BRC-129: Multicast Group Address Assignments](brc-129-multicast-addressing.md) — group index allocations; `0xFFFB` = CtrlGroupSubtreeAnnounce
 - [BRC-130: Fragmentation](brc-130-fragmentation.md) — BRC-130 extension for large subtree payloads; `OrigFrameVer=0x05`
 - [BRC-131: Block Announcements](brc-131-block-announcements.md) — `FrameVerV4` pattern followed by BRC-132
-- [bitcoin-shard-common/frame](https://github.com/lightwebinc/bitcoin-shard-common/tree/main/frame) — `EncodeSubtreeData`, `DecodeSubtreeData`, `IsSubtreeDataFrame`, `EncodeSubtreeDataPayload`, `DecodeSubtreeDataPayload`
-- [bitcoin-shard-proxy/forwarder](https://github.com/lightwebinc/bitcoin-shard-proxy/tree/main/forwarder) — `ProcessSubtreeData`, `fragmentSubtreeData`
-- [bitcoin-shard-listener/listener](https://github.com/lightwebinc/bitcoin-shard-listener/tree/main/listener) — `processSubtreeDataFrame`
-- [bitcoin-retry-endpoint/ingress](https://github.com/lightwebinc/bitcoin-retry-endpoint/tree/main/ingress) — `processSubtreeDataFrame`
-- [bitcoin-retry-endpoint/retransmit](https://github.com/lightwebinc/bitcoin-retry-endpoint/tree/main/retransmit) — V5-aware retransmit routing
+- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame) — `EncodeSubtreeData`, `DecodeSubtreeData`, `IsSubtreeDataFrame`, `EncodeSubtreeDataPayload`, `DecodeSubtreeDataPayload`
+- [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder) — `ProcessSubtreeData`, `fragmentSubtreeData`
+- [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener) — `processSubtreeDataFrame`
+- [retry-endpoint/ingress](https://github.com/lightwebinc/retry-endpoint/tree/main/ingress) — `processSubtreeDataFrame`
+- [retry-endpoint/retransmit](https://github.com/lightwebinc/retry-endpoint/tree/main/retransmit) — V5-aware retransmit routing
 - [BRC-132: Multicast Subtree Data Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0132.md) — published BRC
