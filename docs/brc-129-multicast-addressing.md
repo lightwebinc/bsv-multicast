@@ -60,13 +60,13 @@ Network service groups occupy `0xF800`–`0xFFFF` (2,048 indices). Current proto
 | `0xFFFB` | Subtree Announcements (site)         | `FF05` | `FF05:0000:0000:0000:0000:0000:000B:FFFB` | `FF05::B:FFFB` |
 | `0xFFFB` | Subtree Announcements (org)          | `FF08` | `FF08:0000:0000:0000:0000:0000:000B:FFFB` | `FF08::B:FFFB` |
 | `0xFFFB` | Subtree Announcements (global)       | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFB` | `FF0E::B:FFFB` |
-| `0xFFFC` | Subtree Group Announcements (site)   | `FF05` | `FF05:0000:0000:0000:0000:0000:000B:FFFC` | `FF05::B:FFFC` |
-| `0xFFFC` | Subtree Group Announcements (org)    | `FF08` | `FF08:0000:0000:0000:0000:0000:000B:FFFC` | `FF08::B:FFFC` |
-| `0xFFFC` | Subtree Group Announcements (global) | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFC` | `FF0E::B:FFFC` |
+| `0xFFFC` | Subtree Group Announcements (site)    | `FF05` | `FF05:0000:0000:0000:0000:0000:000B:FFFC` | `FF05::B:FFFC` |
+| `0xFFFC` | Subtree Group Announcements (org)     | `FF08` | `FF08:0000:0000:0000:0000:0000:000B:FFFC` | `FF08::B:FFFC` |
+| `0xFFFC` | Subtree Group Announcements (global)  | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFC` | `FF0E::B:FFFC` |
 | `0xFFFD` | Beacon (site)                        | `FF05` | `FF05:0000:0000:0000:0000:0000:000B:FFFD` | `FF05::B:FFFD` |
 | `0xFFFD` | Beacon (org)                         | `FF08` | `FF08:0000:0000:0000:0000:0000:000B:FFFD` | `FF08::B:FFFD` |
 | `0xFFFD` | Beacon (global)                      | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFD` | `FF0E::B:FFFD` |
-| `0xFFFE` | Block Control channel                | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFE` | `FF0E::B:FFFE` |
+| `0xFFFE` | Block Broadcast channel              | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFE` | `FF0E::B:FFFE` |
 | `0xFFFF` | _(reserved)_                         | —      | reserved                                  | do not use     |
 
 ---
@@ -80,22 +80,22 @@ The `-mc-group-id` flag (env `MC_GROUP_ID`) configures the 16-bit IANA group-id 
 -mc-group-id 0xCAFE    # private deployment / lab
 ```
 
-All group addresses — both shard and control-plane — inherit the same group-id. Operators with different `-mc-group-id` values use entirely disjoint multicast address spaces.
+All group addresses — both shard and network-service — inherit the same group-id. Operators with different `-mc-group-id` values use entirely disjoint multicast address spaces.
 
 ---
 
-## Block Control Channel
+## Block Broadcast Channel
 
-`FF0E::B:FFFE` (index `0xFFFE`) is used for mandatory global-scope control channel distributing block headers, block templates, coinbase transactions, and chained-transaction anchors, as well as other producer data useful to all network participants. This channel is mandatory for all network participants to join.
+`FF0E::B:FFFE` (index `0xFFFE`) is the mandatory global-scope channel distributing block headers, block templates, coinbase transactions, and chained-transaction anchors, as well as other producer data useful to all network participants. This channel is mandatory for all network participants to join.
 
 ### Virtual HashKey Ingredient Indices
 
-Several frame types share `CtrlGroupControl` (`0xFFFE`) as their egress destination but must form independent per-sender flows on the proxy so each carries its own monotonic `SeqNum` counter. The proxy's flow key is `(senderIPv6, groupIdx, subtreeID)`; to keep these flows separate while still emitting to the same multicast group, the proxy substitutes a distinct virtual `groupIdx` into the HashKey computation. These virtual indices **never appear in an actual IPv6 multicast address**; they exist only as inputs to XXH64-based HashKey derivation.
+Several frame types share `GroupBlockBroadcast` (`0xFFFE`) as their egress destination but must form independent per-sender flows on the proxy so each carries its own monotonic `SeqNum` counter. The proxy's flow key is `(senderIPv6, groupIdx, subtreeID)`; to keep these flows separate while still emitting to the same multicast group, the proxy substitutes a distinct virtual `groupIdx` into the HashKey computation. These virtual indices **never appear in an actual IPv6 multicast address**; they exist only as inputs to XXH64-based HashKey derivation.
 
-| Virtual index | Constant                  | Used by               | Egress group |
-| ------------- | ------------------------- | --------------------- | ------------ |
-| `0xFFF8`      | `CoinbaseFlowVirtualIdx`  | BRC-133 coinbase tx   | `0xFFFE`     |
-| `0xFFF9`      | `AnchorFlowVirtualIdx`    | BRC-134 anchor tx     | `0xFFFE`     |
+| Virtual index | Constant            | Used by             | Egress group |
+| ------------- | ------------------- | ------------------- | ------------ |
+| `0xFFF8`      | `GroupCoinbaseFlow` | BRC-133 coinbase tx | `0xFFFE`     |
+| `0xFFF9`      | `GroupAnchorFlow`   | BRC-134 anchor tx   | `0xFFFE`     |
 
 BRC-131 block announces continue to use `0xFFFE` itself as the HashKey ingredient.
 
@@ -115,28 +115,29 @@ Beacon groups support infrastructure service discovery across multiple scopes (s
 
 ## Subtree Group Announcements
 
-Subtree group announcements (BRC-127, MsgType `0x30`) advertise SubtreeID–GroupID bindings so listeners can discover related groups of transactions and filter dynamically for downstream special interest networks. These 64-byte datagrams are forwarded by the proxy to the `CtrlGroupSubtreeGroupAnnounce` group (`0xFFFC`).
+Subtree group announcements (BRC-127, MsgType `0x30`) advertise SubtreeID–GroupID bindings so listeners can discover related groups of transactions and filter dynamically for downstream special interest networks. These 64-byte datagrams are forwarded by the proxy to the `GroupSubtreeGroupAnnounce` group (`0xFFFC`).
 
-Like beacon groups, subtree group announcements support multiple scopes (site-local, organization-local, and global). See the control-plane table above for complete scope and address details.
+Like beacon groups, subtree group announcements support multiple scopes (site-local, organization-local, and global). See the network-service table above for complete scope and address details.
 
 ---
 
 ## Subtree Data Announcements
 
-Subtree data frames (BRC-132, FrameVer `0x05`) deliver the full contents of a Merkle subtree (transaction hashes and optional metadata) to all subscribed listeners on the `CtrlGroupSubtreeAnnounce` group (`0xFFFB`). The subtree is identified by its Merkle root hash (SubtreeID).
+Subtree data frames (BRC-132, FrameVer `0x05`) deliver the full contents of a Merkle subtree (transaction hashes and optional metadata) to all subscribed listeners on the `GroupSubtreeAnnounce` group (`0xFFFB`). The subtree is identified by its Merkle root hash (SubtreeID).
 
 BRC-132 frames are large (32–48 MB per subtree at 1M transactions) and are fragmented using BRC-130. Each BRC-130 fragment carries `OrigFrameVer = 0x05` so that the reassembly path can deliver the reconstituted payload to the correct handler.
 
-Like beacon groups, subtree data announcements support multiple scopes (site-local, organization-local, and global). See the control-plane table above for complete scope and address details. See [BRC-132](brc-132-subtree-data.md) for the frame format specification.
+Like beacon groups, subtree data announcements support multiple scopes (site-local, organization-local, and global). See the network-service table above for complete scope and address details. See [BRC-132](brc-132-subtree-data.md) for the frame format specification.
 
 ---
 
 ## Implementation
 
 - **Group derivation:** `shard-common/shard/shard.go` — `Engine.Addr(groupIndex uint32, port int)` (only the low 16 bits of `groupIndex` are used).
-- **Control group helper:** `shard-common/shard/control.go` — `ControlGroupAddr(scopePrefix, groupID, index uint16)` (standalone; not bound to Engine scope).
-- **Constants:** `CtrlGroupBlockHeader = 0xFFFA`, `CtrlGroupSubtreeAnnounce = 0xFFFB`, `CtrlGroupSubtreeGroupAnnounce = 0xFFFC`, `CtrlGroupBeacon = 0xFFFD`, `CtrlGroupControl = 0xFFFE`.
-- **Virtual HashKey ingredients (not multicast addresses):** `CoinbaseFlowVirtualIdx = 0xFFF8`, `AnchorFlowVirtualIdx = 0xFFF9`.
+- **Network-service group helper:** `shard-common/shard/control.go` — `GroupAddr(scopePrefix uint16, groupID uint16, idx GroupIdx)` (standalone; not bound to Engine scope).
+- **Group index type:** `type GroupIdx uint16` — typed wrapper for the 16-bit IANA group index in bytes 14–15. Provides a `String()` method returning a stable snake_case label (`"block_broadcast"`, `"beacon"`, etc.) used in metrics and logs.
+- **Constants:** `GroupBlockHeader = 0xFFFA`, `GroupSubtreeAnnounce = 0xFFFB`, `GroupSubtreeGroupAnnounce = 0xFFFC`, `GroupBeacon = 0xFFFD`, `GroupBlockBroadcast = 0xFFFE`.
+- **Virtual HashKey ingredients (not multicast addresses):** `GroupCoinbaseFlow = 0xFFF8`, `GroupAnchorFlow = 0xFFF9`.
 - **Default group-id:** `shard.DefaultGroupID = 0x000B` (IANA Bitcoin).
 
 ---

@@ -1,6 +1,6 @@
 # BRC-137 — Shard Manifest Announcement
 
-BRC-137 defines the protocol by which multicast participants periodically advertise their `shard_bits` configuration and the set of shard groups they are joined to. Manifest datagrams are emitted directly to the beacon multicast group (`CtrlGroupBeacon`, index `0xFFFD`) at a configurable scope. This BRC supports operator visibility into network-wide sharding configuration, enables divergence detection, and provides hooks for future automated coordination.
+BRC-137 defines the protocol by which multicast participants periodically advertise their `shard_bits` configuration and the set of shard groups they are joined to. Manifest datagrams are emitted directly to the beacon multicast group (`GroupBeacon`, index `0xFFFD`) at a configurable scope. This BRC supports operator visibility into network-wide sharding configuration, enables divergence detection, and provides hooks for future automated coordination.
 
 > **Canonical BRC:** [BRC-137](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0137.md)
 

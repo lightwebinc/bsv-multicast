@@ -19,11 +19,11 @@ Both payloads are small relative to a typical block and must reach every subscri
 
 ## Control-Plane Multicast Group
 
-Block frames are sent to the **CtrlGroupControl** group:
+Block frames are sent to the **GroupBlockBroadcast** group:
 
 | Index  | Scope  | Compressed Address | Constant            |
 | ------ | ------ | ------------------ | ------------------- |
-| 0xFFFE | global | `FF0E::B:FFFE`     | `CtrlGroupControl`  |
+| 0xFFFE | global | `FF0E::B:FFFE`     | `GroupBlockBroadcast`  |
 
 The global scope (`FF0E`) ensures block announcements cross site boundaries and reach all geographically distributed subscribers. The group index `0xFFFE` is in the reserved control-plane range (above the maximum shard group index `0x0FFF` for `shard_bits` ≤ 12).
 
@@ -167,7 +167,7 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 | `FrameVerV4`          | 4      | `0x04` | BRC-131 block control frame version               |
 | `BlockMsgAnnounce`    | 1      | `0x01` | MsgType: block header + subtree hashes            |
 | `BlockMsgCoinbase`    | 2      | `0x02` | MsgType: raw coinbase transaction                 |
-| `CtrlGroupControl`    | 65534  | `0xFFFE` | Block control multicast group index             |
+| `GroupBlockBroadcast`    | 65534  | `0xFFFE` | Block control multicast group index             |
 | `BlockHeaderSize`     | 80     | `0x50` | Standard BSV block header size in bytes           |
 | `BlockAnnounceMinPayload` | 116 | `0x74` | Minimum BlockAnnounce payload (N=0 subtrees)    |
 | `HeaderSize`          | 92     | `0x5C` | BRC-131 header size (identical to BRC-124)        |

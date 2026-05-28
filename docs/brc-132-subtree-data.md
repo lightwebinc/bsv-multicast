@@ -1,6 +1,6 @@
 # BRC-132 — Subtree Data Frame Format
 
-BRC-132 defines a new frame version (0x05) for distributing complete subtree data payloads (transaction hashes and metadata) over the multicast fabric. Subtree data is delivered to all subscribers via the dedicated `CtrlGroupSubtreeAnnounce` multicast group (`FF0X::B:FFFB`), independently of the shard groups used for individual transaction distribution.
+BRC-132 defines a new frame version (0x05) for distributing complete subtree data payloads (transaction hashes and metadata) over the multicast fabric. Subtree data is delivered to all subscribers via the dedicated `GroupSubtreeAnnounce` multicast group (`FF0X::B:FFFB`), independently of the shard groups used for individual transaction distribution.
 
 > **Canonical BRC:** [BRC-132](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0132.md)
 
@@ -20,15 +20,15 @@ BRC-132 coexists with BRC-127 (subtree group announcements, `FF0X::B:FFFC`), whi
 
 ## Control-Plane Multicast Group
 
-Subtree data frames are sent to the **CtrlGroupSubtreeAnnounce** group:
+Subtree data frames are sent to the **GroupSubtreeAnnounce** group:
 
 | Index  | Scope      | Compressed Address | Constant                      |
 | ------ | ---------- | ------------------ | ----------------------------- |
-| 0xFFFB | site       | `FF05::B:FFFB`     | `CtrlGroupSubtreeAnnounce`    |
-| 0xFFFB | org        | `FF08::B:FFFB`     | `CtrlGroupSubtreeAnnounce`    |
-| 0xFFFB | global     | `FF0E::B:FFFB`     | `CtrlGroupSubtreeAnnounce`    |
+| 0xFFFB | site       | `FF05::B:FFFB`     | `GroupSubtreeAnnounce`    |
+| 0xFFFB | org        | `FF08::B:FFFB`     | `GroupSubtreeAnnounce`    |
+| 0xFFFB | global     | `FF0E::B:FFFB`     | `GroupSubtreeAnnounce`    |
 
-Scope selection mirrors the `CtrlGroupBeacon` pattern; operators choose one or more scopes via `-announce-scope` on listening components.
+Scope selection mirrors the `GroupBeacon` pattern; operators choose one or more scopes via `-announce-scope` on listening components.
 
 ---
 
@@ -207,7 +207,7 @@ After reassembly, optional Merkle-root recomputation verifies the SubtreeID:
 | `FrameVerV5`            | 5      | `0x05` | BRC-132 subtree data frame version                   |
 | `SubtreeMsgHashesOnly`  | 1      | `0x01` | MsgType: transaction hashes only (32B per node)      |
 | `SubtreeMsgFullNodes`   | 2      | `0x02` | MsgType: full nodes with fee and size (48B per node) |
-| `CtrlGroupSubtreeAnnounce` | 65531 | `0xFFFB` | Subtree data multicast group index               |
+| `GroupSubtreeAnnounce` | 65531 | `0xFFFB` | Subtree data multicast group index               |
 | `HeaderSize`            | 92     | `0x5C` | BRC-132 header size (identical to BRC-124)           |
 | `SubtreeDataPayloadHeaderSize` | 24 | `0x18` | Fixed metadata prefix size                      |
 | `SubtreeNodeHashSize`   | 32     | `0x20` | Node size in HashesOnly payload                      |
@@ -220,7 +220,7 @@ After reassembly, optional Merkle-root recomputation verifies the SubtreeID:
 - [BRC-124: Multicast Transaction Frame Format](brc-124-frame-format.md) — base header layout reused by BRC-132
 - [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md) — NACK/ACK/MISS used for subtree frame retransmission
 - [BRC-127: Subtree Group Announcement](brc-127-subtree-announce.md) — SubtreeID→GroupID metadata (distinct from BRC-132 data delivery)
-- [BRC-129: Multicast Group Address Assignments](brc-129-multicast-addressing.md) — group index allocations; `0xFFFB` = CtrlGroupSubtreeAnnounce
+- [BRC-129: Multicast Group Address Assignments](brc-129-multicast-addressing.md) — group index allocations; `0xFFFB` = GroupSubtreeAnnounce
 - [BRC-130: Fragmentation](brc-130-fragmentation.md) — BRC-130 extension for large subtree payloads; `OrigFrameVer=0x05`
 - [BRC-131: Block Announcements](brc-131-block-announcements.md) — `FrameVerV4` pattern followed by BRC-132
 - [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame) — `EncodeSubtreeData`, `DecodeSubtreeData`, `IsSubtreeDataFrame`, `EncodeSubtreeDataPayload`, `DecodeSubtreeDataPayload`

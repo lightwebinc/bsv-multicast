@@ -28,11 +28,11 @@ needs them regardless of shard assignment, because:
 
 ## Control-Plane Multicast Group
 
-Coinbase frames are delivered on the **CtrlGroupControl** group:
+Coinbase frames are delivered on the **GroupBlockBroadcast** group:
 
 | Index  | Scope  | Compressed Address | Constant           |
 | ------ | ------ | ------------------ | ------------------ |
-| 0xFFFE | global | `FF0E::B:FFFE`     | `CtrlGroupControl` |
+| 0xFFFE | global | `FF0E::B:FFFE`     | `GroupBlockBroadcast` |
 
 The global scope (`FF0E`) ensures coinbase transactions cross site boundaries.
 The group index `0xFFFE` is in the reserved control-plane range and never
@@ -73,7 +73,7 @@ BRC-124 shard frames:
 
 - The proxy stamps `HashKey = XXH64(senderIPv6 ∥ 0xFFF8 ∥ zeros)` and `SeqNum`
   (monotonic per sender on the coinbase flow) in-place before forwarding. The
-  virtual index `0xFFF8` (`CoinbaseFlowVirtualIdx`) is never used as an actual
+  virtual index `0xFFF8` (`GroupCoinbaseFlow`) is never used as an actual
   multicast destination — it appears only in the HashKey computation to give
   coinbase frames an independent flow identity from BRC-131 block announces,
   which share the same egress multicast group. If the frame arrives
@@ -114,9 +114,9 @@ independently by listeners — even though both egress to the same
 3. **Stamp** — If `SeqNum == 0`, stamp HashKey and SeqNum in-place using the
    `(senderIPv6, 0xFFF8, zeros)` flow key for `BlockMsgCoinbase`, or the
    `(senderIPv6, 0xFFFE, zeros)` flow key for `BlockMsgAnnounce`. The virtual
-   index `0xFFF8` is the `CoinbaseFlowVirtualIdx` used solely to keep
+   index `0xFFF8` is the `GroupCoinbaseFlow` used solely to keep
    coinbase frames in a flow distinct from block announces on the shared
-   `CtrlGroupControl` egress.
+   `GroupBlockBroadcast` egress.
 4. **Fragment** — If `len(Payload) > fragDataSize`, fragment via BRC-130 with
    `OrigFrameVer = 0x04`.
 5. **Forward** — Write frame to `FF0E::B:FFFE:<egressPort>` on all egress
@@ -143,7 +143,7 @@ independently by listeners — even though both egress to the same
 
 | Component              | Change                                                                            |
 | ---------------------- | --------------------------------------------------------------------------------- |
-| shard-proxy    | `ProcessBlock` handles MsgType `0x02`; routes to `CtrlGroupControl`               |
+| shard-proxy    | `ProcessBlock` handles MsgType `0x02`; routes to `GroupBlockBroadcast`               |
 | shard-listener | `processBlockFrame` handles MsgType `0x02`; gap tracking on ctrl flow             |
 | retry-endpoint | Joins `FF0E::B:FFFE`; caches and retransmits BRC-131 frames regardless of MsgType |
 | shard-common   | `BlockMsgCoinbase = 0x02` constant; `DecodeBlock` validates MsgType               |
@@ -156,7 +156,7 @@ independently by listeners — even though both egress to the same
 | ------------------ | -------- | ----------------------------------- |
 | `FrameVerV4`       | `0x04`   | BRC-131 block control frame version |
 | `BlockMsgCoinbase` | `0x02`   | MsgType: raw coinbase transaction   |
-| `CtrlGroupControl` | `0xFFFE` | Block control multicast group index |
+| `GroupBlockBroadcast` | `0xFFFE` | Block control multicast group index |
 
 ---
 

@@ -27,7 +27,7 @@ sharded this way:
 - Anchor transactions do not need to be confirmed before use — they need only to
   be visible and valid. Wide visibility is the primary requirement.
 
-BRC-134 addresses this by routing anchor frames to the **CtrlGroupControl**
+BRC-134 addresses this by routing anchor frames to the **GroupBlockBroadcast**
 group (`FF0E::B:FFFE`), the same global control channel used for block headers
 and coinbase transactions (BRC-131, BRC-133). All subscribers join this group
 unconditionally.
@@ -36,11 +36,11 @@ unconditionally.
 
 ## Control-Plane Multicast Group
 
-Anchor frames are delivered on the **CtrlGroupControl** group:
+Anchor frames are delivered on the **GroupBlockBroadcast** group:
 
 | Index  | Scope  | Compressed Address | Constant           |
 | ------ | ------ | ------------------ | ------------------ |
-| 0xFFFE | global | `FF0E::B:FFFE`     | `CtrlGroupControl` |
+| 0xFFFE | global | `FF0E::B:FFFE`     | `GroupBlockBroadcast` |
 
 The global scope (`FF0E`) ensures anchor transactions cross site boundaries and
 reach all geographically distributed subscribers. The group index `0xFFFE` is in
@@ -88,9 +88,9 @@ BRC-124 shard frames:
 
 - The proxy stamps `HashKey = XXH64(senderIPv6 ∥ 0xFFF9 ∥ zeros)` and `SeqNum`
   (monotonic per sender on the anchor flow) in-place before forwarding. The
-  virtual index `0xFFF9` (`AnchorFlowVirtualIdx`) gives anchor frames an
+  virtual index `0xFFF9` (`GroupAnchorFlow`) gives anchor frames an
   independent flow identity from BRC-131 block announces and BRC-133
-  coinbase frames, all of which travel on the same `CtrlGroupControl`
+  coinbase frames, all of which travel on the same `GroupBlockBroadcast`
   multicast destination but each use a distinct virtual ingredient in their
   HashKey computation. If the frame arrives pre-stamped (`SeqNum != 0`), it
   is forwarded verbatim.
@@ -111,9 +111,9 @@ BRC-124 shard frames:
    Invalid frames are dropped.
 3. **Stamp** — If `SeqNum == 0`, stamp HashKey and SeqNum in-place using
    the `(senderIPv6, 0xFFF9, zeros)` flow key. The virtual index `0xFFF9`
-   (`AnchorFlowVirtualIdx`) keeps anchor frames in a flow distinct from
+   (`GroupAnchorFlow`) keeps anchor frames in a flow distinct from
    BRC-131 block announces and BRC-133 coinbase frames on the shared
-   `CtrlGroupControl` egress.
+   `GroupBlockBroadcast` egress.
 4. **Forward** — Write frame verbatim to `FF0E::B:FFFE:<egressPort>` on all
    egress interfaces.
 
@@ -143,7 +143,7 @@ becomes necessary it will be defined in a future revision.
 
 | Component              | Change                                                                                                                |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| shard-proxy    | UDP worker and TCP ingress: version `0x06` → `ProcessAnchor`; new `ProcessAnchor` method routes to `CtrlGroupControl` |
+| shard-proxy    | UDP worker and TCP ingress: version `0x06` → `ProcessAnchor`; new `ProcessAnchor` method routes to `GroupBlockBroadcast` |
 | shard-listener | `IsAnchorFrame` dispatch; new `processAnchorFrame` method; gap tracking on ctrl flow                                  |
 | retry-endpoint | Joins `FF0E::B:FFFE`; caches BRC-134 frames by `HashKey ∥ SeqNum`; retransmits to `FF0E::B:FFFE` on NACK hit          |
 | shard-common   | `FrameVerV6 = 0x06` constant; `DecodeAnchor`; `IsAnchorFrame`                                                         |
@@ -167,7 +167,7 @@ becomes necessary it will be defined in a future revision.
 | Name               | Value    | Description                                                       |
 | ------------------ | -------- | ----------------------------------------------------------------- |
 | `FrameVerV6`       | `0x06`   | BRC-134 chained anchor transaction frame version                  |
-| `CtrlGroupControl` | `0xFFFE` | Control-plane multicast group index (shared with BRC-131/BRC-133) |
+| `GroupBlockBroadcast` | `0xFFFE` | Control-plane multicast group index (shared with BRC-131/BRC-133) |
 
 ---
 
@@ -180,7 +180,7 @@ becomes necessary it will be defined in a future revision.
 - [BRC-129: Multicast Group Address Assignments](./brc-129-multicast-addressing.md)
   — control-plane group index allocations
 - [BRC-131: Block Announcement Protocol](./brc-131-block-announcements.md)
-  — BRC-131 shares CtrlGroupControl
+  — BRC-131 shares GroupBlockBroadcast
 - [BRC-133: Coinbase Transaction Delivery](brc-133-coinbase-delivery.md) —
   another control-group transaction type using BRC-131
 - [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame)

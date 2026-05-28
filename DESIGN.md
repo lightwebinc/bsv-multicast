@@ -414,7 +414,7 @@ BRC-124 frame to the normal filter → egress → gap-tracking pipeline.
 **BRC-132 (Subtree Data Frame Format):** BRC-132 defines Frame Version `0x05`
 for distributing complete subtree data payloads (transaction hashes and optional
 fee/size metadata) over the multicast fabric. Frames are delivered to the
-`CtrlGroupSubtreeAnnounce` group (`FF0X::B:FFFB`). Two message types are
+`GroupSubtreeAnnounce` group (`FF0X::B:FFFB`). Two message types are
 defined: `HashesOnly` (32 bytes/node) and `FullNodes` (48 bytes/node, includes
 fee and size). The 92-byte header is layout-identical to BRC-124. Payloads of
 32–48 MB (at 1M nodes) are always fragmented via BRC-130 (`OrigFrameVer=0x05`).
@@ -426,7 +426,7 @@ endpoint retransmits to `FF0X::B:FFFB` rather than a shard group.
 **BRC-133 (Coinbase Transaction):** BRC-133 formalizes MsgType `0x02` within
 BRC-131 frames (FrameVer `0x04`) as the canonical wire format for distributing
 raw coinbase transactions. The ContentID in the frame header carries the SHA256d
-of the coinbase transaction. Frames are delivered on `CtrlGroupControl`
+of the coinbase transaction. Frames are delivered on `GroupBlockBroadcast`
 (`FF0E::B:FFFE`); NACK-based retransmission and gap tracking work identically to
 BRC-131 block announcement frames.
 
@@ -439,7 +439,7 @@ chain — over the control plane. Because all subsequent chain transactions
 reference the anchor as an input, every subscriber must receive it regardless of
 shard assignment. The 92-byte header is layout-identical to BRC-124 with
 `FrameVer=0x06`; the TxID field carries the SHA256d of the anchor transaction.
-Frames are delivered on `CtrlGroupControl` (`FF0E::B:FFFE`). BRC-130
+Frames are delivered on `GroupBlockBroadcast` (`FF0E::B:FFFE`). BRC-130
 fragmentation is not defined for BRC-134. Gap tracking and NACK retransmission
 are identical to BRC-131.
 
@@ -839,7 +839,7 @@ BRC-127 defines the dynamic subtree group announcement protocol. Producers
 advertise which SubtreeIDs belong to which logical group by sending 64-byte
 `SubtreeAnnounce` datagrams (`MsgType 0x30`) to the proxy TCP ingress. The proxy
 forwards these verbatim to the control-plane multicast group
-(`CtrlGroupSubtreeGroupAnnounce = 0xFFFC`). Listeners join this group and
+(`GroupSubtreeGroupAnnounce = 0xFFFC`). Listeners join this group and
 populate a `subtreegroup.Registry`, automatically accepting frames from
 announced subtrees without static configuration.
 
@@ -866,7 +866,7 @@ block-level metadata to all fabric subscribers. Two message types are defined:
   The ContentID in the frame header is the SHA256d of the coinbase transaction.
 
 Both types share the 92-byte BRC-124 header layout and are delivered on the
-**CtrlGroupControl** group (`FF0E::B:FFFE`), ensuring global reach independent
+**GroupBlockBroadcast** group (`FF0E::B:FFFE`), ensuring global reach independent
 of shard assignment. Every subscriber receives every block announcement — there
 is no shard or subtree filtering for block frames.
 
@@ -904,9 +904,9 @@ Two message types are defined:
 - **FullNodes (`MsgType 0x02`)** — 48-byte entry per node (TxHash + Fee + Size),
   same prefix and conflict set.
 
-Both types are delivered on the **CtrlGroupSubtreeAnnounce** group
+Both types are delivered on the **GroupSubtreeAnnounce** group
 (`FF0X::B:FFFB`). BRC-127 subtree group announcements use a separate group
-(`CtrlGroupSubtreeGroupAnnounce`, `FF0X::B:FFFC`).
+(`GroupSubtreeGroupAnnounce`, `FF0X::B:FFFC`).
 
 The 92-byte header is layout-identical to BRC-124. `HashKey` is computed as
 `XXH64(senderIPv6 ∥ 0xFFFB ∥ subtreeID)` so each (sender, subtreeID) pair owns
@@ -934,7 +934,7 @@ reference
 BRC-133 formalizes the wire mechanism for distributing coinbase transactions as
 a dedicated message type (`BlockMsgCoinbase = 0x02`) within BRC-131 block
 control frames (FrameVer `0x04`). Coinbase transactions are delivered to all
-subscribers via the **CtrlGroupControl** group (`FF0E::B:FFFE`), independent of
+subscribers via the **GroupBlockBroadcast** group (`FF0E::B:FFFE`), independent of
 shard assignment.
 
 The 92-byte header is identical to the BRC-124 / BRC-131 layout. The ContentID
@@ -962,7 +962,7 @@ transactions over the multicast fabric. An _anchor transaction_ is the root
 transactions reference it as an input, every subscriber must receive it
 regardless of which shard its TxID would otherwise hash to.
 
-Anchor frames are delivered on the **CtrlGroupControl** group (`FF0E::B:FFFE`),
+Anchor frames are delivered on the **GroupBlockBroadcast** group (`FF0E::B:FFFE`),
 the same global control channel used for BRC-131 block announcements and BRC-133
 coinbase transactions.
 

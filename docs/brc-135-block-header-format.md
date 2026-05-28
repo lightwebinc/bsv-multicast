@@ -42,7 +42,7 @@ fabric subscribers would receive the split frame on the control channel they
 already subscribe to).
 
 When multicast egress is enabled, the emitter sends BRC-135 frames to the
-`CtrlGroupBlockHeader` index (`0xFFFA`) on the **egress scope** (typically a
+`GroupBlockHeader` index (`0xFFFA`) on the **egress scope** (typically a
 different scope or group-id from the ingress fabric):
 
 | Index  | Scope           | Compressed Address        | Notes                            |
@@ -118,7 +118,7 @@ BRC-135 frames carry their own independent `HashKey`/`SeqNum` flow stamped by
 the emitter:
 
 - **HashKey** is `XXH64(emitterIPv6 ∥ 0xFFFA ∥ zeros)` — stable for the lifetime
-  of the emitter process. The group ingredient `0xFFFA` (`CtrlGroupBlockHeader`)
+  of the emitter process. The group ingredient `0xFFFA` (`GroupBlockHeader`)
   matches the actual BRC-135 egress multicast group, so the HashKey input is
   self-consistent with the destination.
 - **SeqNum** is a monotonic counter starting at 1, incremented for each BRC-135
@@ -186,8 +186,8 @@ A consumer receiving BRC-135 frames:
 | `FrameVerV7`           | 7     | `0x07`   | BRC-135 block header frame version                |
 | `BlockHeaderPayload`   | 80    | `0x50`   | Fixed payload size (standard BSV block header)    |
 | `BlockHeaderFrameSize` | 172   | `0xAC`   | Total frame size (92 + 80)                        |
-| `CtrlGroupBlockHeader` | 65530 | `0xFFFA` | Block header egress channel (BRC-135 mc-egress)   |
-| `CtrlGroupControl`     | 65534 | `0xFFFE` | Control group index (shared with BRC-131/133/134) |
+| `GroupBlockHeader` | 65530 | `0xFFFA` | Block header egress channel (BRC-135 mc-egress)   |
+| `GroupBlockBroadcast`     | 65534 | `0xFFFE` | Control group index (shared with BRC-131/133/134) |
 | `HeaderSize`           | 92    | `0x5C`   | BRC-135 header size (identical to BRC-124)        |
 
 ---
