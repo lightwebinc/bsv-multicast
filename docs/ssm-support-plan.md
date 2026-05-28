@@ -20,8 +20,21 @@ list anywhere in the config surface.
   operators pre-declare source IPs or learn them dynamically. ASM remains the
   default.
 - **Non-goals**: No change to frame format, NACK protocol, HashKey computation,
-  or shard derivation. No change to subtx-generator (it unicasts to the proxy).
-  SSM is a deployment/transport mode, not a protocol revision.
+  or shard derivation. SSM is a deployment/transport mode, not a protocol
+  revision.
+- **Design decisions** (resolved from open questions):
+  1. **Single mode per deployment.** `sourceMode` applies to every group a
+     component touches; no per-group override. The beacon group remains ASM by
+     special-case (see Source discovery) even when `sourceMode=ssm`.
+  2. **Distinct source IP per shard-proxy.** Preserves the per-publisher
+     HashKey semantics already in the listener/retry-endpoint flow tracking. If
+     a deployment needs proxies to share a logical source IP, front them with a
+     load balancer (e.g. a NIC-bonded VIP or an L4 LB doing DSR) so the LB
+     publishes a single, stable source IP while distinct proxies sit behind it.
+  3. **subtx-generator gains an SSM-aware direct-multicast mode.** Its existing
+     unicast-to-proxy path stays the default; a new direct-emit mode lets the
+     `10gb-direct-testing` harness exercise the SSM data path without a proxy
+     in the loop.
 
 ## New configuration surface (additive, all components)
 
@@ -36,8 +49,14 @@ multicast:
 ```
 
 The same block ships in `shard-proxy-helm`, `shard-listener-helm`,
-`retry-endpoint-helm`, `subtx-generator-helm` (no-op there),
-`shard-manifest-helm`.
+`retry-endpoint-helm`, `subtx-generator-helm`, `shard-manifest-helm`. Per the
+single-mode-per-deployment decision, the block applies uniformly to every
+group the component opens.
+
+Sender-side components (`shard-proxy`, `subtx-generator` in direct mode) also
+take `multicast.bindSource: <ipv6>` so each sender publishes a stable, known
+source IP. For a multi-proxy deployment behind a load balancer, set
+`bindSource` to the LB's VIP on every proxy.
 
 ## Addressing (BRC-129 amendment)
 
@@ -83,9 +102,10 @@ mfib).
 
 | Component      | File                                                                                                             | Change                                                                                                                                                                                                                                      |
 | -------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| shard-proxy    | [shard-proxy/forwarder/forwarder.go:210-245](../../shard-proxy/forwarder/forwarder.go#L210-L245) (`OpenTargets`) | Optional `bindSource` config: when set, bind the egress socket to that IPv6 (`syscall.Bind` before send) so SSM receivers can pre-declare it. Without `bindSource`, source IP is whatever the kernel picks — fine for ASM, brittle for SSM. |
-| shard-proxy    | beacon emit path                                                                                                 | Must include the bound source IP in the ADVERT payload (already does this per the survey) and now also emit on the _configured_ mode/scope group.                                                                                           |
-| shard-manifest | manifest publish                                                                                                 | Add `sourceAddresses[]` field to the [BRC-137](brc-137-shard-manifest.md) manifest schema so listeners using `discover=manifest` can build their (S,G) join list without listening to the ASM beacon.                                       |
+| shard-proxy      | [shard-proxy/forwarder/forwarder.go:210-245](../../shard-proxy/forwarder/forwarder.go#L210-L245) (`OpenTargets`) | Required `bindSource` when `sourceMode=ssm`: bind the egress socket to that IPv6 (`syscall.Bind` before send) so SSM receivers can pre-declare it. In multi-proxy deployments each proxy uses its **own distinct** source IP (preserves HashKey per-flow semantics); when proxies must share an identity, run them behind an L4 LB and set `bindSource` to the LB VIP on each. Without `bindSource`, source IP is whatever the kernel picks — fine for ASM, broken for SSM. |
+| shard-proxy      | beacon emit path                                                                                                 | Must include the bound source IP in the ADVERT payload (already does this per the survey) and now also emit on the _configured_ mode/scope group.                                                                                                                                                                                                                                                                                                                |
+| subtx-generator  | [subtx-generator/internal/sender/sender.go:189](../../subtx-generator/internal/sender/sender.go#L189)            | Add a new `mode: direct-multicast` alongside today's unicast-to-proxy. In direct mode the generator derives the group from TxID (same `engine.Addr` helper) and emits via a socket bound to `multicast.bindSource`. Enables the `10gb-direct-testing` harness to exercise the SSM data path without a proxy. Unicast mode remains the default.                                                                                                                  |
+| shard-manifest   | manifest publish                                                                                                 | Add `sourceAddresses[]` field to the [BRC-137](brc-137-shard-manifest.md) manifest schema so listeners using `discover=manifest` can build their (S,G) join list without listening to the ASM beacon. In LB-fronted deployments this list contains the VIP, not the backend proxy IPs.                                                                                                                                                                           |
 
 Senders themselves perform no SSM-specific syscall — SSM is purely a
 receiver-side filter plus a network-fabric routing optimization.
@@ -137,19 +157,10 @@ Add to each receiver:
 2. Update [BRC-129](brc-129-multicast-addressing.md) with the SSM addressing
    appendix.
 3. Add the config surface to each Helm chart with `sourceMode: asm` default.
-4. Ship `static` source mode. Validate against a lab fabric with PIM-SSM.
+4. Ship `static` source mode and shard-proxy `bindSource`. Validate against a
+   lab fabric with PIM-SSM, distinct source IP per proxy.
 5. Add `beacon` discovery, then optional `manifest` discovery.
-6. Document the fabric prerequisite in `multicast-kube-infra`.
-
-## Open questions
-
-- **Single mode per deployment, or per-group?** A mixed deployment (data plane
-  SSM, control plane ASM) is more flexible but doubles the config surface.
-  Recommendation: single-mode-per-component for v1.
-- **Anycast source IP across multiple shard-proxies, or distinct per-proxy?**
-  Anycast lets listeners declare one source; distinct preserves the
-  per-publisher HashKey semantics already in the code. Needs a deliberate call
-  before binding to a design.
-- **Should subtx-generator gain an SSM-aware direct-multicast mode** (it
-  currently unicasts to the proxy)? Out of scope for this plan but a natural
-  extension for the `10gb-direct-testing` harness.
+6. Add subtx-generator `direct-multicast` mode and wire it into
+   `10gb-direct-testing`.
+7. Document the fabric prerequisite (PIM-SSM, MLDv2) in `multicast-kube-infra`,
+   including the LB-VIP pattern for shared-source deployments.
