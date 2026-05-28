@@ -1,0 +1,54 @@
+bsv-multicast
+Copyright 2026 Lightweb Inc. (https://lightweb.net)
+
+=========================================================================
+
+This repository contains the design documentation, architecture
+overview, and BRC specification drafts for the BSV layered multicast
+transaction-distribution stack. It is documentation-only; no executable
+software is shipped from this repository.
+
+This product includes documentation developed at Lightweb Inc. and
+licensed under the Apache License, Version 2.0 (see LICENSE).
+
+=========================================================================
+Conceptual Attribution
+
+The IPv6 multicast transaction broadcast architecture documented herein
+was articulated by Dr. Craig S. Wright:
+
+  Multicast within Multicast: Anycast, Sharded Resends, and Hierarchical
+  Distribution for Transaction and Block Propagation
+  https://singulargrit.substack.com/p/multicast-within-multicast-anycast
+  https://singulargrit.substack.com/
+
+=========================================================================
+Third-Party Standards
+
+The BRC drafts in this repository are derived from, and intended for
+contribution back to, the published BRC standards maintained by BSV
+Blockchain. Magic, protocol-version, and frame-format constants are
+inherited from BRC-12 and BRC-124. The full standards catalogue is
+maintained at:
+
+  BSV Blockchain Standards Repository
+  https://github.com/bitcoin-sv/BRCs/
+
+Specific BRCs referenced by this documentation include BRC-12, BRC-30,
+BRC-124, BRC-126, BRC-127, BRC-128, BRC-129, BRC-130, BRC-131, BRC-132,
+BRC-133, BRC-134, BRC-135, BRC-136 (tracked upstream only), and
+BRC-137.
+
+=========================================================================
+Related Projects
+
+This design relates to and complements the BSV Blockchain Teranode
+project, which provides the intra-node transaction validation and
+block-assembly pipeline that this multicast layer distributes:
+
+  Teranode             https://github.com/bsv-blockchain/teranode
+  go-subtree           https://github.com/bsv-blockchain/go-subtree
+  block-headers-service
+                       https://github.com/bsv-blockchain/block-headers-service
+
+=========================================================================

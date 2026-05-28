@@ -69,7 +69,7 @@ same offsets.
 | 6      | 1    | —     | Frame Version | `0x07` — BRC-135 block header                             |
 | 7      | 1    | —     | Reserved      | `0x00`                                                    |
 | 8      | 32   | 8B    | BlockHash     | SHA256d of the 80-byte block header (internal byte order) |
-| 40     | 8    | 8B    | HashKey       | XXH64(emitterIPv6 ∥ 0xFFFE ∥ zeros); stamped by emitter   |
+| 40     | 8    | 8B    | HashKey       | XXH64(emitterIPv6 ∥ 0xFFFA ∥ zeros); stamped by emitter   |
 | 48     | 8    | 8B    | SeqNum        | Monotonic per-emitter counter; stamped by emitter         |
 | 56     | 32   | 8B    | LayoutPad32   | All zeros (no subtree scope for block headers)            |
 | 88     | 4    | —     | PayloadLen    | `0x00000050` (80 = fixed block header size, uint32 BE)    |
@@ -117,8 +117,10 @@ verbatim from the BRC-131 `BlockAnnounce` payload bytes `[0:80]`.
 BRC-135 frames carry their own independent `HashKey`/`SeqNum` flow stamped by
 the emitter:
 
-- **HashKey** is `XXH64(emitterIPv6 ∥ 0xFFFE ∥ zeros)` — stable for the lifetime
-  of the emitter process.
+- **HashKey** is `XXH64(emitterIPv6 ∥ 0xFFFA ∥ zeros)` — stable for the lifetime
+  of the emitter process. The group ingredient `0xFFFA` (`CtrlGroupBlockHeader`)
+  matches the actual BRC-135 egress multicast group, so the HashKey input is
+  self-consistent with the destination.
 - **SeqNum** is a monotonic counter starting at 1, incremented for each BRC-135
   frame emitted. Each emitter maintains a single counter for all block header
   frames.

@@ -88,6 +88,17 @@ All group addresses — both shard and control-plane — inherit the same group-
 
 `FF0E::B:FFFE` (index `0xFFFE`) is used for mandatory global-scope control channel distributing block headers, block templates, coinbase transactions, and chained-transaction anchors, as well as other producer data useful to all network participants. This channel is mandatory for all network participants to join.
 
+### Virtual HashKey Ingredient Indices
+
+Several frame types share `CtrlGroupControl` (`0xFFFE`) as their egress destination but must form independent per-sender flows on the proxy so each carries its own monotonic `SeqNum` counter. The proxy's flow key is `(senderIPv6, groupIdx, subtreeID)`; to keep these flows separate while still emitting to the same multicast group, the proxy substitutes a distinct virtual `groupIdx` into the HashKey computation. These virtual indices **never appear in an actual IPv6 multicast address**; they exist only as inputs to XXH64-based HashKey derivation.
+
+| Virtual index | Constant                  | Used by               | Egress group |
+| ------------- | ------------------------- | --------------------- | ------------ |
+| `0xFFF8`      | `CoinbaseFlowVirtualIdx`  | BRC-133 coinbase tx   | `0xFFFE`     |
+| `0xFFF9`      | `AnchorFlowVirtualIdx`    | BRC-134 anchor tx     | `0xFFFE`     |
+
+BRC-131 block announces continue to use `0xFFFE` itself as the HashKey ingredient.
+
 ---
 
 ## Block Header Egress Channel
@@ -125,6 +136,7 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 - **Group derivation:** `shard-common/shard/shard.go` — `Engine.Addr(groupIndex uint32, port int)` (only the low 16 bits of `groupIndex` are used).
 - **Control group helper:** `shard-common/shard/control.go` — `ControlGroupAddr(scopePrefix, groupID, index uint16)` (standalone; not bound to Engine scope).
 - **Constants:** `CtrlGroupBlockHeader = 0xFFFA`, `CtrlGroupSubtreeAnnounce = 0xFFFB`, `CtrlGroupSubtreeGroupAnnounce = 0xFFFC`, `CtrlGroupBeacon = 0xFFFD`, `CtrlGroupControl = 0xFFFE`.
+- **Virtual HashKey ingredients (not multicast addresses):** `CoinbaseFlowVirtualIdx = 0xFFF8`, `AnchorFlowVirtualIdx = 0xFFF9`.
 - **Default group-id:** `shard.DefaultGroupID = 0x000B` (IANA Bitcoin).
 
 ---

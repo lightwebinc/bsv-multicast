@@ -54,7 +54,7 @@ relevant fields are:
 | 6      | 1    | FrameVersion | `0x04` (BRC-131)                                      |
 | 7      | 1    | MsgType      | `0x02` = `BlockMsgCoinbase`                           |
 | 8      | 32   | ContentID    | CoinbaseTxID — SHA256d of the raw coinbase tx bytes   |
-| 40     | 8    | HashKey      | XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros); stamped by proxy  |
+| 40     | 8    | HashKey      | XXH64(senderIPv6 ∥ 0xFFF8 ∥ zeros); stamped by proxy  |
 | 48     | 8    | SeqNum       | Monotonic per-sender counter; stamped by proxy        |
 | 56     | 32   | LayoutPad32  | All zeros                                             |
 | 88     | 4    | PayloadLen   | Length of the raw coinbase transaction bytes          |
@@ -71,11 +71,15 @@ bytes LE), input vector, output vector, locktime (4 bytes LE).
 Coinbase frames participate in the same NACK-based reliability mechanism as
 BRC-124 shard frames:
 
-- The proxy stamps `HashKey = XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros)` and `SeqNum`
-  (monotonic per sender) in-place before forwarding. If the frame arrives
+- The proxy stamps `HashKey = XXH64(senderIPv6 ∥ 0xFFF8 ∥ zeros)` and `SeqNum`
+  (monotonic per sender on the coinbase flow) in-place before forwarding. The
+  virtual index `0xFFF8` (`CoinbaseFlowVirtualIdx`) is never used as an actual
+  multicast destination — it appears only in the HashKey computation to give
+  coinbase frames an independent flow identity from BRC-131 block announces,
+  which share the same egress multicast group. If the frame arrives
   pre-stamped (`SeqNum != 0`), it is forwarded verbatim.
 - Listeners observe
-  `(ctrlGroupIdx=0xFFFE, zeroSubtreeID, HashKey, SeqNum, ContentID)` for gap
+  `(coinbaseFlowIdx=0xFFF8, zeroSubtreeID, HashKey, SeqNum, ContentID)` for gap
   detection and dispatch BRC-126 NACKs to retry endpoints on gap.
 - Retry endpoints join `FF0E::B:FFFE` and cache BRC-131 `BlockMsgCoinbase`
   frames by `HashKey ∥ SeqNum`. On NACK, the frame is retransmitted to
@@ -91,10 +95,12 @@ carries the full raw coinbase bytes. Subscribers that only need to verify the
 Merkle root may use the `CoinbaseTxID` from the announce frame without waiting
 for the coinbase frame itself.
 
-The two frame types share the same `HashKey` per sender but have independent
-`SeqNum` sequences (they are distinct flows within the `(sender, 0xFFFE, zeros)`
-namespace because their ContentIDs differ). Gap tracking treats them as separate
-objects.
+BlockAnnounce and Coinbase form **separate flows** on the proxy. BlockAnnounce
+frames use HashKey derived from `(sender, 0xFFFE, zeros)`; Coinbase frames use
+HashKey derived from `(sender, 0xFFF8, zeros)`. Each flow therefore has its
+own monotonic SeqNum counter, its own HashKey value, and is gap-tracked
+independently by listeners — even though both egress to the same
+`FF0E::B:FFFE` multicast destination.
 
 ---
 
@@ -105,8 +111,12 @@ objects.
    `ProcessBlock`.
 2. **Decode** — `frame.DecodeBlock` validates Magic, FrameVer, MsgType, and
    PayLen. Invalid MsgType values (`!= 0x01` and `!= 0x02`) are dropped.
-3. **Stamp** — If `SeqNum == 0`, stamp HashKey and SeqNum in-place using
-   `(senderIPv6, 0xFFFE, zeros)` flow key.
+3. **Stamp** — If `SeqNum == 0`, stamp HashKey and SeqNum in-place using the
+   `(senderIPv6, 0xFFF8, zeros)` flow key for `BlockMsgCoinbase`, or the
+   `(senderIPv6, 0xFFFE, zeros)` flow key for `BlockMsgAnnounce`. The virtual
+   index `0xFFF8` is the `CoinbaseFlowVirtualIdx` used solely to keep
+   coinbase frames in a flow distinct from block announces on the shared
+   `CtrlGroupControl` egress.
 4. **Fragment** — If `len(Payload) > fragDataSize`, fragment via BRC-130 with
    `OrigFrameVer = 0x04`.
 5. **Forward** — Write frame to `FF0E::B:FFFE:<egressPort>` on all egress
@@ -122,8 +132,8 @@ objects.
 3. **Egress** — `egress.Sender.SendBlock(raw, bf)` forwards the frame (or
    payload only in strip-header mode) downstream.
 4. **Gap tracking** —
-   `Tracker.Observe(0xFFFE, zeroSubtreeID, HashKey, SeqNum, ContentID)` when
-   `SeqNum != 0`.
+   `Tracker.Observe(coinbaseFlowIdx=0xFFF8, zeroSubtreeID, HashKey, SeqNum, ContentID)`
+   when `SeqNum != 0`.
 5. **Filtering** — Coinbase frames bypass all shard/subtree filters; every
    subscriber receives every coinbase frame.
 

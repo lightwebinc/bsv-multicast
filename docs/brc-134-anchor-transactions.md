@@ -87,10 +87,13 @@ BRC-134 frames participate in the same NACK-based reliability mechanism as
 BRC-124 shard frames:
 
 - The proxy stamps `HashKey = XXH64(senderIPv6 ∥ 0xFFF9 ∥ zeros)` and `SeqNum`
-  (monotonic per sender) in-place before forwarding. The virtual index `0xFFF9`
-  gives anchor frames an independent flow identity from BRC-131 block frames,
-  both of which travel on the same `CtrlGroupControl` multicast address. If the
-  frame arrives pre-stamped (`SeqNum != 0`), it is forwarded verbatim.
+  (monotonic per sender on the anchor flow) in-place before forwarding. The
+  virtual index `0xFFF9` (`AnchorFlowVirtualIdx`) gives anchor frames an
+  independent flow identity from BRC-131 block announces and BRC-133
+  coinbase frames, all of which travel on the same `CtrlGroupControl`
+  multicast destination but each use a distinct virtual ingredient in their
+  HashKey computation. If the frame arrives pre-stamped (`SeqNum != 0`), it
+  is forwarded verbatim.
 - Listeners observe
   `(anchorGroupIdx=0xFFF9, zeroSubtreeID, HashKey, SeqNum, TxID)` for gap
   detection and dispatch BRC-126 NACKs to retry endpoints on gap.
@@ -107,8 +110,10 @@ BRC-124 shard frames:
 2. **Decode** — `frame.DecodeAnchor` validates Magic, FrameVer, and PayLen.
    Invalid frames are dropped.
 3. **Stamp** — If `SeqNum == 0`, stamp HashKey and SeqNum in-place using
-   `(senderIPv6, 0xFFF9, zeros)` flow key. The virtual index `0xFFF9` ensures
-   independent flow identity from BRC-131 block frames.
+   the `(senderIPv6, 0xFFF9, zeros)` flow key. The virtual index `0xFFF9`
+   (`AnchorFlowVirtualIdx`) keeps anchor frames in a flow distinct from
+   BRC-131 block announces and BRC-133 coinbase frames on the shared
+   `CtrlGroupControl` egress.
 4. **Forward** — Write frame verbatim to `FF0E::B:FFFE:<egressPort>` on all
    egress interfaces.
 
