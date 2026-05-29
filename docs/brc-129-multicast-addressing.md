@@ -60,9 +60,9 @@ Network service groups occupy `0xF800`–`0xFFFF` (2,048 indices). Current proto
 | `0xFFFB` | Subtree Announcements (site)         | `FF05` | `FF05:0000:0000:0000:0000:0000:000B:FFFB` | `FF05::B:FFFB` |
 | `0xFFFB` | Subtree Announcements (org)          | `FF08` | `FF08:0000:0000:0000:0000:0000:000B:FFFB` | `FF08::B:FFFB` |
 | `0xFFFB` | Subtree Announcements (global)       | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFB` | `FF0E::B:FFFB` |
-| `0xFFFC` | Subtree Group Announcements (site)    | `FF05` | `FF05:0000:0000:0000:0000:0000:000B:FFFC` | `FF05::B:FFFC` |
-| `0xFFFC` | Subtree Group Announcements (org)     | `FF08` | `FF08:0000:0000:0000:0000:0000:000B:FFFC` | `FF08::B:FFFC` |
-| `0xFFFC` | Subtree Group Announcements (global)  | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFC` | `FF0E::B:FFFC` |
+| `0xFFFC` | Subtree Group Announcements (site)   | `FF05` | `FF05:0000:0000:0000:0000:0000:000B:FFFC` | `FF05::B:FFFC` |
+| `0xFFFC` | Subtree Group Announcements (org)    | `FF08` | `FF08:0000:0000:0000:0000:0000:000B:FFFC` | `FF08::B:FFFC` |
+| `0xFFFC` | Subtree Group Announcements (global) | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFC` | `FF0E::B:FFFC` |
 | `0xFFFD` | Beacon (site)                        | `FF05` | `FF05:0000:0000:0000:0000:0000:000B:FFFD` | `FF05::B:FFFD` |
 | `0xFFFD` | Beacon (org)                         | `FF08` | `FF08:0000:0000:0000:0000:0000:000B:FFFD` | `FF08::B:FFFD` |
 | `0xFFFD` | Beacon (global)                      | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFD` | `FF0E::B:FFFD` |
