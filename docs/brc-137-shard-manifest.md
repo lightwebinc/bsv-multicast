@@ -29,7 +29,9 @@ Offset  Size  Field
      4     2  ProtoVer         (0x02BF)
      6     1  MsgType          (0x40, MsgTypeShardManifest)
      7     1  Flags            bit0 GroupsValid, bit1 Authoritative,
-                               bit2 Shutdown, bits3..7 reserved (=0)
+                               bit2 Shutdown, bit3 SourceModeSSM,
+                               bit4 SourcesValid, bit5 PilotOnly,
+                               bits6..7 reserved (=0)
      8    16  SrcIPv6          announcer's primary IPv6 (informational)
     24     4  InstanceID       CRC32c of hostname (stable across restarts)
     28     4  Epoch            Unix seconds when announcement was generated
@@ -43,26 +45,38 @@ Offset  Size  Field
     38     2  GroupCount       N: number of groupIndex entries in list form
                                (0 if Flags.GroupsValid=0 or bitmap form)
     40     2  BitmapBytes      M: length of trailing bitmap; 0 ⇒ list form
-    42     2  Reserved         MUST be 0
+    42     2  SourceCount      K: number of 16-byte source-IPv6 entries
+                               appended after the groups payload. 0 when
+                               Flags.SourcesValid=0. MUST be 0 in v1.0
+                               implementations that pre-date this field
+                               (formerly Reserved).
     44     4  ManifestCRC      CRC32c (Castagnoli) over bytes [0..44) ‖
                                bytes [48..end), i.e. the entire datagram
                                with the CRC field itself zeroed
     48    16  GenerationID     operator-supplied 128-bit value; bumped
                                whenever ShardBits changes
-    64     ?  Payload          either N×2 bytes of big-endian groupIndex
-                               (sorted ascending, no duplicates), or
-                               exactly M bytes of bitmap (LSB-first, bit i
-                               = group index i)
+    64     ?  Payload          groups payload followed by sources payload:
+                               • groups: N×2 bytes of big-endian groupIndex
+                                 (sorted ascending, no duplicates), or
+                                 exactly M bytes of bitmap (LSB-first, bit i
+                                 = group index i), or empty
+                                 (Flags.GroupsValid=0).
+                               • sources: K × 16 bytes of source IPv6
+                                 (network byte order). Present iff
+                                 Flags.SourcesValid=1.
 ```
 
-Total datagram size = `64 + max(N×2, M)`. Implementations SHOULD keep total
-size ≤ 1232 B to avoid IPv6 fragmentation on typical paths. With
+Total datagram size = `64 + max(N×2, M) + K × 16`. Implementations SHOULD
+keep total size ≤ 1232 B to avoid IPv6 fragmentation on typical paths. With
 `ShardBits=12` (4096 groups) the bitmap form is exactly 512 B; the list
-form is 2 B per joined group.
+form is 2 B per joined group; each source entry adds 16 B. Operators with
+large source lists SHOULD spread the list across multiple announcers (each
+publisher advertising its own source as the lone entry) so individual
+datagrams stay within the recommended MTU.
 
 ### Encoding-form rules
 
-| `Flags.GroupsValid` | `BitmapBytes` | `GroupCount` | Form                           |
+| `Flags.GroupsValid` | `BitmapBytes` | `GroupCount` | Groups payload form            |
 | ------------------- | ------------- | ------------ | ------------------------------ |
 | `0`                 | `0`           | `0`          | identity-only (no group claim) |
 | `1`                 | `> 0`         | `0`          | bitmap, exactly `BitmapBytes` bytes; bit positions 0..(BitmapBytes×8)-1 |
@@ -75,13 +89,38 @@ also malformed.
 
 For bitmap form the bitmap MUST cover only valid shard indices (0..2^ShardBits − 1). Bits at positions ≥ 2^ShardBits MUST be zero and MUST be ignored by consumers.
 
+### Sources payload (when `Flags.SourcesValid=1`)
+
+When `Flags.SourcesValid=1` the datagram appends exactly `SourceCount × 16`
+bytes immediately after the groups payload. Each 16-byte entry is a
+publisher source IPv6 in network byte order, contributed by this announcer.
+Consumers MUST:
+
+- Reject the datagram when `Flags.SourcesValid=1 && SourceCount=0`.
+- Reject the datagram when `Flags.SourcesValid=0 && SourceCount>0`.
+- Treat entries as set-valued (order not significant) and tolerate
+  duplicates by deduplicating across the union of all currently-valid
+  manifests.
+- When `SourceModeSSM=1`, feed the union into the SSM `(S,G)` join calls
+  for data-plane groups derived from announced parameters.
+
+Sender guidance: each shard-proxy SHOULD announce its own `bindSource`
+(typically a single entry) rather than the operator-curated full fleet
+list, so per-datagram size stays small and source-set churn naturally
+follows publisher lifecycle.
+
 ### Flags
 
-| Bit | Name          | Meaning                                                                      |
-| --- | ------------- | ---------------------------------------------------------------------------- |
-| 0   | GroupsValid   | Set when the trailing payload carries a valid joined-groups encoding.        |
-| 1   | Authoritative | Operator-curated authoritative announcer (e.g. orchestrator); see Safety.    |
-| 2   | Shutdown      | Final announcement before graceful shutdown; consumers MAY evict immediately. |
+| Bit | Name           | Meaning                                                                                                                                                                                                                                            |
+| --- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | GroupsValid    | Set when the trailing payload carries a valid joined-groups encoding.                                                                                                                                                                              |
+| 1   | Authoritative  | Operator-curated authoritative announcer (e.g. orchestrator); see Safety.                                                                                                                                                                          |
+| 2   | Shutdown       | Final announcement before graceful shutdown; consumers MAY evict immediately.                                                                                                                                                                      |
+| 3   | SourceModeSSM  | Announcer declares the data plane uses Source-Specific Multicast (FF3x::/32 per RFC 4607). Auto-configuration consumers (see Consumer Behaviour) MUST use the SSM prefix when computing data-plane group addresses derived from this manifest. The beacon group itself remains ASM regardless. |
+| 4   | SourcesValid   | The trailing payload includes `SourceCount × 16` bytes of publisher source IPv6 addresses after the groups payload. Consumers union the source set across all currently-valid manifests they hold. MUST be 0 when `SourceCount=0`.                  |
+| 5   | PilotOnly      | This manifest is exclusively a pilot/assignment broadcast: the announcer is not itself joined to the announced groups and the groups payload describes desired fleet state, not its own joins. Implies `Authoritative=1`; consumers MUST reject `PilotOnly=1 && Authoritative=0` as malformed. |
+
+Bits 6..7 are reserved and MUST be 0.
 
 ### RoleHint
 
@@ -176,9 +215,9 @@ On `SIGTERM` the daemon emits one final manifest with `Flags.Shutdown=1` before 
 
 ---
 
-## Consumer Behaviour (informative)
+## Consumer Behaviour — Observation (informative)
 
-A future BRC-137 consumer MAY join the beacon group(s) of interest and:
+A BRC-137 consumer MAY join the beacon group(s) of interest and:
 
 1. Dispatch incoming datagrams on `buf[6]`. `0x40` ⇒ ShardManifest; pass to manifest decoder. Other MsgTypes ⇒ existing handlers (e.g. `0x20` BRC-126 ADVERT).
 2. Verify `ManifestCRC`. Reject on mismatch.
@@ -186,22 +225,103 @@ A future BRC-137 consumer MAY join the beacon group(s) of interest and:
 4. Evict on `Epoch + TTL` (or `Epoch + 3 × AnnounceInterval` when TTL=0).
 5. Surface metrics: per-peer ShardBits, joined-group count, last-seen, ShardBits divergence (count of distinct values currently observed).
 
-This BRC does not mandate a consumer implementation in v1. Operators MAY scrape manifests with packet capture tools for visibility.
+Operators MAY also scrape manifests with packet capture tools for
+visibility-only deployments.
+
+## Consumer Behaviour — Auto-configuration (normative when opted in)
+
+A consumer that opts in to automatic configuration (e.g. a `shard-proxy`
+or `shard-listener` with `-manifest-consumer-enabled=true`) MUST implement
+the observation requirements above and, additionally, MUST satisfy the
+rules in this section. Components that do not opt in are unaffected.
+
+### Adoption gating
+
+1. **Authoritative-only adoption.** Manifests with `Flags.Authoritative=0`
+   MUST NOT contribute to any adopted value. They MAY still be indexed for
+   visibility and MAY contribute to `Flags.SourcesValid` payload unions
+   (per (3) below).
+2. **Quorum.** A candidate value for a field is eligible for adoption only
+   when reported by at least `pilot-quorum` distinct authoritative
+   announcers (keyed on `(SrcIPv6, InstanceID)`) within their TTL window.
+   Implementations MUST expose `pilot-quorum` as configuration; default
+   `2`. `pilot-quorum=1` MAY be supported but the consumer MUST log a
+   warning at startup.
+3. **Hysteresis.** A candidate value that satisfies quorum MUST hold
+   quorum continuously for `≥ 2 × AnnounceInterval` (taken from any one
+   contributing manifest) before adoption. A change in adopted value
+   resets the hysteresis timer.
+4. **`ShardBits` shift bound.** A consumer MUST NOT adopt a `ShardBits`
+   value that differs from the currently adopted value by more than ±1
+   within any rolling `AnnounceInterval` window. This caps the rate at
+   which the addressable space can be doubled or halved during an
+   automated shift.
+5. **Manual pin precedence.** When the local operator has pinned a value
+   via CLI/env, that value is the local authority and MUST NOT be
+   overridden by adoption. The consumer MUST still evaluate quorum and
+   MUST emit divergence telemetry when the adopted candidate differs from
+   the pin.
+
+Fields subject to adoption: `ShardBits`, `Flags.SourceModeSSM`, and the
+union of `Flags.SourcesValid` payloads. `MCGroupID` is not carried in the
+payload; consumers MUST derive it from the destination address of the
+beacon socket they received the manifest on.
+
+### Source set (`Flags.SourcesValid` payloads)
+
+The source set is not gated by authoritative quorum: it is the deduplicated
+union of every currently-valid manifest's sources payload, irrespective of
+`Flags.Authoritative`. This lets each publisher contribute its own
+`bindSource` via its own sidecar manifest without operator-curated
+authority. Consumers SHOULD rate-limit additions and removals when feeding
+the set into kernel join calls (`MCAST_JOIN_SOURCE_GROUP` /
+`MCAST_LEAVE_SOURCE_GROUP`) to avoid thrashing the multicast forwarding
+information base.
+
+### Divergence telemetry
+
+The consumer MUST emit, at minimum:
+
+- `multicast_manifest_divergence_total{field=...,kind=peer-disagree|pin-disagree|crc-fail}` —
+  counter.
+- `multicast_manifest_last_divergence_epoch{field=...}` — gauge of the
+  most recent Unix-seconds disagreement timestamp.
+- `multicast_manifest_pilots_known` — gauge of distinct authoritative
+  announcers currently within TTL.
+- `multicast_manifest_quorum_met{field=...}` — gauge `1`/`0`.
+
+Implementations MUST NOT label any metric with raw source IPv6 addresses;
+cardinality MUST be bounded by role, group-role, or fleet bucket.
+
+### State transitions
+
+A consumer MUST NOT silently drop traffic when an adopted value changes.
+Components SHOULD signal `ShardBits` or `SourceModeSSM` changes by
+flipping their readiness probe and draining in-flight datagrams within the
+configured drain window before reloading, so the orchestrator can roll the
+pod predictably. Incremental changes — adding or removing entries from
+`Flags.GroupsValid` payloads (when consumed as join hints) or from the
+source set — MAY be applied in place without restart.
 
 ---
 
-## Safety Guidance (non-normative)
+## Safety Guidance
 
-This BRC v1 does not enforce shift limits. Operators and future automation SHOULD:
+The Consumer Behaviour — Auto-configuration section above promotes the
+hysteresis, quorum, and ±1 `ShardBits` shift bound to normative
+requirements for opted-in consumers. The following remain operator-side
+guidance:
 
 1. Bump `GenerationID` whenever `ShardBits` changes.
-2. Avoid changing `ShardBits` by more than ±1 within any rolling window (RECOMMENDED: 1 hour).
-3. Apply hysteresis: hold a candidate `ShardBits` value for ≥ `2 × AnnounceInterval` before adopting.
-4. Require a quorum of authoritative manifests (`Flags.Authoritative=1`) before automated consumers act on a value.
-5. Keep authoritative announcers to a small operator-curated set; treat non-authoritative manifests as observational.
-6. Warn (do not auto-shift) on observed `ShardBits` divergence.
-
-A future revision MAY promote these to normative requirements with explicit rejection rules.
+2. Keep authoritative announcers to a small operator-curated set
+   (recommended: 3 instances across failure domains).
+3. Deploy authoritative announcers with `Flags.PilotOnly=1` so consumers
+   can distinguish operator intent from the announcer's own joins.
+4. Treat non-authoritative manifests as observational (and, when
+   `Flags.SourcesValid=1`, as per-publisher source contributions).
+5. Warn (do not auto-shift) on observed `ShardBits` divergence — the
+   adoption gates already prevent unsafe shifts, but operator visibility
+   is the right place to catch misconfiguration.
 
 ---
 
@@ -231,3 +351,5 @@ A future revision MAY promote these to normative requirements with explicit reje
 - [BRC-127: Subtree Group Announcement](brc-127-subtree-announce.md)
 - [BRC-129: Multicast Group Addressing](brc-129-multicast-addressing.md)
 - [BRC-137: Shard Manifest Announcement (canonical)](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0137.md)
+- [Proxy/Listener Automatic Shard Configuration Plan](AutoShardConfig/auto-shard-config-plan.md)
+- [Source-Specific Multicast Support Plan](SourceSpecificMulticast/ssm-support-plan.md)

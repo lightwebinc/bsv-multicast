@@ -78,6 +78,15 @@ and anchor transactions over reserved control groups.
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
 
+### Active Proposals
+
+- [Automatic Shard Configuration Plan](docs/AutoShardConfig/auto-shard-config-plan.md) —
+  opt-in manifest-driven `ShardBits` / `MCGroupID` adoption with quorum +
+  hysteresis gating (BRC-137 consumer profile)
+- [Source-Specific Multicast Support Plan](docs/SourceSpecificMulticast/ssm-support-plan.md) —
+  opt-in `sourceMode: ssm` switch, `FF3X::/32` addressing, branched
+  `MCAST_JOIN_SOURCE_GROUP` syscalls, beacon/manifest source discovery
+
 ## License
 
 See [LICENSE](LICENSE).

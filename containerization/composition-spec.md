@@ -35,12 +35,9 @@ All charts must agree on these values. Capture them once in your composition lay
 ```yaml
 # helmfile.yaml
 repositories:
-  - name: bsp    # shard-proxy
-    url: https://lightwebinc.github.io/shard-proxy-helm
-  - name: bsl
-    url: https://lightwebinc.github.io/shard-listener-helm
-  - name: bre
-    url: https://lightwebinc.github.io/retry-endpoint-helm
+  - name: bsv-mcast
+    url: oci://ghcr.io/lightwebinc/charts
+    oci: true
 
 environments:
   production:
@@ -50,7 +47,7 @@ environments:
 releases:
   - name: proxy
     namespace: bsv-mcast
-    chart: bsp/shard-proxy
+    chart: oci://ghcr.io/lightwebinc/charts/shard-proxy
     values:
       - config:
           multicastIf: {{ .Values.fabricIface }}
@@ -62,7 +59,7 @@ releases:
 
   - name: listener
     namespace: bsv-mcast
-    chart: bsl/shard-listener
+    chart: oci://ghcr.io/lightwebinc/charts/shard-listener
     values:
       - config:
           multicastIf: {{ .Values.fabricIface }}
@@ -76,7 +73,7 @@ releases:
 
   - name: retry-node-1
     namespace: bsv-mcast
-    chart: bre/retry-endpoint
+    chart: oci://ghcr.io/lightwebinc/charts/retry-endpoint
     values:
       - config:
           mcIface: {{ .Values.fabricIface }}
@@ -91,7 +88,7 @@ releases:
 
   - name: retry-node-2
     namespace: bsv-mcast
-    chart: bre/retry-endpoint
+    chart: oci://ghcr.io/lightwebinc/charts/retry-endpoint
     values:
       - config:
           nackAddr: {{ .Values.retry2FabricAddr }}
@@ -102,7 +99,7 @@ releases:
 
   - name: retry-node-3
     namespace: bsv-mcast
-    chart: bre/retry-endpoint
+    chart: oci://ghcr.io/lightwebinc/charts/retry-endpoint
     values:
       - config:
           nackAddr: {{ .Values.retry3FabricAddr }}
@@ -152,7 +149,7 @@ spec:
       name: 'bsl-{{node}}'
     spec:
       source:
-        repoURL: https://lightwebinc.github.io/shard-listener-helm
+        repoURL: ghcr.io/lightwebinc/charts
         chart: shard-listener
         targetRevision: "0.1.0"
         helm:
@@ -180,7 +177,7 @@ spec:
 ```hcl
 resource "helm_release" "proxy" {
   name       = "proxy"
-  repository = "https://lightwebinc.github.io/shard-proxy-helm"
+  repository = "oci://ghcr.io/lightwebinc/charts"
   chart      = "shard-proxy"
   version    = "0.1.0"
   namespace  = "bsv-mcast"
@@ -206,7 +203,7 @@ resource "helm_release" "proxy" {
 resource "helm_release" "retry" {
   for_each = var.retry_nodes     # map of {name, addr, tier, pref}
   name       = "retry-${each.key}"
-  repository = "https://lightwebinc.github.io/retry-endpoint-helm"
+  repository = "oci://ghcr.io/lightwebinc/charts"
   chart      = "retry-endpoint"
   version    = "0.1.0"
   namespace  = "bsv-mcast"

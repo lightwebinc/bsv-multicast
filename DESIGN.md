@@ -38,6 +38,7 @@ Craig S. Wright in
 - [Coinbase Transaction Frame Format (BRC-133)](#coinbase-transaction-frame-format-brc-133)
 - [Anchor Transaction Frame Format (BRC-134)](#anchor-transaction-frame-format-brc-134)
 - [Block Header Format (BRC-135)](#block-header-format-brc-135)
+- [Shard Manifest Announcement (BRC-137)](#shard-manifest-announcement-brc-137)
 - [Testing and Validation](#testing-and-validation)
 - [Deployment Considerations](#deployment-considerations)
 
@@ -1007,6 +1008,27 @@ strategy
 
 ---
 
+## Shard Manifest Announcement (BRC-137)
+
+BRC-137 defines a periodic announcement datagram (MsgType `0x40`, a 64-byte
+header plus variable payload) that each participant emits to the beacon group
+(`FF0X::B:FFFD`, `GroupBeacon`/`0xFFFD`). It carries the announcer's
+`ShardBits`, joined-group set (list or bitmap form), `GenerationID`, and role
+hint. BRC-137 datagrams do not carry a BRC-124 frame header, are not
+proxy-stamped, are not retransmitted, and are never ACKed.
+
+The `shard-manifest` daemon is the canonical announcer; any participant
+(proxy, listener, retry-endpoint, producer) MAY also self-announce its own
+configuration. Consumers detect cross-peer divergence and, when opted in via
+the [auto-shard-config](docs/AutoShardConfig/auto-shard-config-plan.md) plan,
+adopt `Authoritative=1` values after a quorum + hysteresis gate.
+
+**→ [BRC-137 Shard Manifest Announcement](docs/brc-137-shard-manifest.md)** —
+wire format, flags, encoding-form rules, beacon-group routing, observer and
+auto-config consumer profiles
+
+---
+
 ## Testing and Validation
 
 ### subtx-generator
@@ -1241,6 +1263,9 @@ processing, flush OTLP exporter.
   — anchor frame wire format, FrameVerV6, proxy/listener/retry-endpoint changes
 - [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) —
   standalone block header split, FrameVerV7, emitter-originated sequencing
+- [BRC-137 Shard Manifest Announcement](docs/brc-137-shard-manifest.md) —
+  periodic participant configuration announcement (shard_bits, joined groups,
+  GenerationID); beacon-group distribution
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams, escalation state machine, flood prevention
 
