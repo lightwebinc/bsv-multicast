@@ -31,7 +31,7 @@ Offset  Size  Field
      7     1  Flags            bit0 GroupsValid, bit1 Authoritative,
                                bit2 Shutdown, bit3 SourceModeSSM,
                                bit4 SourcesValid, bit5 PilotOnly,
-                               bits6..7 reserved (=0)
+                               bit6 SuccessorValid, bit7 reserved (=0)
      8    16  SrcIPv6          announcer's primary IPv6 (informational)
     24     4  InstanceID       CRC32c of hostname (stable across restarts)
     28     4  Epoch            Unix seconds when announcement was generated
@@ -55,7 +55,8 @@ Offset  Size  Field
                                with the CRC field itself zeroed
     48    16  GenerationID     operator-supplied 128-bit value; bumped
                                whenever ShardBits changes
-    64     ?  Payload          groups payload followed by sources payload:
+    64     ?  Payload          groups, sources, and successor sections in
+                               order:
                                • groups: N×2 bytes of big-endian groupIndex
                                  (sorted ascending, no duplicates), or
                                  exactly M bytes of bitmap (LSB-first, bit i
@@ -64,12 +65,17 @@ Offset  Size  Field
                                • sources: K × 16 bytes of source IPv6
                                  (network byte order). Present iff
                                  Flags.SourcesValid=1.
+                               • successor: 24 bytes describing a pending
+                                 generation transition. Present iff
+                                 Flags.SuccessorValid=1. See Successor
+                                 block.
 ```
 
-Total datagram size = `64 + max(N×2, M) + K × 16`. Implementations SHOULD
-keep total size ≤ 1232 B to avoid IPv6 fragmentation on typical paths. With
-`ShardBits=12` (4096 groups) the bitmap form is exactly 512 B; the list
-form is 2 B per joined group; each source entry adds 16 B. Operators with
+Total datagram size = `64 + max(N×2, M) + K × 16 + (24 if SuccessorValid
+else 0)`. Implementations SHOULD keep total size ≤ 1232 B to avoid IPv6
+fragmentation on typical paths. With `ShardBits=12` (4096 groups) the
+bitmap form is exactly 512 B; the list form is 2 B per joined group; each
+source entry adds 16 B; the successor block adds 24 B. Operators with
 large source lists SHOULD spread the list across multiple announcers (each
 publisher advertising its own source as the lone entry) so individual
 datagrams stay within the recommended MTU.
@@ -109,18 +115,80 @@ Sender guidance: each shard-proxy SHOULD announce its own `bindSource`
 list, so per-datagram size stays small and source-set churn naturally
 follows publisher lifecycle.
 
+### Successor block (when `Flags.SuccessorValid=1`)
+
+The Successor block signals an in-flight generation transition: the
+announcer is committing to a future `ShardBits` (and optionally
+`SourceModeSSM`) value that becomes the sole active generation at
+`TransitionEpoch`. The block enables live re-sharding consumers (see
+the [Automatic Shard Configuration Plan](AutoShardConfig/auto-shard-config-plan.md))
+to enter a bridging window before cutover; consumers that do not
+implement live re-sharding MUST still parse and account for the
+divergence but otherwise behave as for any other future `GenerationID`
+change.
+
+When `Flags.SuccessorValid=1` the datagram appends exactly 24 bytes
+immediately after the sources payload:
+
+```text
+Offset (within block)  Size  Field
+---------------------  ----  -----
+                    0    16  SuccessorGenerationID  the incoming generation's 128-bit ID
+                   16     1  SuccessorShardBits     1..15; MUST satisfy |Successor - ShardBits| ≤ 1
+                   17     1  SuccessorFlags         bit0 SuccessorSourceModeSSM,
+                                                    bits1..7 reserved (=0)
+                   18     2  Reserved               MUST be 0
+                   20     4  TransitionEpoch        Unix seconds at which the successor becomes
+                                                    the sole active generation
+```
+
+Consumer rules (normative when auto-configuration is enabled):
+
+- Reject the datagram when
+  `|SuccessorShardBits − ShardBits| > 1`.
+- Reject the datagram when `Flags.SuccessorValid=1 && Flags.Authoritative=0`
+  (live re-sharding signals require operator authority).
+- Apply the existing adoption gates (quorum, hysteresis) to the
+  Successor block as a unit (the tuple
+  `(SuccessorGenerationID, SuccessorShardBits, SuccessorFlags, TransitionEpoch)`
+  is the candidate value).
+- Consumers that implement live re-sharding (an opt-in, deployment-side
+  policy) MAY enter a bridging window between the moment the Successor
+  block first satisfies quorum and `local_clock ≥ TransitionEpoch`. The
+  bridging-mode semantics (dual-emission for senders, union-join for
+  receivers) are specified in the
+  [Automatic Shard Configuration Plan](AutoShardConfig/auto-shard-config-plan.md).
+- Consumers that do not implement live re-sharding MUST treat
+  Successor-block adoption as a divergence event and otherwise wait for
+  the pilot to roll `GenerationID` (i.e. drop the Successor block and
+  promote it to the active generation) before reacting on the new
+  value. Pilots MUST honour this by rolling `GenerationID` to the
+  former `SuccessorGenerationID` at or after `TransitionEpoch`.
+
+Pilot guidance:
+
+- Choose `TransitionEpoch ≥ now + 2 × AnnounceInterval`; pilots MUST
+  reject configurations below that floor.
+- Recommended `TransitionEpoch ≥ now + 4 × AnnounceInterval` so the
+  last-to-receive consumer has at least `2 × AnnounceInterval` of
+  bridging.
+- Clock skew between pilot and consumers MUST stay below
+  `AnnounceInterval / 2`; operators SHOULD run NTP and the consumer
+  SHOULD expose observed skew via metrics.
+
 ### Flags
 
-| Bit | Name           | Meaning                                                                                                                                                                                                                                            |
-| --- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0   | GroupsValid    | Set when the trailing payload carries a valid joined-groups encoding.                                                                                                                                                                              |
-| 1   | Authoritative  | Operator-curated authoritative announcer (e.g. orchestrator); see Safety.                                                                                                                                                                          |
-| 2   | Shutdown       | Final announcement before graceful shutdown; consumers MAY evict immediately.                                                                                                                                                                      |
-| 3   | SourceModeSSM  | Announcer declares the data plane uses Source-Specific Multicast (FF3x::/32 per RFC 4607). Auto-configuration consumers (see Consumer Behaviour) MUST use the SSM prefix when computing data-plane group addresses derived from this manifest. The beacon group itself remains ASM regardless. |
-| 4   | SourcesValid   | The trailing payload includes `SourceCount × 16` bytes of publisher source IPv6 addresses after the groups payload. Consumers union the source set across all currently-valid manifests they hold. MUST be 0 when `SourceCount=0`.                  |
-| 5   | PilotOnly      | This manifest is exclusively a pilot/assignment broadcast: the announcer is not itself joined to the announced groups and the groups payload describes desired fleet state, not its own joins. Implies `Authoritative=1`; consumers MUST reject `PilotOnly=1 && Authoritative=0` as malformed. |
+| Bit | Name           | Meaning                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0   | GroupsValid    | Set when the trailing payload carries a valid joined-groups encoding.                                                                                                                                                                                                                                                                                                                                              |
+| 1   | Authoritative  | Operator-curated authoritative announcer (e.g. orchestrator); see Safety.                                                                                                                                                                                                                                                                                                                                          |
+| 2   | Shutdown       | Final announcement before graceful shutdown; consumers MAY evict immediately.                                                                                                                                                                                                                                                                                                                                      |
+| 3   | SourceModeSSM  | Announcer declares the data plane uses Source-Specific Multicast (FF3x::/32 per RFC 4607). Auto-configuration consumers MUST use the SSM prefix when computing data-plane group addresses derived from this manifest. Whether the beacon group itself is joined via ASM or SSM is a deployment-posture choice (see the [SSM support plan](SourceSpecificMulticast/ssm-support-plan.md)), not a BRC-137 invariant.  |
+| 4   | SourcesValid   | The trailing payload includes `SourceCount × 16` bytes of publisher source IPv6 addresses after the groups payload. Consumers union the source set across all currently-valid manifests they hold. MUST be 0 when `SourceCount=0`.                                                                                                                                                                                |
+| 5   | PilotOnly      | This manifest is exclusively a pilot/assignment broadcast: the announcer is not itself joined to the announced groups and the groups payload describes desired fleet state, not its own joins. Implies `Authoritative=1`; consumers MUST reject `PilotOnly=1 && Authoritative=0` as malformed.                                                                                                                     |
+| 6   | SuccessorValid | The trailing payload includes a 24-byte Successor block (see "Successor block") describing an in-flight generation transition. Requires `Authoritative=1`; consumers MUST reject `SuccessorValid=1 && Authoritative=0` as malformed. The Successor block's `ShardBits` MUST be within ±1 of the announcer's current `ShardBits` per the existing safety guidance.                                                 |
 
-Bits 6..7 are reserved and MUST be 0.
+Bit 7 is reserved and MUST be 0.
 
 ### RoleHint
 
