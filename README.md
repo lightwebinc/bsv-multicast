@@ -78,14 +78,19 @@ and anchor transactions over reserved control groups.
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
 
-### Active Proposals
+### Implemented Opt-In Features
+
+Both shipped across the fleet; ASM / manual configuration remain the defaults.
+The plan documents below are the canonical design references.
 
 - [Automatic Shard Configuration Plan](docs/AutoShardConfig/auto-shard-config-plan.md) —
-  opt-in manifest-driven `ShardBits` / `MCGroupID` adoption with quorum +
-  hysteresis gating (BRC-137 consumer profile)
+  **implemented (Phase 1+2)**: opt-in manifest-driven `ShardBits` / `MCGroupID` /
+  `SourceMode` adoption with quorum + hysteresis gating (BRC-137 consumer
+  profile), plus a Successor block for live re-sharding
 - [Source-Specific Multicast Support Plan](docs/SourceSpecificMulticast/ssm-support-plan.md) —
-  opt-in `sourceMode: ssm` switch, `FF3X::/32` addressing, branched
-  `MCAST_JOIN_SOURCE_GROUP` syscalls, beacon/manifest source discovery
+  **implemented (opt-in)**: `sourceMode: ssm` switch, `FF3X::/32` addressing,
+  branched `MCAST_JOIN_SOURCE_GROUP` syscalls, beacon/manifest source
+  discovery (full intra-domain Posture C still requires a PIM-SSM fabric)
 
 ## License
 

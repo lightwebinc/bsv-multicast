@@ -1,6 +1,8 @@
 # Source-Specific Multicast (SSM) Support Plan
 
-- Status: Proposal (partially specified — see below)
+- Status: **Implemented (opt-in)** across `shard-common` (v0.11.0+) and every
+  consumer repo; full intra-domain Posture C (SSM-everywhere) still requires a
+  PIM-SSM fabric. Required BRC amendments remain open — see below.
 - Scope: All multicast-aware components and infra
 - Default behavior unchanged: ASM remains the default; SSM is opt-in.
 
