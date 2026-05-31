@@ -1,10 +1,18 @@
 # Proxy/Listener Automatic Shard Configuration Plan
 
-- Status: Proposal (revised)
+- Status: **Implemented** (Phase 1 + Phase 2; live-resharding bridging mode is the proxy-side dual-emit path)
 - Scope: `shard-proxy`, `shard-listener` (consumer-side implementation); small
   follow-up to `shard-manifest`.
 - Default behavior unchanged: manual CLI configuration remains the default;
   auto-config is opt-in per component.
+- Implementation landed across `shard-common`
+  (`frame.SuccessorBlock` + `manifest` consumer package), `shard-manifest`
+  (`-pilot-only` + `-successor-*` flags), `shard-listener` (beacon
+  demux + manifest applier + runtime `AddGroup`/`RemoveGroup` on the
+  worker), `shard-proxy` (dedicated beacon socket + restart-on-adopt +
+  optional `forwarder.BridgingEngine` for dual-emit), and
+  `multicast-test` (scenarios 70-71). 50+ unit tests plus loopback
+  integration tests confirm the wire-level pipeline.
 - Compatible with both ASM and SSM, and with all four
   [deployment postures](../SourceSpecificMulticast/ssm-support-plan.md#deployment-postures)
   (A: legacy ASM, B: data-plane SSM, C: SSM-everywhere intra-domain, D: SSM
