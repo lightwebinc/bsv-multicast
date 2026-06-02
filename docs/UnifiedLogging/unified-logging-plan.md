@@ -161,7 +161,7 @@ or genericize it:
   requested/actual (the kernel silently clamps to `net.core.rmem_max`).
 - `netjoin.Join` failure, especially `ENOBUFS` from exceeding `mld_max_msf`
   source filters (SSM) → Error with `group`, source count, `errno`. This is the
-  exact failure mode `conventions.md`/the SSM plan warns about; today it is a
+  exact failure mode `conventions.md`/the SSM design warns about; today it is a
   generic `auto-join AddGroup failed`.
 
 These are cheap (error paths, not the success hot path) and turn opaque drops
