@@ -121,7 +121,7 @@ The Successor block signals an in-flight generation transition: the
 announcer is committing to a future `ShardBits` (and optionally
 `SourceModeSSM`) value that becomes the sole active generation at
 `TransitionEpoch`. The block enables live re-sharding consumers (see
-the [Automatic Shard Configuration Plan](AutoShardConfig/auto-shard-config-plan.md))
+the [Automatic Shard Configuration](../DESIGN.md#automatic-shard-configuration))
 to enter a bridging window before cutover; consumers that do not
 implement live re-sharding MUST still parse and account for the
 divergence but otherwise behave as for any other future `GenerationID`
@@ -157,7 +157,7 @@ Consumer rules (normative when auto-configuration is enabled):
   block first satisfies quorum and `local_clock ≥ TransitionEpoch`. The
   bridging-mode semantics (dual-emission for senders, union-join for
   receivers) are specified in the
-  [Automatic Shard Configuration Plan](AutoShardConfig/auto-shard-config-plan.md).
+  [Automatic Shard Configuration](../DESIGN.md#automatic-shard-configuration).
 - Consumers that do not implement live re-sharding MUST treat
   Successor-block adoption as a divergence event and otherwise wait for
   the pilot to roll `GenerationID` (i.e. drop the Successor block and
@@ -183,7 +183,7 @@ Pilot guidance:
 | 0   | GroupsValid    | Set when the trailing payload carries a valid joined-groups encoding.                                                                                                                                                                                                                                                                                                                                              |
 | 1   | Authoritative  | Operator-curated authoritative announcer (e.g. orchestrator); see Safety.                                                                                                                                                                                                                                                                                                                                          |
 | 2   | Shutdown       | Final announcement before graceful shutdown; consumers MAY evict immediately.                                                                                                                                                                                                                                                                                                                                      |
-| 3   | SourceModeSSM  | Announcer declares the data plane uses Source-Specific Multicast (FF3x::/32 per RFC 4607). Auto-configuration consumers MUST use the SSM prefix when computing data-plane group addresses derived from this manifest. Whether the beacon group itself is joined via ASM or SSM is a deployment-posture choice (see the [SSM support plan](SourceSpecificMulticast/ssm-support-plan.md)), not a BRC-137 invariant.  |
+| 3   | SourceModeSSM  | Announcer declares the data plane uses Source-Specific Multicast (FF3x::/32 per RFC 4607). Auto-configuration consumers MUST use the SSM prefix when computing data-plane group addresses derived from this manifest. Whether the beacon group itself is joined via ASM or SSM is a deployment-posture choice (see [Source-Specific Multicast](../DESIGN.md#source-specific-multicast-ssm)), not a BRC-137 invariant.  |
 | 4   | SourcesValid   | The trailing payload includes `SourceCount × 16` bytes of publisher source IPv6 addresses after the groups payload. Consumers union the source set across all currently-valid manifests they hold. MUST be 0 when `SourceCount=0`.                                                                                                                                                                                |
 | 5   | PilotOnly      | This manifest is exclusively a pilot/assignment broadcast: the announcer is not itself joined to the announced groups and the groups payload describes desired fleet state, not its own joins. Implies `Authoritative=1`; consumers MUST reject `PilotOnly=1 && Authoritative=0` as malformed.                                                                                                                     |
 | 6   | SuccessorValid | The trailing payload includes a 24-byte Successor block (see "Successor block") describing an in-flight generation transition. Requires `Authoritative=1`; consumers MUST reject `SuccessorValid=1 && Authoritative=0` as malformed. The Successor block's `ShardBits` MUST be within ±1 of the announcer's current `ShardBits` per the existing safety guidance.                                                 |
@@ -419,5 +419,5 @@ guidance:
 - [BRC-127: Subtree Group Announcement](brc-127-subtree-announce.md)
 - [BRC-129: Multicast Group Addressing](brc-129-multicast-addressing.md)
 - [BRC-137: Shard Manifest Announcement (canonical)](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0137.md)
-- [Proxy/Listener Automatic Shard Configuration Plan](AutoShardConfig/auto-shard-config-plan.md)
-- [Source-Specific Multicast Support Plan](SourceSpecificMulticast/ssm-support-plan.md)
+- [Automatic Shard Configuration](../DESIGN.md#automatic-shard-configuration)
+- [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm)

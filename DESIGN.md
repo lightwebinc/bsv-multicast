@@ -39,6 +39,8 @@ Craig S. Wright in
 - [Anchor Transaction Frame Format (BRC-134)](#anchor-transaction-frame-format-brc-134)
 - [Block Header Format (BRC-135)](#block-header-format-brc-135)
 - [Shard Manifest Announcement (BRC-137)](#shard-manifest-announcement-brc-137)
+- [Source-Specific Multicast (SSM)](#source-specific-multicast-ssm)
+- [Automatic Shard Configuration](#automatic-shard-configuration)
 - [Testing and Validation](#testing-and-validation)
 - [Deployment Considerations](#deployment-considerations)
 
@@ -126,8 +128,8 @@ responsibility:
 
 ### Core Services (Binaries)
 
-| Repository                                                                      | Purpose                                                                                     |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Repository                                                      | Purpose                                                                                     |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | [shard-proxy](https://github.com/lightwebinc/shard-proxy)       | Stateless ingress proxy; receives frames, derives multicast group, forwards verbatim        |
 | [shard-listener](https://github.com/lightwebinc/shard-listener) | Multicast subscriber; filters by shard/subtree, forwards to unicast and multicast consumers |
 | [retry-endpoint](https://github.com/lightwebinc/retry-endpoint) | Caches frames, retransmits on NACK requests                                                 |
@@ -135,43 +137,44 @@ responsibility:
 
 ### Shared Libraries
 
-| Repository                                                                  | Purpose                                    | Packages                                          |
-| --------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------- |
+| Repository                                                  | Purpose                                    | Packages                                           |
+| ----------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------- |
 | [shard-common](https://github.com/lightwebinc/shard-common) | Protocol primitives shared across services | `frame`, `shard`, `seqhash`, `sequence`, `txidset` |
 
 ### Infrastructure Automation
 
-| Repository                                                                      | Purpose                                         | Deploys                |
-| ------------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------- |
-| [ingress-infra](https://github.com/lightwebinc/ingress-infra)               | Ansible/Terraform for ingress proxy deployment  | shard-proxy    |
-| [listener-infra](https://github.com/lightwebinc/listener-infra)             | Ansible/Terraform for listener deployment       | shard-listener |
-| [retransmission-infra](https://github.com/lightwebinc/retransmission-infra) | Ansible/Terraform for retry endpoint deployment | retry-endpoint |
-| [manifest-infra](https://github.com/lightwebinc/manifest-infra)             | Ansible/Terraform for manifest deployment       | shard-manifest |
-| [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes deployment (k0s reference, EKS stub) | full stack via Helm    |
+| Repository                                                                  | Purpose                                         | Deploys             |
+| --------------------------------------------------------------------------- | ----------------------------------------------- | ------------------- |
+| [ingress-infra](https://github.com/lightwebinc/ingress-infra)               | Ansible/Terraform for ingress proxy deployment  | shard-proxy         |
+| [listener-infra](https://github.com/lightwebinc/listener-infra)             | Ansible/Terraform for listener deployment       | shard-listener      |
+| [retransmission-infra](https://github.com/lightwebinc/retransmission-infra) | Ansible/Terraform for retry endpoint deployment | retry-endpoint      |
+| [manifest-infra](https://github.com/lightwebinc/manifest-infra)             | Ansible/Terraform for manifest deployment       | shard-manifest      |
+| [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes deployment (k0s reference, EKS stub) | full stack via Helm |
 
 ### Helm Charts
 
-Each service has a dedicated chart repository, consumed by `multicast-kube-infra`:
+Each service has a dedicated chart repository, consumed by
+`multicast-kube-infra`:
 
-| Repository                                                                      | Chart            |
-| ------------------------------------------------------------------------------- | ---------------- |
-| [shard-proxy-helm](https://github.com/lightwebinc/shard-proxy-helm)             | shard-proxy      |
-| [shard-listener-helm](https://github.com/lightwebinc/shard-listener-helm)       | shard-listener   |
-| [retry-endpoint-helm](https://github.com/lightwebinc/retry-endpoint-helm)       | retry-endpoint   |
-| [subtx-generator-helm](https://github.com/lightwebinc/subtx-generator-helm)     | subtx-generator  |
-| [shard-manifest-helm](https://github.com/lightwebinc/shard-manifest-helm)       | shard-manifest   |
+| Repository                                                                  | Chart           |
+| --------------------------------------------------------------------------- | --------------- |
+| [shard-proxy-helm](https://github.com/lightwebinc/shard-proxy-helm)         | shard-proxy     |
+| [shard-listener-helm](https://github.com/lightwebinc/shard-listener-helm)   | shard-listener  |
+| [retry-endpoint-helm](https://github.com/lightwebinc/retry-endpoint-helm)   | retry-endpoint  |
+| [subtx-generator-helm](https://github.com/lightwebinc/subtx-generator-helm) | subtx-generator |
+| [shard-manifest-helm](https://github.com/lightwebinc/shard-manifest-helm)   | shard-manifest  |
 
 ### Testing and Tools
 
-| Repository                                                                        | Purpose                                                     |
-| --------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Traffic generator for load/functional testing               |
+| Repository                                                        | Purpose                                                                                        |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Traffic generator for load/functional testing                                                  |
 | [multicast-test](https://github.com/lightwebinc/multicast-test)   | Integration test harness: Go + Docker scenarios (`harness/`) and legacy LXD VM lab (`vm-lab/`) |
 
 ### Meta Repository
 
-| Repository                                                            | Purpose                                                    |
-| --------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Repository                                                    | Purpose                                                    |
+| ------------------------------------------------------------- | ---------------------------------------------------------- |
 | [bsv-multicast](https://github.com/lightwebinc/bsv-multicast) | This repository; project overview and design documentation |
 
 ---
@@ -415,12 +418,12 @@ BRC-124 frame to the normal filter → egress → gap-tracking pipeline.
 **BRC-132 (Subtree Data Frame Format):** BRC-132 defines Frame Version `0x05`
 for distributing complete subtree data payloads (transaction hashes and optional
 fee/size metadata) over the multicast fabric. Frames are delivered to the
-`GroupSubtreeAnnounce` group (`FF0X::B:FFFB`). Two message types are
-defined: `HashesOnly` (32 bytes/node) and `FullNodes` (48 bytes/node, includes
-fee and size). The 92-byte header is layout-identical to BRC-124. Payloads of
-32–48 MB (at 1M nodes) are always fragmented via BRC-130 (`OrigFrameVer=0x05`).
-Gap tracking and NACK retransmission work identically to BRC-124; the retry
-endpoint retransmits to `FF0X::B:FFFB` rather than a shard group.
+`GroupSubtreeAnnounce` group (`FF0X::B:FFFB`). Two message types are defined:
+`HashesOnly` (32 bytes/node) and `FullNodes` (48 bytes/node, includes fee and
+size). The 92-byte header is layout-identical to BRC-124. Payloads of 32–48 MB
+(at 1M nodes) are always fragmented via BRC-130 (`OrigFrameVer=0x05`). Gap
+tracking and NACK retransmission work identically to BRC-124; the retry endpoint
+retransmits to `FF0X::B:FFFB` rather than a shard group.
 
 **→ [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md)**
 
@@ -632,9 +635,8 @@ encode/decode, `EncodeFragment`/`DecodeFragment`/`IsFragment`,
 `seqhash` (XXH64 flow hash for HashKey), `sequence` (per-flow monotonic
 counters).
 
-**→
-[shard-common README](https://github.com/lightwebinc/shard-common)**
-— package API,
+**→ [shard-common README](https://github.com/lightwebinc/shard-common)** —
+package API,
 [protocol spec](https://github.com/lightwebinc/shard-common/blob/main/docs/protocol.md)
 
 ---
@@ -772,14 +774,14 @@ proposed
 
 **Include Mode:**
 
-```
+```text
 subtree-include = "abc123...,def456..."  (hex, 32-byte each)
 → Only frames with SubtreeID in this set pass
 ```
 
 **Exclude Mode:**
 
-```
+```text
 subtree-exclude = "abc123...,def456..."  (hex, 32-byte each)
 → Frames with SubtreeID in this set are dropped (overrides include)
 ```
@@ -840,9 +842,9 @@ BRC-127 defines the dynamic subtree group announcement protocol. Producers
 advertise which SubtreeIDs belong to which logical group by sending 64-byte
 `SubtreeAnnounce` datagrams (`MsgType 0x30`) to the proxy TCP ingress. The proxy
 forwards these verbatim to the control-plane multicast group
-(`GroupSubtreeGroupAnnounce = 0xFFFC`). Listeners join this group and
-populate a `subtreegroup.Registry`, automatically accepting frames from
-announced subtrees without static configuration.
+(`GroupSubtreeGroupAnnounce = 0xFFFC`). Listeners join this group and populate a
+`subtreegroup.Registry`, automatically accepting frames from announced subtrees
+without static configuration.
 
 Announcements must be re-sent before their TTL expires (recommended: interval
 10–30 s; TTL ≥ 3× interval). If announcements cease, entries expire and frames
@@ -867,9 +869,9 @@ block-level metadata to all fabric subscribers. Two message types are defined:
   The ContentID in the frame header is the SHA256d of the coinbase transaction.
 
 Both types share the 92-byte BRC-124 header layout and are delivered on the
-**GroupBlockBroadcast** group (`FF0E::B:FFFE`), ensuring global reach independent
-of shard assignment. Every subscriber receives every block announcement — there
-is no shard or subtree filtering for block frames.
+**GroupBlockBroadcast** group (`FF0E::B:FFFE`), ensuring global reach
+independent of shard assignment. Every subscriber receives every block
+announcement — there is no shard or subtree filtering for block frames.
 
 Sequence tracking and NACK-based retransmission work identically to BRC-124: the
 proxy stamps `HashKey` and `SeqNum` in-place, listeners track the control flow
@@ -905,8 +907,8 @@ Two message types are defined:
 - **FullNodes (`MsgType 0x02`)** — 48-byte entry per node (TxHash + Fee + Size),
   same prefix and conflict set.
 
-Both types are delivered on the **GroupSubtreeAnnounce** group
-(`FF0X::B:FFFB`). BRC-127 subtree group announcements use a separate group
+Both types are delivered on the **GroupSubtreeAnnounce** group (`FF0X::B:FFFB`).
+BRC-127 subtree group announcements use a separate group
 (`GroupSubtreeGroupAnnounce`, `FF0X::B:FFFC`).
 
 The 92-byte header is layout-identical to BRC-124. `HashKey` is computed as
@@ -935,8 +937,8 @@ reference
 BRC-133 formalizes the wire mechanism for distributing coinbase transactions as
 a dedicated message type (`BlockMsgCoinbase = 0x02`) within BRC-131 block
 control frames (FrameVer `0x04`). Coinbase transactions are delivered to all
-subscribers via the **GroupBlockBroadcast** group (`FF0E::B:FFFE`), independent of
-shard assignment.
+subscribers via the **GroupBlockBroadcast** group (`FF0E::B:FFFE`), independent
+of shard assignment.
 
 The 92-byte header is identical to the BRC-124 / BRC-131 layout. The ContentID
 field (bytes 8–39) carries the CoinbaseTxID (SHA256d of the coinbase
@@ -963,9 +965,9 @@ transactions over the multicast fabric. An _anchor transaction_ is the root
 transactions reference it as an input, every subscriber must receive it
 regardless of which shard its TxID would otherwise hash to.
 
-Anchor frames are delivered on the **GroupBlockBroadcast** group (`FF0E::B:FFFE`),
-the same global control channel used for BRC-131 block announcements and BRC-133
-coinbase transactions.
+Anchor frames are delivered on the **GroupBlockBroadcast** group
+(`FF0E::B:FFFE`), the same global control channel used for BRC-131 block
+announcements and BRC-133 coinbase transactions.
 
 The 92-byte header is layout-identical to BRC-124 with Frame Version `0x06` at
 offset 6. The TxID field (bytes 8–39) carries the SHA256d of the anchor
@@ -1017,15 +1019,111 @@ header plus variable payload) that each participant emits to the beacon group
 hint. BRC-137 datagrams do not carry a BRC-124 frame header, are not
 proxy-stamped, are not retransmitted, and are never ACKed.
 
-The `shard-manifest` daemon is the canonical announcer; any participant
-(proxy, listener, retry-endpoint, producer) MAY also self-announce its own
+The `shard-manifest` daemon is the canonical announcer; any participant (proxy,
+listener, retry-endpoint, producer) MAY also self-announce its own
 configuration. Consumers detect cross-peer divergence and, when opted in via
-the [auto-shard-config](docs/AutoShardConfig/auto-shard-config-plan.md) plan,
-adopt `Authoritative=1` values after a quorum + hysteresis gate.
+[Automatic Shard Configuration](#automatic-shard-configuration), adopt
+`Authoritative=1` values after a quorum + hysteresis gate.
 
 **→ [BRC-137 Shard Manifest Announcement](docs/brc-137-shard-manifest.md)** —
 wire format, flags, encoding-form rules, beacon-group routing, observer and
 auto-config consumer profiles
+
+---
+
+## Source-Specific Multicast (SSM)
+
+The fabric runs in either Any-Source Multicast (ASM, the default) or
+Source-Specific Multicast (SSM, opt-in via `multicast.sourceMode: ssm`). SSM is
+a deployment/transport mode only — frame format, NACK protocol, HashKey
+computation, and shard derivation are unchanged. When enabled, receivers join
+`(S,G)` instead of `(*,G)` and the fabric uses the RFC 4607 SSM address range.
+
+### Addressing
+
+The address space is selected by `(sourceMode, scope)`. RFC 8815 deprecates
+inter-domain ASM, so global scope is SSM-only.
+
+| Mode | Site scope (intra-domain) | Global scope (inter-domain) |
+| ---- | ------------------------- | --------------------------- |
+| ASM  | `FF05::B:idx`             | Not supported (RFC 8815)    |
+| SSM  | `FF35::B:idx`             | `FF3E::B:idx`               |
+
+`FF3x::/32` is the RFC 4607 IPv6 SSM range. Group-ID (`0x000B`) and the
+shard-index field are preserved; only the high 32 bits change. A single
+`engine.Addr(groupIdx, port, mode, scope)` helper centralizes derivation.
+
+### Key properties
+
+- **Distinct source IP per publisher** (`bindSource`, set on every emitter).
+  Required by PIM-SSM RPF and preserves the per-publisher HashKey flow
+  semantics. Anycast/shared-source deployments are not supported; for a single
+  stable identity use VRRP active-standby (failover, not load distribution).
+- **Source discovery.** Data-plane sources flow exclusively through
+  shard-manifest (BRC-137 `Flags.SourcesValid`); receivers set
+  `sources.consume: [manifest]`. Control groups (beacon, manifest,
+  subtree-announce) are joined against per-group bootstrap source lists
+  (`sources.bootstrap.*`, IPv6 literals or DNS names re-resolved on refresh).
+- **Receiver joins** use `MCAST_JOIN_SOURCE_GROUP` (RFC 3678) via a shared
+  `netjoin` helper that diffs and rate-limits join/leave churn.
+
+### Deployment postures
+
+Four self-consistent network + config states. **C is recommended for new
+intra-domain deployments; D for inter-domain.** AutoShardConfig works across all
+four.
+
+| Posture | Data plane | Control plane | Fabric                         | Inter-domain  |
+| ------- | ---------- | ------------- | ------------------------------ | ------------- |
+| A       | ASM        | ASM           | PIM-SM + RP                    | No (RFC 8815) |
+| B       | SSM        | ASM           | PIM-SM (RP) **and** PIM-SSM    | Data only     |
+| C       | SSM        | SSM           | PIM-SSM only (no RP/MSDP)      | Intra only    |
+| D       | SSM        | SSM, global   | PIM-SSM + inter-domain peering | Yes           |
+
+At the target scale (hundreds of publishers/listeners), SSM requires raising
+`net.ipv6.mld_max_msf`, deterministic per-pod IPv6 (Multus + Whereabouts),
+fabric mfib sizing, and join-rate limiting in `netjoin`.
+
+---
+
+## Automatic Shard Configuration
+
+shard-proxy and shard-listener can opt in to consuming BRC-137 manifests
+(`multicast.autoConfig.enabled=true`) and adopting the announced `ShardBits` /
+`SourceModeSSM` after a quorum + hysteresis gate. Manual CLI/env pins always
+win. It works identically under ASM and SSM and across all four deployment
+postures (the beacon-socket join is ASM under A/B, SSM under C/D). When disabled
+(the default), manual configuration is used and behavior is unchanged.
+
+A shared `shard-common/manifest/` package holds the registry, adoption gates,
+and source-set union; proxy and listener wrap it with their own apply semantics.
+shard-manifest is the sole authority — data-plane components are consumers only.
+
+### Adoption modes
+
+- **Restart (default, `liveResharding=false`).** A `ShardBits` / `SourceModeSSM`
+  change flips `/readyz`, drains, then exits non-zero; the orchestrator rolls
+  the pod, which restarts with the adopted value warm in the registry.
+- **Live re-sharding (opt-in, `liveResharding=true`).** A re-shard is a
+  generation transition signalled by a BRC-137 `Successor` block carrying the
+  incoming `ShardBits` (constrained to ±1) and a `TransitionEpoch`. During the
+  bridging window the proxy dual-emits each frame to both the current and
+  successor layouts and listeners union-join both; downstream TxID dedup absorbs
+  the duplicates. At `TransitionEpoch` the consumer atomically swaps to the
+  successor and leaves the now-unused groups — no restart, `/readyz` stays
+  green. Requires egress dedup sized to ≥ 2× the bridging window.
+
+### Listener auto-join
+
+With `autoJoinFromManifest=true`, a listener's effective subscription is
+`union(-shard-include, pilot_groups)`, where `pilot_groups` is the union of
+authoritative `Flags.GroupsValid` payloads. Static `-shard-include` entries are
+never leaved; pilot-added groups are leaved only when no pilot still claims
+them.
+
+**→ [BRC-137 Shard Manifest Announcement](docs/brc-137-shard-manifest.md)** —
+the normative wire format, adoption gates, and Successor-block layout this
+behavior implements.
 
 ---
 
@@ -1039,9 +1137,8 @@ auto-config consumer profiles
 optional gap injection (`-seq-gap-every`, `-seq-gap-delay`) for NACK/retransmit
 tests, multi-core token-bucket pacer.
 
-**→
-[subtx-generator README](https://github.com/lightwebinc/subtx-generator)**
-— usage examples, flags
+**→ [subtx-generator README](https://github.com/lightwebinc/subtx-generator)** —
+usage examples, flags
 
 ### shard-listener E2E Tests
 
@@ -1071,9 +1168,8 @@ make test-e2e
 
 **Purpose:** Full-stack integration testing across all components.
 
-The
-[multicast-test](https://github.com/lightwebinc/multicast-test)
-repository provides two parallel test frameworks:
+The [multicast-test](https://github.com/lightwebinc/multicast-test) repository
+provides two parallel test frameworks:
 
 1. **Go Docker harness (`harness/`)** — primary. 40 scenario tests driven by
    `go test`. Spawns ephemeral Docker containers on an isolated IPv6 multicast
@@ -1107,12 +1203,12 @@ bash scenarios/run-all.sh      # run full scenario suite
 
 ### Platform Support
 
-| OS                   | Service Manager | Network Config         | Proxy | Listener | Retry | Manifest |
-| -------------------- | --------------- | ---------------------- | ----- | -------- | ----- | -------- |
-| Ubuntu 24.04         | systemd         | Netplan / ip           | ✓     | ✓        | ✓     | ✓        |
-| FreeBSD 14           | rc.d            | rc.conf / ifconfig     | ✓     | ✓        | ✓     | ✓        |
-| AWS EC2              | systemd         | ENI + Terraform        | ✓     | ✓        | ✓     | ✓        |
-| Kubernetes (k0s ref) | kubelet         | Multus macvlan         | ✓     | ✓        | ✓     | ✓        |
+| OS                   | Service Manager | Network Config     | Proxy | Listener | Retry | Manifest |
+| -------------------- | --------------- | ------------------ | ----- | -------- | ----- | -------- |
+| Ubuntu 24.04         | systemd         | Netplan / ip       | ✓     | ✓        | ✓     | ✓        |
+| FreeBSD 14           | rc.d            | rc.conf / ifconfig | ✓     | ✓        | ✓     | ✓        |
+| AWS EC2              | systemd         | ENI + Terraform    | ✓     | ✓        | ✓     | ✓        |
+| Kubernetes (k0s ref) | kubelet         | Multus macvlan     | ✓     | ✓        | ✓     | ✓        |
 
 Kubernetes deployment is provided by
 [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra),
@@ -1210,8 +1306,8 @@ which composes the per-service Helm charts (`shard-proxy-helm`,
 
 All services expose Prometheus metrics on dedicated ports:
 
-| Service                | Metrics Port | Prefix |
-| ---------------------- | ------------ | ------ |
+| Service        | Metrics Port | Prefix |
+| -------------- | ------------ | ------ |
 | shard-proxy    | :9100        | bsp\_  |
 | shard-listener | :9200        | bsl\_  |
 | retry-endpoint | :9400        | bre\_  |
@@ -1292,12 +1388,12 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 
 ### Standards
 
-**BRC-12: Raw Transaction Format**
+#### BRC-12: Raw Transaction Format
 
 - The BRC-12 wire-frame format transports transactions conforming to BRC-12
 - [BSV Blockchain Standards Repository](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0012.md)
 
-**BRC-30: Extended Format (EF) Transaction**
+#### BRC-30: Extended Format (EF) Transaction
 
 - The payload format for BRC-128 frames
 - [BSV Blockchain Standards Repository](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0030.md)
@@ -1308,8 +1404,8 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 
 ### Default Ports
 
-| Service                             | Port         | Protocol | Purpose                                      |
-| ----------------------------------- | ------------ | -------- | -------------------------------------------- |
+| Service                     | Port         | Protocol | Purpose                                      |
+| --------------------------- | ------------ | -------- | -------------------------------------------- |
 | shard-proxy (UDP ingress)   | 9000         | UDP      | Frame ingress                                |
 | shard-proxy (TCP ingress)   | configurable | TCP      | Reliable frame ingress (disabled by default) |
 | shard-proxy (egress)        | 9001         | UDP      | Multicast egress                             |
@@ -1321,16 +1417,16 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 
 ### Metrics Ports
 
-| Service                | Port | Endpoint                          |
-| ---------------------- | ---- | --------------------------------- |
+| Service        | Port | Endpoint                          |
+| -------------- | ---- | --------------------------------- |
 | shard-proxy    | 9100 | `/metrics`, `/healthz`, `/readyz` |
 | shard-listener | 9200 | `/metrics`, `/healthz`, `/readyz` |
 | retry-endpoint | 9400 | `/metrics`, `/healthz`, `/readyz` |
 
 ### Default AS Numbers
 
-| Service                 | AS    |
-| ----------------------- | ----- |
+| Service               | AS    |
+| --------------------- | ----- |
 | ingress-infra (proxy) | 65001 |
 | listener-infra        | 65002 |
 
@@ -1349,5 +1445,5 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 
 ---
 
-_Document Version: 1.13_  
-_Last Updated: 2026-05-20_
+_Document Version: 1.14_  
+_Last Updated: 2026-06-02_
