@@ -168,9 +168,21 @@ equivalents.
 3. **Aerospike adopters** provision the namespace (infra role) and set
    `-cache-backend=aerospike` / `*-backend=aerospike`.
 
-## Remaining surfaces (cross-repo checklist)
+## Cross-repo surfaces (complete)
 
-- Helm charts (`*-helm`): add `cacheBackend` and `aerospike*` keys with
-  `values.schema.json` enums.
-- Infra (`retransmission-infra`, `multicast-kube-infra`): optional Aerospike
-  namespace provisioning role; `docs/networking.md` note.
+- **Go services** — `shard-proxy`, `shard-listener`, `retry-endpoint`: flags +
+  `docs/configuration.md` + `docs/architecture` notes.
+- **shard-common** — `cache` package + README packages table.
+- **Helm charts** — `retry-endpoint-helm` (`cacheBackend` + `aerospike*`),
+  `shard-proxy-helm` (`txidDedup.backend` + `aerospike*`), `shard-listener-helm`
+  (`egressDedup*` / `ingressSet*` backend + `aerospike*`): `values.yaml`,
+  `values.schema.json` enums, and README values reference. Operators passing
+  comma-separated `aerospikeHosts` via `--set` must escape commas.
+- **Infra** — `ingress-infra`, `listener-infra`, `retransmission-infra`:
+  `group_vars` + `config.env.j2` backend/aerospike vars and a `docs/networking.md`
+  cache-backend connectivity section. `retransmission-infra` ships an optional
+  `aerospike` Ansible role (CE install + namespace provisioning, gated on an
+  `aerospike_nodes` inventory group). `multicast-kube-infra` documents deploying
+  the backend as an in-cluster workload.
+- **skills** — `architecture.md` (freecache → modular note) and `conventions.md`
+  (Modular Cache Backend section).
