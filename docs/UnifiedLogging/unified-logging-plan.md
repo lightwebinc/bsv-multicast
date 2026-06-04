@@ -78,7 +78,7 @@ messaging" — organized so each new call site has an obvious home.
 | 4 | **Auto-config / adoption** | Info / Warn | no | `auto-config adopted new ShardBits (restart mode)`, `auto-join applied`, `live-resharding: bridging engine installed` | `shard_bits`, `mc_group_id`, `source_mode`, `epoch`, quorum |
 | 5 | **Fatal startup** | Error → exit | no | `configuration error`, `multicast interface not found`, `metrics init failed`, `invalid bind-source` | `error`, offending input |
 | 6 | **Runtime subsystem error** | Error | no | `worker exited with error`, `beacon listener error`, `sender exited with error`, `TCP ingress exited with error` | `error`, subsystem id (`worker`, `iface`, `group`) |
-| 7 | **Protocol / data-plane event** | Debug (Warn on anomaly) | **yes** | `subtree_announce: decode error`, `… sender rejected by filter`, `… datagram too short`; gap-detected, NACK-sent, retransmit | `group`, `seq`, `txid`, `frame_type`, `proto` — **rate-limited/sampled** |
+| 7 | **Protocol / data-plane event** | Debug (Warn on anomaly) | **yes** | `subtree_group_announce: decode error`, `… sender rejected by filter`, `… datagram too short`; gap-detected, NACK-sent, retransmit | `group`, `seq`, `txid`, `frame_type`, `proto` — **rate-limited/sampled** |
 | 8 | **OS / NIC / host** *(new)* | Warn / Error | partly | *(none today)* — `ENOBUFS` on egress, `SO_RCVBUF`/`SO_SNDBUF` clamp, MLD source-filter exhausted, IPv6 join failure | `errno`, `network.interface.name`, `group`, syscall name |
 
 **Rule:** categories 1–6 are unconditional. Category 7 is the only one allowed

@@ -1,6 +1,6 @@
 # BRC-127 — Subtree Group Announcement
 
-BRC-127 defines the protocol for dynamically advertising SubtreeID–GroupID bindings over the multicast fabric. Producers send periodic `SubtreeAnnounce` datagrams to the proxy via TCP; the proxy forwards them to the `GroupSubtreeGroupAnnounce` multicast group (`FF05::B:FFFC`). Listeners subscribe to this group and populate a dynamic registry used at the subtree filter layer.
+BRC-127 defines the protocol for dynamically advertising SubtreeID–GroupID bindings over the multicast fabric. Producers send periodic `SubtreeGroupAnnounce` datagrams to the proxy via TCP; the proxy forwards them to the `GroupSubtreeGroupAnnounce` multicast group (`FF05::B:FFFC`). Listeners subscribe to this group and populate a dynamic registry used at the subtree filter layer.
 
 > **Canonical BRC:** [BRC-127](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0127.md)
 
@@ -19,7 +19,7 @@ Offset  Size  Field
 ------  ----  -----
      0     4  Magic (0xE3E1F3E8)
      4     2  ProtoVer (0x02BF)
-     6     1  MsgType = 0x30 (SubtreeAnnounce)
+     6     1  MsgType = 0x30 (SubtreeGroupAnnounce)
      7     1  Flags (reserved 0x00)
      8    32  SubtreeID  — 32-byte SHA-256 subtree root hash (from BRC-124 frame header)
     40    16  GroupID    — 128-bit group identifier (big-endian)
@@ -34,7 +34,7 @@ One datagram maps one SubtreeID to one GroupID. Producers send one datagram per 
 
 ## Control-Plane Multicast Group
 
-SubtreeAnnounce datagrams are distributed on the control-plane group:
+SubtreeGroupAnnounce datagrams are distributed on the control-plane group:
 
 | Index      | Scope | Compressed Address | Constant                          |
 | ---------- | ----- | ------------------ | --------------------------------- |
@@ -50,7 +50,7 @@ Defined in `shard-common/shard/control.go`. Occupies the top of the 16-bit shard
 Producer (subtx-gen, block assembler)
     │
     │  TCP connection to proxy (e.g. [::1]:9002)
-    │  One 64-byte SubtreeAnnounce per (SubtreeID, GroupID) pair
+    │  One 64-byte SubtreeGroupAnnounce per (SubtreeID, GroupID) pair
     ▼
 shard-proxy  (TCP ingress, worker/tcp.go)
     │  Detects MsgType=0x30 at buf[6]
@@ -61,8 +61,8 @@ IPv6 multicast fabric  →  FF05::B:FFFC:9001
     │
     ▼
 shard-listener
-    │  SubtreeAnnounceListener joins FF05::B:FFFC
-    │  DecodeSubtreeAnnounce → subtreegroup.Registry.Add(GroupID, SubtreeID, TTL)
+    │  SubtreeGroupAnnounceListener joins FF05::B:FFFC
+    │  DecodeSubtreeGroupAnnounce → subtreegroup.Registry.Add(GroupID, SubtreeID, TTL)
     ▼
 filter.Allow (hot path, per received frame)
     │  groupReg.Contains(frame.SubtreeID)
@@ -74,7 +74,7 @@ filter.Allow (hot path, per received frame)
 
 ## Proxy Forwarding
 
-The proxy TCP ingress (`worker/tcp.go`) handles SubtreeAnnounce datagrams transparently in the same connection loop as BRC-124 frames:
+The proxy TCP ingress (`worker/tcp.go`) handles SubtreeGroupAnnounce datagrams transparently in the same connection loop as BRC-124 frames:
 
 1. Read 44 bytes (common TCP preamble).
 2. Check `buf[6]`:
@@ -99,9 +99,9 @@ The proxy TCP ingress (`worker/tcp.go`) handles SubtreeAnnounce datagrams transp
 | `-sender-include` / `SENDER_INCLUDE`                    | `""`    | IPv6 CIDRs of trusted announcement senders (empty = all)     |
 | `-sender-exclude` / `SENDER_EXCLUDE`                    | `""`    | IPv6 CIDRs to reject (checked before include)                |
 
-### SubtreeAnnounceListener
+### SubtreeGroupAnnounceListener
 
-`discovery.SubtreeAnnounceListener` joins the `GroupSubtreeAnnounce` group on each configured scope. It uses a raw syscall socket with `SO_REUSEPORT` so it can coexist with data workers bound to the same listen port (both use `SO_REUSEPORT`; Linux requires all sockets sharing a port this way to have the option set).
+`discovery.SubtreeGroupAnnounceListener` joins the `GroupSubtreeGroupAnnounce` group on each configured scope. It uses a raw syscall socket with `SO_REUSEPORT` so it can coexist with data workers bound to the same listen port (both use `SO_REUSEPORT`; Linux requires all sockets sharing a port this way to have the option set).
 
 - Eviction loop: 1-second tick calls `Registry.Evict()`, removing entries whose TTL has elapsed.
 - Source filtering: `SenderExclude` is checked first; `SenderInclude` is then applied (empty = accept all remaining).
@@ -148,7 +148,7 @@ The `subtx-gen` tool includes BRC-127 announcement support:
 | `-announce-interval` | `10s`   | Re-announce period                                      |
 | `-announce-ttl`      | `0`     | TTL in seconds; `0` = use listener default              |
 
-When both `-announce-addr` and `-subtree-group` are set, `subtx-gen` maintains a TCP connection to the proxy and sends one `SubtreeAnnounce` datagram per `(SubtreeID, GroupID)` pair at the configured interval.
+When both `-announce-addr` and `-subtree-group` are set, `subtx-gen` maintains a TCP connection to the proxy and sends one `SubtreeGroupAnnounce` datagram per `(SubtreeID, GroupID)` pair at the configured interval.
 
 ---
 
@@ -156,11 +156,11 @@ When both `-announce-addr` and `-subtree-group` are set, `subtx-gen` maintains a
 
 | Component                                      | File                                                              |
 | ---------------------------------------------- | ----------------------------------------------------------------- |
-| Wire format encode/decode                      | `shard-common/frame/subtree_announce.go`                  |
-| `MsgTypeSubtreeAnnounce = 0x30`, `SubtreeAnnounceSize = 64` | `shard-common/frame/frame.go`              |
+| Wire format encode/decode                      | `shard-common/frame/subtree_group_announce.go`                  |
+| `MsgTypeSubtreeGroupAnnounce = 0x30`, `SubtreeGroupAnnounceSize = 64` | `shard-common/frame/frame.go`              |
 | `GroupSubtreeGroupAnnounce = 0xFFFC`     | `shard-common/shard/control.go`                           |
 | Proxy TCP detection + `ForwardControl`         | `shard-proxy/worker/tcp.go`, `forwarder/forwarder.go`     |
-| `SubtreeAnnounceListener`                      | `shard-listener/discovery/subtree_announce.go`            |
+| `SubtreeGroupAnnounceListener`                      | `shard-listener/discovery/subtree_group_announce.go`            |
 | `subtreegroup.Registry`                        | `shard-listener/subtreegroup/registry.go`                 |
 | Filter integration (`groupReg`)                | `shard-listener/filter/filter.go`                         |
 | Listener config flags                          | `shard-listener/config/config.go`                         |

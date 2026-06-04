@@ -157,7 +157,7 @@ Like beacon groups, subtree group announcements support multiple scopes (site-lo
 
 ## Subtree Data Announcements
 
-Subtree data frames (BRC-132, FrameVer `0x05`) deliver the full contents of a Merkle subtree (transaction hashes and optional metadata) to all subscribed listeners on the `GroupSubtreeAnnounce` group (`0xFFFB`). The subtree is identified by its Merkle root hash (SubtreeID).
+Subtree data frames (BRC-132, FrameVer `0x05`) deliver the full contents of a Merkle subtree (transaction hashes and optional metadata) to all subscribed listeners on the `GroupSubtreeDataAnnounce` group (`0xFFFB`). The subtree is identified by its Merkle root hash (SubtreeID).
 
 BRC-132 frames are large (32–48 MB per subtree at 1M transactions) and are fragmented using BRC-130. Each BRC-130 fragment carries `OrigFrameVer = 0x05` so that the reassembly path can deliver the reconstituted payload to the correct handler.
 
@@ -172,7 +172,7 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 - **Group joins:** `shard-common/netjoin/netjoin.go` — `Join(fd, ifaceIdx, group, sources)` issues `MCAST_JOIN_SOURCE_GROUP` `(S,G)` joins (RFC 3678) when `sources` is non-empty (SSM), or a plain `(*,G)` join otherwise (ASM); diffs and rate-limits join/leave churn.
 - **Network-service group helper:** `shard-common/shard/control.go` — `GroupAddr(scopePrefix uint16, groupID uint16, idx GroupIdx)` (standalone; not bound to Engine scope).
 - **Group index type:** `type GroupIdx uint16` — typed wrapper for the 16-bit IANA group index in bytes 14–15. Provides a `String()` method returning a stable snake_case label (`"block_broadcast"`, `"beacon"`, etc.) used in metrics and logs.
-- **Constants:** `GroupBlockHeader = 0xFFFA`, `GroupSubtreeAnnounce = 0xFFFB`, `GroupSubtreeGroupAnnounce = 0xFFFC`, `GroupBeacon = 0xFFFD`, `GroupBlockBroadcast = 0xFFFE`.
+- **Constants:** `GroupBlockHeader = 0xFFFA`, `GroupSubtreeDataAnnounce = 0xFFFB`, `GroupSubtreeGroupAnnounce = 0xFFFC`, `GroupBeacon = 0xFFFD`, `GroupBlockBroadcast = 0xFFFE`.
 - **Virtual HashKey ingredients (not multicast addresses):** `GroupCoinbaseFlow = 0xFFF8`, `GroupAnchorFlow = 0xFFF9`.
 - **Default group-id:** `shard.DefaultGroupID = 0x000B` (IANA Bitcoin).
 
