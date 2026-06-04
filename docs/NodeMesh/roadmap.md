@@ -135,12 +135,17 @@ meshes** (transit relay needs PIM RPF, which smcroute lacks). See
   loopback (`DEBUG`/`IPV6_MULTICAST_LOOP`) governs whether the local listener
   sees the node's own emissions.
 
-### Phase 4 — WireGuard admin overlay
+### Phase 4 — WireGuard admin overlay — IMPLEMENTED
 
-- New `admin-overlay` role. wg interface on its own (scenario-supplied) prefix;
-  SSH `ListenAddress` bound to the wg address; public SSH dropped; `mgmt_cidrs_*`
-  emergency fallback (key-auth only) + provider ACL guidance. Peer configs
-  emitted by the Phase 1 generator.
+- `integrated-infra` `admin-overlay` role: per-node wg keypair, full admin mesh
+  built from gathered peer pubkeys (hostvars), overlay address operator-supplied
+  (`fleet-orchestration` assigns from `admin_overlay.prefix`). SSH over the
+  overlay always; firewall keeps `mgmt_cidrs` as the emergency key-auth fallback
+  (provider ACL the complementary half); optional `admin_overlay_lock_ssh` binds
+  sshd to the overlay only. Linux-only (systemd wg-quick) for now.
+- **Acceptance: met** — `multicast-test/mesh/admin-overlay.sh` (scenario 82)
+  verifies an N-node full-mesh WireGuard overlay: handshake + reachability over
+  the overlay in every direction.
 
 ### Phase 5 — Consumer-edge scale-out role
 
