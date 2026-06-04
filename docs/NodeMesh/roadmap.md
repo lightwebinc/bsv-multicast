@@ -159,11 +159,20 @@ meshes** (transit relay needs PIM RPF, which smcroute lacks). See
 - **Acceptance: met** — `multicast-test/mesh/consumer-edge.sh` (scenario 83)
   verifies core → edge → miner delivery (2-hop mc-router fan).
 
-### Phase 6 — Fleet orchestration + multi-provider (stretch)
+### Phase 6 — Fleet orchestration + multi-provider — IMPLEMENTED
 
-- Repeatable incremental site-add across AWS / generic-SSH / on-prem / dedicated
-  via the existing Terraform examples, auto-wired into mesh + admin overlay by
-  the Phase 1 generator.
+- `fleet-orchestration` deployment workflow: `topology.yml` → generator →
+  inventory → (provision) → one Ansible run over the whole fleet (so mesh +
+  admin-overlay `hostvars` resolve in a single pass). `Makefile` runbook
+  (`generate` / `validate` / `deploy`), `RUNBOOK.md` for the on-prem (static)
+  and cloud paths, and a provision-only `terraform/aws` multi-node reference
+  (other providers follow the same shape). Generator gained `role:
+  consumer-edge` + `parent` so a fleet can include consumer-edges; incremental
+  site-add = a topology edit + `make validate && make deploy`.
+- **Acceptance: met** — `make check` (inventory + playbook syntax-check) and
+  `tofu validate` pass; the generated inventory drives integrated-infra directly.
+  Real multi-provider apply is exercised against real instances (the open tooling
+  is provider-agnostic; real data lives in the private ops repo).
 
 ### Phase 7 — Tunnel broker service + registration API — proprietary (out of scope here)
 
