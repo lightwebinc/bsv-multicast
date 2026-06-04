@@ -12,13 +12,33 @@ IANA allocates IPv6 multicast group addresses on the **96-bit boundary**: the to
 
 The on-wire default is the IANA Bitcoin allocation `FF0X::B` (group-id `0x000B`). Operators MAY override the group-id via `-mc-group-id` for testing or private deployments, but conformant deployments use `0x000B`.
 
+This bottom-32-bit split (group-id + shard index) is identical under both source modes (see [Source Mode and Address Range](#source-mode-and-address-range)); only the high-order prefix bytes `[0:2]` differ.
+
+---
+
+## Source Mode and Address Range
+
+The fabric runs in one of two source modes. **Any-Source Multicast (ASM)** is the default; **Source-Specific Multicast (SSM)** is an opt-in transport mode for deployments needing inter-domain distribution (see [Source-Specific Multicast (SSM)](#source-specific-multicast-ssm)). The mode selects the address range via the multicast prefix byte `[1]`, which encodes `flags(4) | scope(4)`:
+
+- **ASM** uses the well-known permanent prefix (`flags = 0`) → `FF0x`.
+- **SSM** uses the RFC 4607 SSM range `FF3x::/32` (`flags = 3`) → `FF3x`.
+
+The scope nibble (`5` site, `8` org, `E` global) is unchanged between modes. Because RFC 8815 deprecates inter-domain ASM, global scope is SSM-only.
+
+| Mode | Site scope (intra-domain) | Global scope (inter-domain) |
+| ---- | ------------------------- | --------------------------- |
+| ASM  | `FF05::B:idx`             | not supported (RFC 8815)    |
+| SSM  | `FF35::B:idx`             | `FF3E::B:idx`               |
+
+The group-id (`0x000B`) and the shard-index field are preserved across modes — only the high 32 bits change. Addresses elsewhere in this doc are written in ASM (`FF0x`) form; under SSM, substitute the corresponding `FF3x` prefix.
+
 ---
 
 ## Address Derivation
 
 All IPv6 multicast group addresses are derived from three components:
 
-1. **Scope prefix** (`MCPrefix`, 2 bytes) — the first two bytes of the IPv6 address, e.g. `FF05` (site-local), `FF08` (organisation-local), or `FF0E` (global).
+1. **Multicast prefix** (`MCPrefix`, 2 bytes) — the first two bytes of the IPv6 address, encoding `flags(4) | scope(4)`. ASM: `FF05` (site), `FF08` (org), `FF0E` (global); SSM: `FF35`, `FF38`, `FF3E` for the same scopes (see [Source Mode and Address Range](#source-mode-and-address-range)).
 2. **IANA group-id** (`MCGroupID`, 2 bytes) — occupies bytes `[12:14]`, default `0x000B` (IANA Bitcoin).
 3. **Shard group index** (2 bytes) — occupies bytes `[14:16]` (16-bit index space).
 
@@ -28,7 +48,7 @@ Byte:  0  1    2  3  4  5  6  7  8  9 10 11   12 13   14 15
        FF 05    00 00 00 00 00 00 00 00 00 00         00 0B  XX XX
 ```
 
-The `shard.Engine.Addr(groupIndex, port)` function assembles these components into a `net.UDPAddr`.
+The `shard.Engine.Addr(groupIndex, port)` function assembles these components into a `net.UDPAddr` from the Engine's configured `mcPrefix` (which carries the ASM/SSM flags nibble and scope).
 
 ---
 
@@ -84,9 +104,23 @@ All group addresses — both shard and network-service — inherit the same grou
 
 ---
 
+## Source-Specific Multicast (SSM)
+
+SSM is a transport mode only: the frame format (BRC-124), the NACK protocol (BRC-126), the `HashKey` computation, and the shard derivation are all unchanged. SSM affects only the address range (the high 32 bits, per [Source Mode and Address Range](#source-mode-and-address-range)) and how receivers join a group.
+
+- **Joins.** Under ASM, receivers perform an any-source `(*,G)` join. Under SSM, receivers perform a source-specific `(S,G)` join per RFC 3678 (`MCAST_JOIN_SOURCE_GROUP`), one join per `(source, group)` pair.
+- **Distinct source per publisher.** Each publisher emits from a distinct, stable unicast source address (`bindSource`). Required by PIM-SSM reverse-path forwarding; preserves the per-publisher `HashKey` flow identity. Anycast/shared-source emission is not supported under SSM — a single stable identity uses VRRP active-standby (failover, not load distribution).
+- **Source discovery.** Receivers learn publisher sources before issuing `(S,G)` joins:
+  - **Data-plane sources** flow through the shard manifest (BRC-139 `Flags.SourcesValid`); receivers set `sources.consume: [manifest]` and union the source set across currently-valid manifests.
+  - **Control-plane groups** (beacon, manifest, subtree-announce) are joined against per-group bootstrap source lists (`sources.bootstrap.*`, IPv6 literals or DNS names re-resolved on refresh), since their sources cannot be discovered from within the group.
+
+Deployment postures combining ASM/SSM data and control planes (and their PIM/fabric prerequisites) are out of scope here — see [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm) in DESIGN.md.
+
+---
+
 ## Block Broadcast Channel
 
-`FF0E::B:FFFE` (index `0xFFFE`) is the mandatory global-scope channel distributing block headers, block templates, coinbase transactions, and chained-transaction anchors, as well as other producer data useful to all network participants. This channel is mandatory for all network participants to join.
+Index `0xFFFE` is the mandatory global-scope channel distributing block headers, block templates, coinbase transactions, and chained-transaction anchors, as well as other producer data useful to all network participants. All network participants join this group. The concrete address depends on the source mode: under ASM it is `FF0E::B:FFFE` (intra-domain only, since RFC 8815 deprecates inter-domain ASM); inter-domain distribution uses the SSM address `FF3E::B:FFFE`.
 
 ### Virtual HashKey Ingredient Indices
 
@@ -133,7 +167,9 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 
 ## Implementation
 
-- **Group derivation:** `shard-common/shard/shard.go` — `Engine.Addr(groupIndex uint32, port int)` (only the low 16 bits of `groupIndex` are used).
+- **Group derivation:** `shard-common/shard/shard.go` — `New(mcPrefix, groupID, shardBits)` builds the Engine; `mcPrefix` is the full upper 16 bits carrying flags+scope (`0xFF05` ASM site, `0xFF35` SSM site, `0xFF3E` SSM global). `Engine.Addr(groupIndex uint32, port int)` assembles the address from that prefix (only the low 16 bits of `groupIndex` are used) — unchanged across modes.
+- **Source mode:** `shard-common/shard/mode.go` — `SourceMode` (`SourceModeASM`/`SourceModeSSM`, `ParseSourceMode`) selects which `mcPrefix` is built.
+- **Group joins:** `shard-common/netjoin/netjoin.go` — `Join(fd, ifaceIdx, group, sources)` issues `MCAST_JOIN_SOURCE_GROUP` `(S,G)` joins (RFC 3678) when `sources` is non-empty (SSM), or a plain `(*,G)` join otherwise (ASM); diffs and rate-limits join/leave churn.
 - **Network-service group helper:** `shard-common/shard/control.go` — `GroupAddr(scopePrefix uint16, groupID uint16, idx GroupIdx)` (standalone; not bound to Engine scope).
 - **Group index type:** `type GroupIdx uint16` — typed wrapper for the 16-bit IANA group index in bytes 14–15. Provides a `String()` method returning a stable snake_case label (`"block_broadcast"`, `"beacon"`, etc.) used in metrics and logs.
 - **Constants:** `GroupBlockHeader = 0xFFFA`, `GroupSubtreeAnnounce = 0xFFFB`, `GroupSubtreeGroupAnnounce = 0xFFFC`, `GroupBeacon = 0xFFFD`, `GroupBlockBroadcast = 0xFFFE`.
@@ -145,3 +181,8 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 ## References
 
 - [BRC-129: IPv6 Multicast Group Address Assignments](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md) — published BRC
+- [BRC-139: Shard Manifest Announcement](brc-139-shard-manifest.md) — distributes the publisher source set for SSM data-plane source discovery
+- [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm) — deployment postures and fabric prerequisites
+- [RFC 4607](https://www.rfc-editor.org/rfc/rfc4607) — Source-Specific Multicast (`FF3x::/32` range)
+- [RFC 3678](https://www.rfc-editor.org/rfc/rfc3678) — `MCAST_JOIN_SOURCE_GROUP` `(S,G)` join API
+- [RFC 8815](https://www.rfc-editor.org/rfc/rfc8815) — deprecating ASM for inter-domain multicast

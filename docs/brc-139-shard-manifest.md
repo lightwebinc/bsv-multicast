@@ -1,14 +1,14 @@
-# BRC-137 — Shard Manifest Announcement
+# BRC-139 — Shard Manifest Announcement
 
-BRC-137 defines the protocol by which multicast participants periodically advertise their `shard_bits` configuration and the set of shard groups they are joined to. Manifest datagrams are emitted directly to the beacon multicast group (`GroupBeacon`, index `0xFFFD`) at a configurable scope. This BRC supports operator visibility into network-wide sharding configuration, enables divergence detection, and defines the consumer profile for automated, rate-limited shard coordination (see the normative consumer rules below).
+BRC-139 defines the protocol by which multicast participants periodically advertise their `shard_bits` configuration and the set of shard groups they are joined to. Manifest datagrams are emitted directly to the beacon multicast group (`GroupBeacon`, index `0xFFFD`) at a configurable scope. This BRC supports operator visibility into network-wide sharding configuration, enables divergence detection, and defines the consumer profile for automated, rate-limited shard coordination (see the normative consumer rules below).
 
-> **Canonical BRC:** [BRC-137](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0137.md)
+> **Canonical BRC:** [BRC-139](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0139.md)
 
 ---
 
 ## Purpose
 
-All components of the multicast pipeline (proxy, listener, retry endpoint, transaction producer) must agree on a single `shard_bits` value to interoperate. Today this value is configured manually on each component and there is no on-network signal to verify agreement. BRC-137 introduces a small, dedicated announcement service that:
+All components of the multicast pipeline (proxy, listener, retry endpoint, transaction producer) must agree on a single `shard_bits` value to interoperate. Today this value is configured manually on each component and there is no on-network signal to verify agreement. BRC-139 introduces a small, dedicated announcement service that:
 
 1. Lets every participant periodically declare its current `shard_bits` and the set of shard group indices it claims to have joined.
 2. Lets observers detect inconsistent configuration across peers.
@@ -183,7 +183,7 @@ Pilot guidance:
 | 0   | GroupsValid    | Set when the trailing payload carries a valid joined-groups encoding.                                                                                                                                                                                                                                                                                                                                              |
 | 1   | Authoritative  | Operator-curated authoritative announcer (e.g. orchestrator); see Safety.                                                                                                                                                                                                                                                                                                                                          |
 | 2   | Shutdown       | Final announcement before graceful shutdown; consumers MAY evict immediately.                                                                                                                                                                                                                                                                                                                                      |
-| 3   | SourceModeSSM  | Announcer declares the data plane uses Source-Specific Multicast (FF3x::/32 per RFC 4607). Auto-configuration consumers MUST use the SSM prefix when computing data-plane group addresses derived from this manifest. Whether the beacon group itself is joined via ASM or SSM is a deployment-posture choice (see [Source-Specific Multicast](../DESIGN.md#source-specific-multicast-ssm)), not a BRC-137 invariant.  |
+| 3   | SourceModeSSM  | Announcer declares the data plane uses Source-Specific Multicast (FF3x::/32 per RFC 4607). Auto-configuration consumers MUST use the SSM prefix when computing data-plane group addresses derived from this manifest. Whether the beacon group itself is joined via ASM or SSM is a deployment-posture choice (see [Source-Specific Multicast](../DESIGN.md#source-specific-multicast-ssm)), not a BRC-139 invariant.  |
 | 4   | SourcesValid   | The trailing payload includes `SourceCount × 16` bytes of publisher source IPv6 addresses after the groups payload. Consumers union the source set across all currently-valid manifests they hold. MUST be 0 when `SourceCount=0`.                                                                                                                                                                                |
 | 5   | PilotOnly      | This manifest is exclusively a pilot/assignment broadcast: the announcer is not itself joined to the announced groups and the groups payload describes desired fleet state, not its own joins. Implies `Authoritative=1`; consumers MUST reject `PilotOnly=1 && Authoritative=0` as malformed.                                                                                                                     |
 | 6   | SuccessorValid | The trailing payload includes a 24-byte Successor block (see "Successor block") describing an in-flight generation transition. Requires `Authoritative=1`; consumers MUST reject `SuccessorValid=1 && Authoritative=0` as malformed. The Successor block's `ShardBits` MUST be within ±1 of the announcer's current `ShardBits` per the existing safety guidance.                                                 |
@@ -285,7 +285,7 @@ On `SIGTERM` the daemon emits one final manifest with `Flags.Shutdown=1` before 
 
 ## Consumer Behaviour — Observation (informative)
 
-A BRC-137 consumer MAY join the beacon group(s) of interest and:
+A BRC-139 consumer MAY join the beacon group(s) of interest and:
 
 1. Dispatch incoming datagrams on `buf[6]`. `0x40` ⇒ ShardManifest; pass to manifest decoder. Other MsgTypes ⇒ existing handlers (e.g. `0x20` BRC-126 ADVERT).
 2. Verify `ManifestCRC`. Reject on mismatch.
@@ -395,8 +395,8 @@ guidance:
 
 ## Interactions With Other BRCs
 
-- **BRC-126 (Retransmission / ADVERT)** — shares the beacon group `0xFFFD` and listen port. Distinguished by MsgType byte at offset 6 (`0x20` ADVERT vs `0x40` ShardManifest). BRC-137 does not retransmit and is not retransmitted.
-- **BRC-127 (Subtree group announcements)** — orthogonal: BRC-127 announces SubtreeID→GroupID bindings on `0xFFFC` and goes through the proxy. BRC-137 announces participant configuration directly on `0xFFFD`.
+- **BRC-126 (Retransmission / ADVERT)** — shares the beacon group `0xFFFD` and listen port. Distinguished by MsgType byte at offset 6 (`0x20` ADVERT vs `0x40` ShardManifest). BRC-139 does not retransmit and is not retransmitted.
+- **BRC-127 (Subtree group announcements)** — orthogonal: BRC-127 announces SubtreeID→GroupID bindings on `0xFFFC` and goes through the proxy. BRC-139 announces participant configuration directly on `0xFFFD`.
 - **BRC-129 (Multicast addressing)** — no new index allocated. Manifests reuse the existing beacon group.
 
 ---
@@ -418,6 +418,6 @@ guidance:
 - [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md)
 - [BRC-127: Subtree Group Announcement](brc-127-subtree-announce.md)
 - [BRC-129: Multicast Group Addressing](brc-129-multicast-addressing.md)
-- [BRC-137: Shard Manifest Announcement (canonical)](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0137.md)
+- [BRC-139: Shard Manifest Announcement (canonical)](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0139.md)
 - [Automatic Shard Configuration](../DESIGN.md#automatic-shard-configuration)
 - [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm)

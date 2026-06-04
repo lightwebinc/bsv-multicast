@@ -33,7 +33,7 @@ and anchor transactions over reserved control groups.
 | [listener-infra](https://github.com/lightwebinc/listener-infra)               | Egress (deploy)         | Ansible/Terraform automation for `shard-listener` nodes                             |
 | [retry-endpoint](https://github.com/lightwebinc/retry-endpoint)   | Retransmission          | Caches frames, retransmits on NACK requests; beacon-advertised                              |
 | [retransmission-infra](https://github.com/lightwebinc/retransmission-infra)   | Retransmission (deploy) | Ansible/Terraform automation for `retry-endpoint` nodes                             |
-| [shard-manifest](https://github.com/lightwebinc/shard-manifest)   | Manifest                | BRC-137 announcer; periodic `shard_bits` + joined-groups beacon                             |
+| [shard-manifest](https://github.com/lightwebinc/shard-manifest)   | Manifest                | BRC-139 announcer; periodic `shard_bits` + joined-groups beacon                             |
 | [manifest-infra](https://github.com/lightwebinc/manifest-infra)   | Manifest (deploy)       | Ansible/Terraform automation for `shard-manifest` nodes                                     |
 | [shard-common](https://github.com/lightwebinc/shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `seqhash`, `sequence`, `txidset`                     |
 | [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 senders                  |
@@ -74,7 +74,7 @@ and anchor transactions over reserved control groups.
   — Chained anchor transaction distribution
 - [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) —
   Standalone 80-byte block header split; emitter-originated
-- [BRC-137 Shard Manifest Announcement](docs/brc-137-shard-manifest.md) —
+- [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md) —
   Periodic participant configuration announcement (shard_bits + joined groups)
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams

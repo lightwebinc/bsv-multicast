@@ -38,7 +38,7 @@ Craig S. Wright in
 - [Coinbase Transaction Frame Format (BRC-133)](#coinbase-transaction-frame-format-brc-133)
 - [Anchor Transaction Frame Format (BRC-134)](#anchor-transaction-frame-format-brc-134)
 - [Block Header Format (BRC-135)](#block-header-format-brc-135)
-- [Shard Manifest Announcement (BRC-137)](#shard-manifest-announcement-brc-137)
+- [Shard Manifest Announcement (BRC-139)](#shard-manifest-announcement-brc-139)
 - [Source-Specific Multicast (SSM)](#source-specific-multicast-ssm)
 - [Automatic Shard Configuration](#automatic-shard-configuration)
 - [Testing and Validation](#testing-and-validation)
@@ -133,7 +133,7 @@ responsibility:
 | [shard-proxy](https://github.com/lightwebinc/shard-proxy)       | Stateless ingress proxy; receives frames, derives multicast group, forwards verbatim        |
 | [shard-listener](https://github.com/lightwebinc/shard-listener) | Multicast subscriber; filters by shard/subtree, forwards to unicast and multicast consumers |
 | [retry-endpoint](https://github.com/lightwebinc/retry-endpoint) | Caches frames, retransmits on NACK requests                                                 |
-| [shard-manifest](https://github.com/lightwebinc/shard-manifest) | BRC-137 manifest announcer; emits `shard_bits` + joined-groups beacons                      |
+| [shard-manifest](https://github.com/lightwebinc/shard-manifest) | BRC-139 manifest announcer; emits `shard_bits` + joined-groups beacons                      |
 
 ### Shared Libraries
 
@@ -1011,13 +1011,13 @@ strategy
 
 ---
 
-## Shard Manifest Announcement (BRC-137)
+## Shard Manifest Announcement (BRC-139)
 
-BRC-137 defines a periodic announcement datagram (MsgType `0x40`, a 64-byte
+BRC-139 defines a periodic announcement datagram (MsgType `0x40`, a 64-byte
 header plus variable payload) that each participant emits to the beacon group
 (`FF0X::B:FFFD`, `GroupBeacon`/`0xFFFD`). It carries the announcer's
 `ShardBits`, joined-group set (list or bitmap form), `GenerationID`, and role
-hint. BRC-137 datagrams do not carry a BRC-124 frame header, are not
+hint. BRC-139 datagrams do not carry a BRC-124 frame header, are not
 proxy-stamped, are not retransmitted, and are never ACKed.
 
 The `shard-manifest` daemon is the canonical announcer; any participant (proxy,
@@ -1026,7 +1026,7 @@ configuration. Consumers detect cross-peer divergence and, when opted in via
 [Automatic Shard Configuration](#automatic-shard-configuration), adopt
 `Authoritative=1` values after a quorum + hysteresis gate.
 
-**→ [BRC-137 Shard Manifest Announcement](docs/brc-137-shard-manifest.md)** —
+**→ [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md)** —
 wire format, flags, encoding-form rules, beacon-group routing, observer and
 auto-config consumer profiles
 
@@ -1061,7 +1061,7 @@ shard-index field are preserved; only the high 32 bits change. A single
   semantics. Anycast/shared-source deployments are not supported; for a single
   stable identity use VRRP active-standby (failover, not load distribution).
 - **Source discovery.** Data-plane sources flow exclusively through
-  shard-manifest (BRC-137 `Flags.SourcesValid`); receivers set
+  shard-manifest (BRC-139 `Flags.SourcesValid`); receivers set
   `sources.consume: [manifest]`. Control groups (beacon, manifest,
   subtree-announce) are joined against per-group bootstrap source lists
   (`sources.bootstrap.*`, IPv6 literals or DNS names re-resolved on refresh).
@@ -1089,7 +1089,7 @@ fabric mfib sizing, and join-rate limiting in `netjoin`.
 
 ## Automatic Shard Configuration
 
-shard-proxy and shard-listener can opt in to consuming BRC-137 manifests
+shard-proxy and shard-listener can opt in to consuming BRC-139 manifests
 (`multicast.autoConfig.enabled=true`) and adopting the announced `ShardBits` /
 `SourceModeSSM` after a quorum + hysteresis gate. Manual CLI/env pins always
 win. It works identically under ASM and SSM and across all four deployment
@@ -1106,7 +1106,7 @@ shard-manifest is the sole authority — data-plane components are consumers onl
   change flips `/readyz`, drains, then exits non-zero; the orchestrator rolls
   the pod, which restarts with the adopted value warm in the registry.
 - **Live re-sharding (opt-in, `liveResharding=true`).** A re-shard is a
-  generation transition signalled by a BRC-137 `Successor` block carrying the
+  generation transition signalled by a BRC-139 `Successor` block carrying the
   incoming `ShardBits` (constrained to ±1) and a `TransitionEpoch`. During the
   bridging window the proxy dual-emits each frame to both the current and
   successor layouts and listeners union-join both; downstream TxID dedup absorbs
@@ -1122,7 +1122,7 @@ authoritative `Flags.GroupsValid` payloads. Static `-shard-include` entries are
 never leaved; pilot-added groups are leaved only when no pilot still claims
 them.
 
-**→ [BRC-137 Shard Manifest Announcement](docs/brc-137-shard-manifest.md)** —
+**→ [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md)** —
 the normative wire format, adoption gates, and Successor-block layout this
 behavior implements.
 
@@ -1368,7 +1368,7 @@ processing, flush OTLP exporter.
   — anchor frame wire format, FrameVerV6, proxy/listener/retry-endpoint changes
 - [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) —
   standalone block header split, FrameVerV7, emitter-originated sequencing
-- [BRC-137 Shard Manifest Announcement](docs/brc-137-shard-manifest.md) —
+- [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md) —
   periodic participant configuration announcement (shard_bits, joined groups,
   GenerationID); beacon-group distribution
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
