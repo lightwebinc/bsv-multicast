@@ -118,11 +118,22 @@ meshes** (transit relay needs PIM RPF, which smcroute lacks). See
   ingress. (Per-frame-type validation across the live binaries lands with the
   Phase 3 harness.)
 
-### Phase 3 — Multi-node mesh test harness + success demo
+### Phase 3 — Multi-node mesh test harness + success demo — IMPLEMENTED
 
-- Docker-driver collapsed-mesh topology: N node-containers (NET_ADMIN), ip6gre
-  mesh + mc-router between them, one consumer per node. Encode the success demo
-  as a scenario (full + partial mesh variants); CI-runnable locally.
+- `multicast-test/mesh/collapsed-mesh.sh` stands up N collapsed nodes running
+  the **real** `shard-proxy` + `shard-listener` + `retry-endpoint` in per-node
+  netns over the ip6gre mesh + mc-router, each with one miner (subtx-gen sender
+  + sink). Runs host-native (netns, not the Docker bridge, which can't carry the
+  multicast mesh). Scenario 81 (`MESH_DEMO=1`) drives it.
+- **Acceptance: met** — the 3-node demo verifies every miner receives traffic
+  ingested at every node (1797 frames/miner: own 600 via loopback + 600 from
+  each remote node), full-duplex, through the real binaries.
+- **Finding (fixed):** emitters send IPv6 multicast at hoplimit 1, which a
+  routed/tunneled mesh decrements to 0 on the first hop. Added
+  `shard-proxy` `EGRESS_HOPLIMIT` (mirrors the listener's `MC_EGRESS_HOPLIMIT`);
+  integrated-infra auto-raises it to 64 in mesh mode. The proxy's co-located
+  loopback (`DEBUG`/`IPV6_MULTICAST_LOOP`) governs whether the local listener
+  sees the node's own emissions.
 
 ### Phase 4 — WireGuard admin overlay
 
