@@ -147,11 +147,17 @@ meshes** (transit relay needs PIM RPF, which smcroute lacks). See
   verifies an N-node full-mesh WireGuard overlay: handshake + reachability over
   the overlay in every direction.
 
-### Phase 5 — Consumer-edge scale-out role
+### Phase 5 — Consumer-edge scale-out — IMPLEMENTED
 
-- `listener-infra` `consumer-edge` node: a multicast listener/consumer that
-  terminates many consumer tunnels, offloading the core node. Documents the
-  collapsed → distributed (proxy/listener/retry/consumer-edge) per-site path.
+- Implemented as a **node role** of `integrated-infra` (`node_role:
+  consumer-edge`) rather than a separate listener-infra role — DRY reuse of the
+  proven mesh stack (networking + mc-router + firewall). A consumer-edge runs
+  only `shard-listener`, receives the fabric over an upstream `fabric: true`
+  tunnel from a core node (whose matching end is an `mc_egress: true` leaf), and
+  re-fans the BRC-129 groups to its own consumer leaf tunnels — itself a
+  multicast consumer of the core. Documents the collapsed → distributed path.
+- **Acceptance: met** — `multicast-test/mesh/consumer-edge.sh` (scenario 83)
+  verifies core → edge → miner delivery (2-hop mc-router fan).
 
 ### Phase 6 — Fleet orchestration + multi-provider (stretch)
 
@@ -159,16 +165,30 @@ meshes** (transit relay needs PIM RPF, which smcroute lacks). See
   via the existing Terraform examples, auto-wired into mesh + admin overlay by
   the Phase 1 generator.
 
-### Phase 7 — Tunnel broker service + registration API
+### Phase 7 — Tunnel broker service + registration API — proprietary (out of scope here)
 
-- New `tunnel-broker` repo: end-user/consumer registration, tunnel provisioning
-  across the fleet, shard-group assignment, wg/gre config issuance. Built last,
-  on the stable data/admin-plane primitives from Phases 0–5.
+The tunnel broker (consumer registration, fleet-wide provisioning, shard-group
+assignment, config issuance) and the surrounding business/branding are the
+**commercial track** and are tracked in a separate **private** plan, not in this
+open-source roadmap. The broker is designed to *drive* the open primitives
+(the `topology.yml` schema, the `consumers[]` / `admin_overlay` peer model the
+reference roles already consume) rather than fork them.
+
+## Open-source vs proprietary boundary
+
+This roadmap and the repos it references are the open-source **demonstration**:
+protocol/specs, reference services, reference infra (roles + generic Terraform
+modules), the deployment **tooling** (`fleet-orchestration` generator + the
+`topology.yml` schema), and the test harness. They are addressing-agnostic and
+example-only. **Real fleet data (addresses, keys, peer maps), the broker
+service, and business planning are proprietary** and live in a private repo. The
+seam is the `topology.yml` schema: open tooling consumes it; the private side
+supplies real data and runs the service.
 
 ## Sequencing
 
 Phase 0 de-risks the mesh-multicast core. Phases 1–3 produce the demonstrable
 3-node deliverable with automation and a CI test. Phase 4 closes the
-admin/security requirement. Phases 5–6 are the scale story. Phase 7 is the
-eventual broker. The demo track (0–3) and the broker (7) are independent once
-Phase 0 lands.
+admin/security requirement. Phases 5–6 are the scale + multi-provider deployment
+story (open reference). Phase 7 (proprietary) is the eventual broker, tracked
+separately.
