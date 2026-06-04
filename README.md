@@ -78,6 +78,9 @@ and anchor transactions over reserved control groups.
   Periodic participant configuration announcement (shard_bits + joined groups)
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
+- [Node Mesh Roadmap](docs/NodeMesh/roadmap.md) — Meshed self-contained nodes:
+  fabric mesh, bidirectional consumer tunnels, WireGuard admin overlay, fleet
+  automation, tunnel broker (Phase 0 implemented)
 
 ## License
 
