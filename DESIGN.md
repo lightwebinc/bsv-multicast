@@ -81,8 +81,8 @@ The multicast pipeline consists of three tiers:
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        Ingress Tier (ingress-infra)                       │
-│                    Deploys: shard-proxy nodes                       │
+│                        Ingress Tier (ingress-infra)                         │
+│                    Deploys: shard-proxy nodes                               │
 │                  Stateless, deterministic, horizontally scalable            │
 └───────────────────────────────┬─────────────────────────────────────────────┘
                                 │  IPv6 UDP Multicast (FF05::<shard>)
