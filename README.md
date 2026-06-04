@@ -78,9 +78,12 @@ and anchor transactions over reserved control groups.
   Periodic participant configuration announcement (shard_bits + joined groups)
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
-- [Node Mesh Roadmap](docs/NodeMesh/roadmap.md) — Meshed self-contained nodes:
-  fabric mesh, bidirectional consumer tunnels, WireGuard admin overlay, fleet
-  automation, tunnel broker (Phase 0 implemented)
+
+Meshed multi-node deployment (ip6gre fabric mesh, bidirectional consumer
+tunnels, consumer-edge scale-out, WireGuard admin overlay, fleet deployment) is
+documented in the per-component infra repos — see
+[integrated-infra `docs/mesh.md`](https://github.com/lightwebinc/integrated-infra/blob/main/docs/mesh.md)
+and [`docs/admin-overlay.md`](https://github.com/lightwebinc/integrated-infra/blob/main/docs/admin-overlay.md).
 
 ## License
 
