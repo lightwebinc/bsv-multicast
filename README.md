@@ -39,6 +39,7 @@ and anchor transactions over reserved control groups.
 | [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 senders                  |
 | [multicast-test](https://github.com/lightwebinc/multicast-test)   | Testing                 | Integration test harness: Go + Docker scenarios (`harness/`) and legacy LXD VM lab (`vm-lab/`) |
 | [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes (deploy)     | k0s-reference + Helm composition of the full stack; distribution-agnostic                   |
+| [integrated-infra](https://github.com/lightwebinc/integrated-infra)         | Collapsed node (deploy) | Ansible/Terraform automation for a collapsed single-host node (`shard-proxy` + `shard-listener` + `retry-endpoint`) |
 | [shard-proxy-helm](https://github.com/lightwebinc/shard-proxy-helm)             | Helm chart              | Chart for `shard-proxy`                                                                     |
 | [shard-listener-helm](https://github.com/lightwebinc/shard-listener-helm)       | Helm chart              | Chart for `shard-listener`                                                                  |
 | [retry-endpoint-helm](https://github.com/lightwebinc/retry-endpoint-helm)       | Helm chart              | Chart for `retry-endpoint`                                                                  |

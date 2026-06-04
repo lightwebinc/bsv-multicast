@@ -41,15 +41,26 @@ Offset  Size  Field
 
 ### Flags Bitmask
 
-| Bit      | Name                | Meaning                                           |
-| -------- | ------------------- | ------------------------------------------------- |
-| `0x0001` | _(reserved)_        | Unused, Reserved for future use                   |
-| `0x0002` | HasParent           | Upstream escalation endpoint configured (Phase 2) |
-| `0x0004` | Draining            | Entering shutdown; stop routing new NACKs here    |
-| `0x0008` | UnicastRetransmit   | Supports unicast frame delivery to NACK source    |
-| `0x0010` | MulticastRetransmit | Retransmits via multicast (default on)            |
+| Bit      | Name                | Meaning                                                    |
+| -------- | ------------------- | ---------------------------------------------------------- |
+| `0x0001` | _(reserved)_        | Unused, Reserved for future use                            |
+| `0x0002` | HasParent           | NACK proxying enabled (an upstream endpoint is configured) |
+| `0x0004` | Draining            | Entering shutdown; stop routing new NACKs here             |
+| `0x0008` | UnicastRetransmit   | Supports unicast frame delivery to NACK source             |
+| `0x0010` | MulticastRetransmit | Retransmits via multicast (default on)                     |
 
-**HasParent rationale:** When set, the endpoint forwards NACKs internally to a parent endpoint on local cache miss. Benefits: topology encapsulation (listeners need only know local endpoints), reduced global beacon traffic, faster recovery via co-located forwarding.
+**HasParent rationale:** When set, the endpoint forwards NACKs to a parent (upstream) endpoint on local cache miss. Benefits: topology encapsulation (listeners need only know local endpoints), reduced global beacon traffic, faster recovery via co-located forwarding.
+
+### NACK Proxying (cross-domain recovery)
+
+A retry-endpoint serving a downstream multicast domain (fed by a `shard-listener`'s multicast egress) can only cache what the listener actually emitted. A frame the listener never put on the downstream wire — egress send error, interface flap, in-fabric loss — is missed identically by the downstream endpoint and every downstream consumer, so a downstream-only cache cannot repair it. NACK proxying recovers such frames from an upstream endpoint that received them directly from the proxy:
+
+1. A downstream consumer NACKs the downstream endpoint → local cache miss → MISS returned immediately.
+2. The downstream endpoint forwards the NACK to a configured upstream endpoint with the **Proxied** flag set (`0x01`). Recovery is asynchronous ("cache-warm") so no NACK worker is held.
+3. The upstream endpoint serves the proxied NACK from its cache. Because the requester (the downstream endpoint) is not joined to the upstream shard groups, the frame is returned via **unicast** to the NACK source — a proxied NACK is always served a unicast copy regardless of the upstream's advertised retransmit mode.
+4. The downstream endpoint re-caches the recovered frame (keyed `HashKey ∥ SeqNum`, per-FrameVer TTL) and multicast-retransmits it into the downstream domain; the consumer's gap auto-fills.
+
+**One-hop bound:** the Proxied flag prevents an upstream endpoint from re-proxying, so a chain is at most one hop. Upstream discovery is static configuration (a separated downstream domain generally cannot receive upstream multicast beacons). When several downstream endpoints run with proxying, a shared cache backend (Redis/Aerospike) lets an in-flight claim dedup the upstream NACKs so only one endpoint recovers each gap.
 
 ---
 
@@ -63,7 +74,7 @@ Offset  Size  Field
      0     4  Magic (0xE3E1F3E8)
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x10 (NACK)
-     7     1  Flags (reserved 0x00)
+     7     1  Flags — bit 0 (0x01) = Proxied; bits 1–7 reserved 0x00
      8     8  HashKey   — stable per-flow XXH64 identifier from the BRC-124 frame
     16     8  StartSeq  — first missing SeqNum (inclusive)
     24     8  EndSeq    — last missing SeqNum (inclusive); equals StartSeq for single-frame
@@ -75,6 +86,8 @@ Offset  Size  Field
 > **StartSeq / EndSeq** (offsets 16/24) specify the range of missing sequence numbers. For current single-frame retrieval, `StartSeq == EndSeq`. The retry endpoint looks up the frame using the 16-byte cache key `HashKey ∥ StartSeq`.
 
 > **SubtreeID** (offset 32) is carried for informational purposes; the cache key is `HashKey ∥ SeqNum` and does not require SubtreeID for disambiguation.
+
+> **Flags / Proxied** (offset 7, bit `0x01`) marks a NACK that an endpoint issued on behalf of a downstream domain (cross-domain proxying — see below). An endpoint receiving a NACK with this bit set MUST serve it from its own cache but MUST NOT re-proxy it, bounding any proxy chain to a single hop. The bit was previously reserved and is ignored by legacy endpoints (which simply never re-proxy).
 
 ---
 

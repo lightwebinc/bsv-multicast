@@ -150,6 +150,7 @@ responsibility:
 | [retransmission-infra](https://github.com/lightwebinc/retransmission-infra) | Ansible/Terraform for retry endpoint deployment | retry-endpoint      |
 | [manifest-infra](https://github.com/lightwebinc/manifest-infra)             | Ansible/Terraform for manifest deployment       | shard-manifest      |
 | [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes deployment (k0s reference, EKS stub) | full stack via Helm |
+| [integrated-infra](https://github.com/lightwebinc/integrated-infra)         | Collapsed single-host node (Ansible/Terraform)  | all three services  |
 
 ### Helm Charts
 
@@ -1215,6 +1216,14 @@ Kubernetes deployment is provided by
 which composes the per-service Helm charts (`shard-proxy-helm`,
 `shard-listener-helm`, `retry-endpoint-helm`, `subtx-generator-helm`,
 `shard-manifest-helm`).
+
+For a single-host footprint,
+[integrated-infra](https://github.com/lightwebinc/integrated-infra) deploys a
+**collapsed node** — `shard-proxy`, `shard-listener`, and `retry-endpoint`
+co-located on one multi-homed host (uplink for sender ingress, multicast-fabric
+interface for IPv6 multicast in/out). It targets Ubuntu 24.04, FreeBSD 14, AWS
+EC2, and any SSH host via the same Ansible/Terraform automation as the
+per-service infra repos.
 
 ### Networking Requirements
 
