@@ -101,11 +101,22 @@ meshes** (transit relay needs PIM RPF, which smcroute lacks). See
 - Generator → per-node `tunnels[]`, mc-router rules, generated Ansible
   inventory, WireGuard peer maps. "Add a site" = add a node + regenerate.
 
-### Phase 2 — Full-duplex collapsed node + bidirectional consumer tunnels
+### Phase 2 — Full-duplex collapsed node + bidirectional consumer tunnels — IMPLEMENTED
 
-- Consumer (miner) tunnel carries both directions: miner→proxy ingress and
-  listener→miner egress. Generalize the single static consumer tunnel into a
-  `consumers[]` list. Validate full duplex of **all** frame types.
+- A consumer tunnel is a **multicast leaf**: the miner sends txns **UP** to the
+  proxy by unicast (its tunnel is a proxy ingress iface) and receives **DOWN**
+  by joining the shard groups the mc-router fans onto the tunnel. Mark a
+  non-fabric tunnel `mc_egress: true`. `mode: unicast` consumers instead get a
+  single listener `egress_addr` (SPV/app). Groups fan to consumer leaves on
+  both the local-emit and fan-in paths, so a miner sees txns ingested at **any**
+  node; no rule accepts multicast *from* a leaf.
+- `integrated-infra` mc-router + firewall (`firewall_consumer_mc_ifaces`) and
+  the `fleet-orchestration` generator (`consumers[]` → `mc_egress` tunnels)
+  implement it.
+- **Acceptance: met** — `multicast-test/mesh/ip6gre-mesh.sh` attaches a miner
+  per node and verifies DOWN multicast receipt from every node + UP unicast
+  ingress. (Per-frame-type validation across the live binaries lands with the
+  Phase 3 harness.)
 
 ### Phase 3 — Multi-node mesh test harness + success demo
 
