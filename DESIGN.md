@@ -170,7 +170,7 @@ Each service has a dedicated chart repository, consumed by
 | Repository                                                        | Purpose                                                                                        |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Traffic generator for load/functional testing                                                  |
-| [multicast-test](https://github.com/lightwebinc/multicast-test)   | Integration test harness: Go + Docker scenarios (`harness/`) and legacy LXD VM lab (`vm-lab/`) |
+| [multicast-test](https://github.com/lightwebinc/multicast-test)   | Integration test suite: Go + Docker scenarios (`harness/`) on an isolated IPv6 bridge          |
 
 ### Meta Repository
 
@@ -588,10 +588,13 @@ missing frame arrives via multicast or explicit NACK ACK.
 **Key Characteristics:**
 
 - Single-worker multicast receiver (SO_REUSEPORT limitation)
-- In-memory cache (freecache, 60 s TTL, GC-free, single 16-byte key:
-  `HashKey ∥ SeqNum`)
+- Pluggable cache backend (`shard-common/cache`): in-process striped map
+  (default), Redis, or Aerospike; 60 s TTL, single 16-byte key:
+  `HashKey ∥ SeqNum`
 - Multi-tier rate limiting: per-IP, per-HashKey, per-SeqNum pre-lookup;
-  per-group (groupIdx) post-lookup (ACK still sent on throttle)
+  per-group (groupIdx) post-lookup. The group-tier limiter still sends ACK so
+  the listener does not escalate; the honest-congestion tiers (per-HashKey,
+  per-SeqNum) optionally emit THROTTLED (`-rl-throttle-response`)
 - Sharding-based multicast egress for retransmitted frames
 
 **Architecture:**
@@ -599,7 +602,7 @@ missing frame arrives via multicast or explicit NACK ACK.
 ```text
 Multicast Receiver (1 worker, SO_REUSEPORT)
   ┌──────────────────┐
-  │ Join all groups  │──▶ Cache (freecache, 60 s TTL)
+  │ Join all groups  │──▶ Cache (memory/redis/aerospike, 60 s TTL)
   └──────────────────┘
 
 NACK Server (NACK_WORKERS goroutines)
@@ -613,9 +616,10 @@ Retransmit Egress
   └──────────────────┘
 ```
 
-**Cache:** Single 16-byte key (`HashKey ∥ SeqNum`) → raw frame. Default backend:
-in-process freecache (60 s TTL, GC-free). Optional: Redis for cross-instance
-shared cache.
+**Cache:** Single 16-byte key (`HashKey ∥ SeqNum`) → raw frame. Pluggable
+`shard-common/cache` backend (`-cache-backend`): in-process striped map
+(default), Redis, or Aerospike for cross-instance shared cache (60 s TTL). See
+[shard-common cache backend](https://github.com/lightwebinc/shard-common/blob/main/docs/cache-backend.md).
 
 **→
 [retry-endpoint Architecture](https://github.com/lightwebinc/retry-endpoint/blob/main/docs/architecture.md)**
@@ -658,6 +662,11 @@ are defined in:
 - **ACK/MISS responses** — every NACK receives a unicast response (16 bytes).
   ACK confirms retransmit dispatched; MISS indicates cache miss and triggers
   immediate escalation to the next endpoint.
+- **THROTTLED response (optional)** — an honest-congestion signal (16 bytes,
+  `MsgType 0x13`) emitted by the per-flow/per-gap rate-limit tiers when enabled
+  (`-rl-throttle-response`). The listener holds the gap for a hinted backoff and
+  retries the same endpoint without escalating or consuming its retry budget.
+  The flood (per-source-IP) tier stays silent to avoid reflection.
 - **Beacon discovery** — retry endpoints periodically multicast ADVERT messages
   (56 bytes) to site/global beacon groups. Listeners maintain a dynamic endpoint
   registry, sorted by `(Tier ASC, Preference DESC)`.
@@ -716,7 +725,9 @@ per-SeqNum pre-lookup; per-group post-lookup), performs a single-key cache
 lookup (`HashKey ∥ SeqNum`), and retransmits via multicast and/or unicast on a
 hit. On a miss, a 16-byte MISS response triggers immediate listener escalation.
 The group-tier limiter skips the retransmit but still sends ACK so the listener
-does not escalate unnecessarily.
+does not escalate unnecessarily. When `-rl-throttle-response` is enabled, the
+honest-congestion tiers (per-HashKey, per-SeqNum) instead return a 16-byte
+THROTTLED response so the listener holds and retries the same endpoint.
 
 See
 **[BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.md)**
@@ -1170,32 +1181,26 @@ make test-e2e
 **Purpose:** Full-stack integration testing across all components.
 
 The [multicast-test](https://github.com/lightwebinc/multicast-test) repository
-provides two parallel test frameworks:
+is the public integration suite: a **Go Docker harness** (`harness/`) of ~45
+scenario tests driven by `go test`. Each scenario spawns ephemeral Docker
+containers on an isolated IPv6 multicast bridge (`fd10::/64`) and covers
+functional filters, NACK retransmission, fragmentation, BRC-127 group
+announcements, BRC-131/132/134 control-plane delivery, SSM rollout, unified
+logging, TxID dedup with Redis, and rate-limit defenses. See the repo's
+[`SCENARIOS.md`](https://github.com/lightwebinc/multicast-test/blob/main/SCENARIOS.md)
+for the full index.
 
-1. **Go Docker harness (`harness/`)** — primary. 40 scenario tests driven by
-   `go test`. Spawns ephemeral Docker containers on an isolated IPv6 multicast
-   bridge (`fd10::/64`). Covers functional, NACK retransmission, fragmentation,
-   BRC-127 group announcements, BRC-131/132/134 control-plane delivery, TxID
-   dedup with Redis, and rate-limit defenses.
-2. **LXD VM lab (`vm-lab/`)** — legacy. Persistent Ubuntu/FreeBSD VMs on
-   `fd20::/64` with Ansible deploy and bash `run.sh` scenario scripts. Useful
-   for end-to-end soak tests, BGP, and dashboard validation.
+Deployment / applied-infrastructure testing (the LXD VM lab, privileged netns
+mesh repros, and real-host deployment tooling) is maintained separately from
+this public suite.
 
-**Getting Started (Go Docker harness):**
+**Getting Started:**
 
 ```bash
 cd multicast-test
-make test          # all 40 scenarios (~30 min, requires Docker + sudo)
+make test          # all scenarios (~30 min, requires Docker + sudo)
 make test-quick    # tier-1 filter scenarios (~60s)
 make help          # show all targets
-```
-
-**Getting Started (LXD VM lab):**
-
-```bash
-cd multicast-test/vm-lab
-bash deploy.sh                 # provision VMs + Ansible deploy
-bash scenarios/run-all.sh      # run full scenario suite
 ```
 
 ---
@@ -1244,7 +1249,7 @@ per-service infra repos.
 **Retry Endpoint (retry-endpoint):**
 
 - IPv6 enabled on multicast interface
-- Optional: Redis for shared cache (multi-node deployments)
+- Optional: Redis or Aerospike for shared cache (multi-node deployments)
 
 ### Firewall Configuration
 
@@ -1307,7 +1312,7 @@ per-service infra repos.
 
 **Retry Endpoint Scaling:**
 
-- Deploy multiple retry endpoints with shared Redis cache
+- Deploy multiple retry endpoints with a shared Redis or Aerospike cache
 - Cross-instance deduplication prevents duplicate retransmissions
 - Rate limiting protects against NACK storms
 
@@ -1454,5 +1459,5 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 
 ---
 
-_Document Version: 1.14_  
-_Last Updated: 2026-06-02_
+_Document Version: 1.15_  
+_Last Updated: 2026-06-09_
