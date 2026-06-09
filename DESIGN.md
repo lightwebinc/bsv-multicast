@@ -592,9 +592,9 @@ missing frame arrives via multicast or explicit NACK ACK.
   (default), Redis, or Aerospike; 60 s TTL, single 16-byte key:
   `HashKey ∥ SeqNum`
 - Multi-tier rate limiting: per-IP, per-HashKey, per-SeqNum pre-lookup;
-  per-group (groupIdx) post-lookup. The group-tier limiter still sends ACK so
-  the listener does not escalate; the honest-congestion tiers (per-HashKey,
-  per-SeqNum) optionally emit THROTTLED (`-rl-throttle-response`)
+  per-group (groupIdx) post-lookup. The honest-congestion tiers (per-HashKey,
+  per-SeqNum, per-group) optionally emit THROTTLED (`-rl-throttle-response`)
+  so the listener holds rather than escalates; without it they stay silent
 - Sharding-based multicast egress for retransmitted frames
 
 **Architecture:**
@@ -663,10 +663,11 @@ are defined in:
   ACK confirms retransmit dispatched; MISS indicates cache miss and triggers
   immediate escalation to the next endpoint.
 - **THROTTLED response (optional)** — an honest-congestion signal (16 bytes,
-  `MsgType 0x13`) emitted by the per-flow/per-gap rate-limit tiers when enabled
-  (`-rl-throttle-response`). The listener holds the gap for a hinted backoff and
-  retries the same endpoint without escalating or consuming its retry budget.
-  The flood (per-source-IP) tier stays silent to avoid reflection.
+  `MsgType 0x13`) emitted by the per-flow/per-gap/per-group rate-limit tiers
+  when enabled (`-rl-throttle-response`). The listener holds the gap for a
+  hinted backoff and retries the same endpoint without escalating or consuming
+  its retry budget. The flood (per-source-IP) tier stays silent to avoid
+  reflection.
 - **Beacon discovery** — retry endpoints periodically multicast ADVERT messages
   (56 bytes) to site/global beacon groups. Listeners maintain a dynamic endpoint
   registry, sorted by `(Tier ASC, Preference DESC)`.
@@ -724,10 +725,10 @@ The retry endpoint applies four-tier rate limiting (per-IP, per-HashKey,
 per-SeqNum pre-lookup; per-group post-lookup), performs a single-key cache
 lookup (`HashKey ∥ SeqNum`), and retransmits via multicast and/or unicast on a
 hit. On a miss, a 16-byte MISS response triggers immediate listener escalation.
-The group-tier limiter skips the retransmit but still sends ACK so the listener
-does not escalate unnecessarily. When `-rl-throttle-response` is enabled, the
-honest-congestion tiers (per-HashKey, per-SeqNum) instead return a 16-byte
-THROTTLED response so the listener holds and retries the same endpoint.
+When `-rl-throttle-response` is enabled, the honest-congestion tiers
+(per-HashKey, per-SeqNum, per-group) return a 16-byte THROTTLED response so the
+listener holds and retries the same endpoint; without it they stay silent and
+the listener falls back to timeout + backoff.
 
 See
 **[BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.md)**

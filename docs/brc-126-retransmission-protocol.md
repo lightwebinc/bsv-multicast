@@ -126,7 +126,7 @@ Offset  Size  Field
 
 ## THROTTLED Response (`MsgType 0x13`) — 16 bytes
 
-Sent unicast to the NACK source when the request was rejected by a congestion-control tier that limits per-gap (per-SeqNum) or per-flow (per-HashKey/chain) request rate. It is a flow-control signal, **not** a failure: the endpoint is healthy, and for a per-gap throttle a retransmit for this exact gap was likely just served and is propagating over the multicast data plane. On receipt a listener MUST hold the gap for the hinted backoff and retry the **same** endpoint; it MUST NOT escalate to another endpoint and MUST NOT count the throttle as a recovery failure.
+Sent unicast to the NACK source when the request was rejected by a congestion-control tier that limits per-gap (per-SeqNum), per-flow (per-HashKey/chain), or per-group (groupIdx) request rate. It is a flow-control signal, **not** a failure: the endpoint is healthy, and for a per-gap throttle a retransmit for this exact gap was likely just served and is propagating over the multicast data plane. On receipt a listener MUST hold the gap for the hinted backoff and retry the **same** endpoint; it MUST NOT escalate to another endpoint and MUST NOT count the throttle as a recovery failure.
 
 ```text
 Offset  Size  Field
@@ -138,7 +138,7 @@ Offset  Size  Field
      8     8  SeqNum — echo of the throttled request's StartSeq
 ```
 
-**Backoff hint.** The suggested hold is `ThrottleHintBase << bucket`, where `ThrottleHintBase = 125 ms` and `bucket` is the Flags low nibble. Endpoints SHOULD use bucket `2` (~500 ms) for a per-gap throttle and bucket `3` (~1 s) for a per-flow throttle. Listeners SHOULD apply jitter and MAY clamp to a local maximum; the gap's absolute TTL remains the upper bound, and a multicast repair cancels the gap regardless.
+**Backoff hint.** The suggested hold is `ThrottleHintBase << bucket`, where `ThrottleHintBase = 125 ms` and `bucket` is the Flags low nibble. Endpoints SHOULD use bucket `2` (~500 ms) for a per-gap throttle, bucket `3` (~1 s) for a per-flow throttle, and bucket `4` (~2 s) for a per-group throttle. Listeners SHOULD apply jitter and MAY clamp to a local maximum; the gap's absolute TTL remains the upper bound, and a multicast repair cancels the gap regardless.
 
 **Emission rules.** THROTTLED is OPTIONAL and defaults to disabled (`-rl-throttle-response` / `RL_THROTTLE_RESPONSE`); it is a load-shedding refinement for high-fan-out deployments. An endpoint MUST NOT send THROTTLED for a flood-tier (per-source IP) rejection: that tier sheds abusive or spoofed-source load, and answering it would permit reflection. The 16-byte response is smaller than the 64-byte NACK, so the protocol is never a bandwidth amplifier regardless.
 
@@ -206,7 +206,7 @@ Operator assigns `-tier` (0–254) and `-preference` (0–255, default 128) on e
 
 - **Multicast fill suppression:** retransmits go to multicast; all listeners receive them; `Tracker.Fill()` cancels pending NACKs.
 - **Cache TTL (60 s):** retransmitted frames remain in cache for the TTL window; natural expiry bounds the retransmit window without coordination overhead.
-- **Rate-limit tiers:** per-source-IP (flood, silent drop), per-flow (HashKey), per-gap (SeqNum), and per-group (groupIdx). The honest-congestion tiers (per-flow, per-gap) MAY emit THROTTLED so the listener holds rather than escalates; the flood tier stays silent to avoid reflection.
+- **Rate-limit tiers:** per-source-IP (flood, silent drop), per-flow (HashKey), per-gap (SeqNum), and per-group (groupIdx). The honest-congestion tiers (per-flow, per-gap, per-group) MAY emit THROTTLED so the listener holds rather than escalates; the flood tier stays silent to avoid reflection.
 - **Inter-AS:** MP-BGP propagates retransmits; remote listeners fill before backoff fires.
 
 ---
