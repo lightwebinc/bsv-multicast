@@ -49,15 +49,16 @@ Listener receives:  SeqNum 1, 2, 3, [gap], 6, 7, ...
          │  ReadFrom response(300ms)│
          └──────────┬───────────────┘
                     │
-          ┌─────────┼─────────┐
-          ▼         ▼         ▼
-        ACK       MISS     Timeout
-          │         │         │
-    cancel gap   advance   backoff
-                endpoint   & retry
+      ┌────────┬────┴────┬─────────┐
+      ▼        ▼         ▼         ▼
+    ACK      MISS    THROTTLED  Timeout
+      │        │         │         │
+ cancel gap advance   hold same  backoff
+            endpoint  endpoint   & retry
+                      (no escalate)
 ```
 
-The NACK carries the `HashKey` (stable per-flow identifier) and `StartSeq`/`EndSeq` (missing sequence range). The retry endpoint looks up the frame using the 16-byte cache key `HashKey ∥ StartSeq`. The listener opens a per-request ephemeral UDP socket (`[::]:0`), sends the NACK, and waits up to 300 ms for a single response.
+The NACK carries the `HashKey` (stable per-flow identifier) and `StartSeq`/`EndSeq` (missing sequence range). The retry endpoint looks up the frame using the 16-byte cache key `HashKey ∥ StartSeq`. The listener opens a per-request ephemeral UDP socket (`[::]:0`), sends the NACK, and waits up to 300 ms for a single response (`ACK`, `MISS`, or — when the endpoint runs with `-rl-throttle-response` — `THROTTLED`).
 
 ---
 
@@ -124,20 +125,32 @@ Tier 1:
        ▼
   ┌────────────────┐
   │ NACKED(Tier-K) │  NACK sent to endpoint at current (tier, preference)
-  └───┬────┬───┬───┘
-      │    │   │
-      │    │   └─── Timeout ──► exponential backoff; retry next sweep
-      │    │
-      │    └─── MISS ──► advance to next endpoint at same tier (by Preference);
-      │                  if tier exhausted, advance to Tier K+1;
-      │                  retry IMMEDIATELY (no backoff)
-      │
-      └─── ACK ──► gap entry cancelled; done
-                   (ACK.Flags indicates multicast_sent / unicast_sent)
+  └─┬───┬───┬───┬──┘
+    │   │   │   │
+    │   │   │   └─ Timeout ──► exponential backoff; retry next sweep
+    │   │   │
+    │   │   └─ THROTTLED ──► hold the SAME endpoint for the hinted backoff
+    │   │                    (ThrottleHintBase << bucket, jittered);
+    │   │                    do NOT escalate, do NOT count a failed round
+    │   │
+    │   └─ MISS ──► advance to next endpoint at same tier (by Preference);
+    │               if tier exhausted, advance to Tier K+1;
+    │               retry IMMEDIATELY (no backoff)
+    │
+    └─ ACK ──► gap entry cancelled; done
+               (ACK.Flags indicates multicast_sent / unicast_sent)
 
   Any state ──► FILLED  (multicast repair arrived independently)
                 gap entry cancelled; in-flight socket times out harmlessly
 ```
+
+`THROTTLED` is an optional honest-congestion signal (enabled per-endpoint via
+`-rl-throttle-response`). It means the request hit a per-gap, per-flow, or
+per-group rate-limit tier — the endpoint is healthy and a multicast repair for
+this exact gap is likely already propagating — so the listener parks the gap
+briefly and retries the same endpoint rather than escalating or burning a retry.
+The per-source-IP flood tier never emits `THROTTLED` (it would enable
+reflection); it stays silent and the listener falls back to timeout + backoff.
 
 ---
 
@@ -202,7 +215,7 @@ No protocol changes required. Network team extends multicast fabric via MP-BGP.
 | Mechanism                | Layer          | Effect                                                                                            |
 | ------------------------ | -------------- | ------------------------------------------------------------------------------------------------- |
 | Cache TTL (60 s)         | Retry endpoint | Frames expire naturally; bounds retransmit window                                                 |
-| Multi-tier rate limiting | Retry endpoint | Per-IP, per-HashKey, per-SeqNum (pre-lookup, silent drop); per-group (post-lookup, ACK preserved) |
+| Multi-tier rate limiting | Retry endpoint | Per-IP (flood, always silent); per-HashKey, per-SeqNum (pre-lookup) and per-group (post-lookup) — silent by default, or emit `THROTTLED` under `-rl-throttle-response` |
 | `Tracker.Fill()`         | Listener       | Multicast repair cancels pending NACKs for all listeners                                          |
 | Jitter hold-off          | Listener       | Randomised delay before first NACK suppresses duplicates                                          |
 | Exponential backoff      | Listener       | Reduces NACK rate on persistent gaps                                                              |
