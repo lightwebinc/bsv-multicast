@@ -646,6 +646,132 @@ package API,
 
 ---
 
+## Ingress Authorization (Miner-tier Gate)
+
+Most ingress is open by design: any sender submits a transaction (BRC-12 /
+124 / 128) to the nearest proxy and it is sharded to the fabric. But three
+frame classes are **privileged control-plane** messages that egress to a
+broadcast group every subscriber receives, and must originate only from
+miner-tier peers:
+
+| Class | Frame | Egress group |
+|-------|-------|--------------|
+| Block announce | BRC-131 (`FrameVerV4`, `BlockMsgAnnounce`) | `GroupBlockBroadcast` |
+| Coinbase | BRC-133 (`FrameVerV4`, `BlockMsgCoinbase`) | `GroupBlockBroadcast` |
+| Subtree data | BRC-132 (`FrameVerV5`) | `GroupSubtreeDataAnnounce` |
+
+End-user / service consumers (which both submit ordinary transactions) must
+not be able to announce blocks — including indirectly, e.g. relaying a libp2p
+block-gossip message up a consumer tunnel.
+
+Two distinct mechanisms cover this, and the distinction is load-bearing —
+conflating them is how a permissionless network accidentally becomes a
+permissioned one:
+
+1. **Permissionless protocol gate (validate the artifact).** A block
+   announcement carries its own authorization in the form of proof of work —
+   anyone may announce, but the announcement must hash under its claimed
+   target. No identity, no allowlist, nothing to coordinate across domains.
+   This is the BSV-native gate and the right default for an open network.
+2. **Domain-local admission control (govern your own resources).** An operator
+   may additionally restrict *which peers may use this domain's edges and
+   metered bandwidth* — a business/operational policy (subscription, abuse
+   attribution), not a network-wide permission. It is identity/network based
+   and therefore only meaningful inside the issuing domain. A peer an operator
+   declines can still announce through another domain or its own ingress; the
+   network stays open.
+
+The frame-class gate and source allowlist below are mechanism (2) — admission
+control. Proof-of-work validation is mechanism (1). They compose: a privileged
+frame may be required to both arrive on an admitted path AND carry valid work.
+
+### Per-socket frame-class gate (admission control)
+
+The proxy enforces authorization as a property of the **ingress socket**, not
+the host, so one edge serves miners and ordinary consumers interleaved (best
+fit per device + bandwidth):
+
+- **User / transaction ingress** (`-udp-listen-port`, default 8725;
+  `-tcp-listen-port`) accepts transactions + BRC-134 anchor only. Privileged
+  BRC-131/133/132 frames are dropped at `forwarder.DispatchClass` and counted
+  (`bsp_privileged_frame_rejected_total{frame_type}`). Exposed to all
+  consumers; the broker's consumer deployment path is unchanged.
+- **Miner ingress** (`-miner-listen-port`, e.g. 9000; `-miner-tcp-listen-port`)
+  accepts every class, including the privileged ones. Opening it is the
+  proxy's "accept block/coinbase/subtree data?" switch (both `0` ⇒ the proxy
+  ingests transactions only).
+
+`-tx-accept-privileged` (default `false`) reverts the user port to legacy
+accept-all for collapsed/dev single-port nodes.
+
+### Network access = tier
+
+The gate above is the application-layer enforcement point (it holds even if a
+firewall is misconfigured). Operationally, *which* peers can reach the miner
+port is the network-access layer and is where the broker's miner-tier label
+gets teeth: a miner-tier tunnel is routed to the edge's miner port and its
+inner address is admitted by a firewall source set; consumer tunnels reach
+only 8725. Miners that are not customers are added to the miner source set out
+of band — no subscription record required. The open data plane stays
+tier-agnostic (just sockets + a frame-class gate); the broker (proprietary)
+supplies the routing and source roster.
+
+### Permissionless gate: proof of work
+
+The permissionless mechanism validates the **artifact**, not the emitter. A
+BRC-131 block announce carries the 80-byte header in-frame; the proxy gates it
+(opt-in, `-require-block-pow`) on a cheap stateless check — `hash(header) ≤
+target(nBits)` and that target ≤ a configured difficulty floor
+(`-min-pow-bits`). Forging a passing header costs work proportional to the
+floor; verifying costs one double-SHA256. That asymmetry is the spam gate, and
+because proof of work is globally verifiable it needs **zero cross-domain
+coordination** — every domain checks identically against the same chain rules,
+with no shared key registry to replicate or reconcile.
+
+This is deliberately not full consensus validation (the proxy has no chain
+context to confirm `nBits` is the correct retarget for the height); it rejects
+ingress spam cheaply, and the consuming node (Teranode) does full validation.
+Rejections increment `bsp_block_pow_rejected_total`. Implemented in
+`shard-common/pow` + `shard-proxy` (`forwarder.SetBlockPoW`).
+
+**The check belongs at the listener too, not only the proxy.** A block
+announcement that originates in another domain arrives over the multicast
+fabric (inter-domain peering) and never passes our proxy — so the **listener**
+independently re-validates before fan-out (opt-in, `-require-block-pow`):
+
+- **Block announce (BRC-131):** same stateless header-PoW check before
+  forwarding downstream; a frame failing PoW is dropped (`bsl_frames_dropped_total{reason="block_pow"}`)
+  and not gap-tracked, so a junk injection can't pollute recovery state.
+- **Coinbase (BRC-133):** has no in-frame PoW, so it is gated by **correlation**
+  — the listener records the coinbase TxID of every PoW-valid block announce
+  (a shared, TTL-bounded `CoinbaseCorrelator`) and forwards a coinbase frame
+  only if its TxID matches one (`reason="coinbase_uncorrelated"` otherwise). An
+  uncorrelated coinbase (arriving before its block, or matching none) is
+  dropped and re-evaluated if the block arrives and the coinbase is re-sent.
+- **Subtree data (BRC-132):** no in-frame PoW and no block to correlate against
+  pre-block; bounded only by admission control + the 60s cache TTL (unanchored
+  subtrees age out). This is the soft edge, called out honestly.
+
+Implemented in `shard-common/pow` + `shard-listener`
+(`listener.Worker.SetBlockPoW`, `CoinbaseCorrelator`), on both the direct and
+the BRC-130-reassembled block paths.
+
+> **Anchor transactions (BRC-134) are deliberately ungated.** Anyone may create
+> and emit an anchor; wide dissemination to every subscriber is the intended
+> behaviour, so anchors carry no PoW gate and no admission requirement — they
+> are the permissionless baseline, not a residual surface.
+
+> **Cross-domain note on signing.** Cryptographic frame signing (a per-frame
+> identity signature against a pubkey allowlist) is a *domain-local* attribution
+> tool — useful inside one commercial domain for billing / abuse attribution,
+> but it does NOT generalise across domains: a signature registry is shared
+> mutable state with revocation/split-brain coordination costs, exactly what
+> multicast set out to avoid. Inter-domain, frames are re-validated by proof of
+> work, not by signature. Signing stays an optional per-domain add-on, never the
+> network authorization.
+
+---
+
 ## Retransmission and Reliability
 
 ### NACK Protocol (BRC-126)
@@ -1256,9 +1382,13 @@ per-service infra repos.
 
 **Proxy (ingress-infra):**
 
-- Allow UDP/TCP ingress on listen port (default 9000)
+- Allow UDP/TCP transaction ingress on the user listen port (default 8725)
+  from all consumers
+- If a miner ingress is enabled (`-miner-listen-port`, e.g. 9000), allow it
+  **only** from the miner-tier source set (tunnels / firewall allowlist) — it
+  accepts privileged block/coinbase/subtree-data frames. See
+  [§ Ingress Authorization](#ingress-authorization-miner-tier-gate).
 - Allow IPv6 multicast egress on egress interface
-- No additional firewall rules required
 
 **Listener (listener-infra):**
 
