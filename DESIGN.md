@@ -756,10 +756,11 @@ Implemented in `shard-common/pow` + `shard-listener`
 (`listener.Worker.SetBlockPoW`, `CoinbaseCorrelator`), on both the direct and
 the BRC-130-reassembled block paths.
 
-> **Anchor transactions (BRC-134) are deliberately ungated.** Anyone may create
-> and emit an anchor; wide dissemination to every subscriber is the intended
-> behaviour, so anchors carry no PoW gate and no admission requirement — they
-> are the permissionless baseline, not a residual surface.
+> **Anchor transactions (BRC-134) are deliberately ungated — and stay that way.**
+> Anchors are **user-submitted**: any participant may create and emit one, and
+> wide dissemination to every subscriber is the intended behaviour. They carry
+> no PoW gate and no admission requirement — the permissionless baseline. This
+> is a firm design decision: anchors are NOT folded into the miner-tier gate.
 
 > **Cross-domain note on signing.** Cryptographic frame signing (a per-frame
 > identity signature against a pubkey allowlist) is a *domain-local* attribution
@@ -1172,11 +1173,18 @@ auto-config consumer profiles
 
 ## Source-Specific Multicast (SSM)
 
-The fabric runs in either Any-Source Multicast (ASM, the default) or
-Source-Specific Multicast (SSM, opt-in via `multicast.sourceMode: ssm`). SSM is
+The fabric runs in either Source-Specific Multicast (SSM, **the default and
+first-class mode**) or Any-Source Multicast (ASM, a **lab/dev fallback** —
+`sourceMode: asm`). SSM is required for **inter-domain** operation (RFC 8815
+forbids inter-domain ASM) and gives RP-less, loop-free source trees; it is the
+default across the Helm charts, integrated-infra, and the fleet's spine-multicast
+fabrics. ASM is retained only for smcroute collapsed-unicast labs (and the bare
+binary CLI default, since a bare invocation is a lab/dev scenario). SSM vs ASM is
 a deployment/transport mode only — frame format, NACK protocol, HashKey
-computation, and shard derivation are unchanged. When enabled, receivers join
-`(S,G)` instead of `(*,G)` and the fabric uses the RFC 4607 SSM address range.
+computation, and shard derivation are unchanged. Under SSM, receivers
+`(S,G)`-join the publisher roster (`ssm_publishers_static`) instead of `(*,G)`,
+each emitter binds a routable per-node source (`bind_source`), and the fabric
+uses the RFC 4607 SSM address range.
 
 ### Addressing
 
