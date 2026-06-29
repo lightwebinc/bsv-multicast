@@ -137,6 +137,41 @@ OR max-delay) modelled in `sim/window.go`.
   bill on wire-pps so the coalescing saving flows to the bill. Advertise
   bundle-capability so the upstream only coalesces toward capable consumers.
 
+### P6 status — SHIPPED (origin-coalescing, not spine-coalescing)
+
+A design correction surfaced during implementation and is now load-bearing:
+coalescing happens at the **origin** (collapsed/ingress proxy), **not** at the
+spine. The forwarder's coalescing divert only fires when `src != nil`; a spine
+re-emits with `src = nil`, and re-stamping there would break the per-source
+HashKey that own-traffic exclusion depends on. So:
+
+- **`shard-proxy` (OSS):** new `Forwarder.ProcessBundle` + a `FrameVer 0x08` case
+  in `DispatchClass` — a relay (the spine) re-emits an ingress-coalesced bundle
+  **verbatim** to its group (group read from the bundle header, no re-stamp,
+  members opaque). Cheap magic + payload-length validation guards a corrupt
+  header (`bundle_malformed` drop counter).
+- **`shard-proxy-afxdp`:** `-coalesce` / `-coalesce-max-bytes` (1500) /
+  `-coalesce-max-members` / `-coalesce-carry-txid`, default off. `SetCoalesce` +
+  `FlushCoalesced` wired on the **origin** drains only (collapsed `-xdp-mode
+  kernel`, ingress). **`-mode collapsed -xdp-mode native|skb` + `-coalesce` is a
+  fatal startup error**: the in-place AF_XDP TX (`TxEgress.Send`) emits straight
+  from UMEM and silently drops a heap bundle datagram. The spine relays bundles
+  verbatim (one bundle → one `SpineTx.SendCopy` descriptor = the "TX-side
+  packing") and surfaces oversize/saturated TX drops on `/metrics`. A bundle must
+  fit `frame-size − 62`; size the spine `-frame-size` ≥ any feeding proxy's
+  `-coalesce-max-bytes + 62`.
+- **`shard-listener` (OSS):** optional `egress.BundleSink` seam +
+  `fanout.Sink.SendBundle` — bundle-capable consumers get the whole bundle, the
+  rest get decoalesced+re-stamped frames (default path unchanged). `Consumer`
+  gains `BundleCapable`.
+- **`shard-listener-1bsv`:** `policy.ConsumerSpec.BundleCapable` (broker-pushed),
+  the wrapper chain forwards `SendBundle`, and the meter gains `Txs`/`TxsTotal`
+  (+ `consumer_egress_txs_total`): a whole bundle meters **1 wire packet, N txs**
+  — bill on packets, receipt on txs.
+
+Deps: `shard-common v0.14.0`, `shard-listener v1.6.5`, `shard-proxy` at the
+bundle-relay commit. Build/test green incl. `GOWORK=off` CI mode.
+
 ---
 
 ## Cross-cutting
