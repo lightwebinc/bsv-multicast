@@ -76,6 +76,9 @@ and anchor transactions over reserved control groups.
   Standalone 80-byte block header split; emitter-originated
 - [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md) —
   Periodic participant configuration announcement (shard_bits + joined groups)
+- [BRC-142 Coalescing (Bundle) Frame](docs/brc-142-coalescing-frame.md) —
+  Packs many small txs of one (group, subtree) into one ≤MTU datagram; inverse
+  of BRC-130 (DRAFT)
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
 
