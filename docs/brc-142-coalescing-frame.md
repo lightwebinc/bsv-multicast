@@ -8,9 +8,20 @@ across many datagrams; BRC-142 merges many small transactions into one. The goal
 is to cut **packets-per-second** — the dominant data-plane forwarding cost — on
 the replicated fabric and per-tunnel egress hops.
 
-> **Status: DRAFT.** Not yet submitted to `bitcoin-sv/BRCs`. Design rationale,
-> alternatives, and the simulation results that fixed the parameters below are in
-> [coalescing-frame-format-DRAFT.md](coalescing-frame-format-DRAFT.md).
+> **Status: PROPOSED — [bitcoin-sv/BRCs PR #164](https://github.com/bitcoin-sv/BRCs/pull/164)**
+> (opened 2026-06-29, awaiting review). The brief normative text is the PR
+> (`transactions/0142.md`); this document is the detailed design and rationale and
+> is kept congruent with it.
+>
+> **Reference implementation: SHIPPED** across the data plane — `shard-common`
+> bundle codec (`v0.14.0`), `shard-proxy` coalescing + verbatim relay,
+> `shard-listener` edge-/consumer-decoalesce (`v1.6.5`), `retry-endpoint` bundle
+> cache — and the commercial layer — `shard-proxy-1bsv` origin-side coalescing +
+> spine relay, `shard-listener-1bsv` consumer-decoalesce + per-member metering.
+> **§20 records the deliberate deployment decisions** (within-batch flush, spine
+> relays / origin-only coalescing, listener-side re-bucketing, per-proxy opt-in).
+> Design rationale, alternatives, and the simulation results that fixed the
+> parameters below are in [coalescing-frame-format-DRAFT.md](coalescing-frame-format-DRAFT.md).
 
 ---
 
@@ -134,8 +145,16 @@ A coalescing node (proxy, spine, relay):
    buffered member reaches the configured **max coalescing delay** (§8), whichever
    first.
 
-Coalescing is **opt-in per flow**: low-latency relay opts out and pays the
-small-packet price; bulk/replay/archival flows opt in.
+Coalescing is **opt-in**: low-latency paths opt out and pay the small-packet
+price; bulk/replay/archival paths opt in.
+
+> **Implementation note (§20).** The reference proxy realizes the bounded-delay
+> requirement as a **within-batch flush** — it packs only the eligible frames of
+> one receive batch (`recvmmsg`) and flushes at batch end, so there is *no timer
+> and no configurable delay knob*; added latency is the batch dwell (≈0). This is
+> the limit of the "window is irrelevant at 1500 MTU" finding (§14). Opt-in is
+> **per proxy** (a `-coalesce` flag), not yet per-flow; per-flow opt-in is a future
+> refinement.
 
 ---
 
@@ -248,6 +267,22 @@ benefit for any `k`. Re-shard cutover follows the BRC-139 `Successor` block
 routes each bundle by its tagged `ShardBits`; past `TransitionEpoch` the old
 generation retires.
 
+> **Implementation status (§20) — ENFORCED at the delivery edge.** The **listener**
+> (`shard-listener` `processBundle`, used by both the OSS and the `…-1bsv`
+> commercial listener) applies the rule: before filter/dedup/delivery it compares
+> the bundle's `ShardBits` to its own generation, and on a mismatch re-buckets to
+> the local `ShardBits` (`bundle.Rebucketer` — split + re-coalesce each member into
+> its correct local group) so neither edge- nor consumer-decoalesce can
+> over-deliver a coarser bundle to a finer subscriber. Re-bucketing is applied
+> **once, at the delivery edge** (where subscribers attach), not at every hop: the
+> mid-fabric `shard-proxy-1bsv` spine relay (`Forwarder.ProcessBundle`)
+> deliberately re-emits **verbatim** — it forwards toward listeners, it does not
+> deliver to subscribers, so it has no finer-subscriber to protect. Metric
+> `bsl_bundles_rebucketed_total`. **Caveat:** re-bucketing re-stamps child-flow
+> HashKeys from a re-emit identity, so own-traffic exclusion (which keys on the
+> original sender's HashKey) does not apply to re-bucketed cross-generation flows —
+> a documented re-shard-boundary limitation, not a common-path regression.
+
 ---
 
 ## 12. Inter-domain
@@ -282,22 +317,33 @@ dwell is sub-millisecond and the window setting is largely irrelevant (the bundl
 is MTU-capped, not window-capped). Set the max delay to roughly the bundle
 fill-time for the flow's arrival rate; a delay beyond fill-time adds latency
 without adding density. Recommended starting point at 1500: `≤ 250 µs`–`1 ms`.
+The reference implementation takes this to its limit and uses **no delay knob at
+all** — a within-batch flush (§5/§20), so its added latency is the receive-batch
+dwell (≈0) and bundles form only when a batch carries enough same-flow members.
 
 ---
 
 ## 15. Metrics
 
-| Metric                              | Description                                          |
-| ----------------------------------- | ---------------------------------------------------- |
-| `bsp_coalesce_bundles_total`        | Bundles emitted                                      |
-| `bsp_coalesce_members_total`        | Transactions packed into bundles                     |
-| `bsp_coalesce_members_per_bundle`   | Histogram of members/bundle (achieved R)             |
-| `bsp_coalesce_flush_size_total`     | Bundles flushed by MTU/count cap                     |
-| `bsp_coalesce_flush_timer_total`    | Bundles flushed by the max-delay timer               |
-| `bsp_coalesce_ineligible_total`     | Transactions excluded (> MTU → BRC-130)              |
-| `bsl_decoalesce_bundles_total`      | Bundles unpacked                                     |
-| `bsl_decoalesce_members_total`      | Member frames emitted downstream                     |
-| `bsl_rebucket_bundles_total`        | Bundles re-bucketed at a relay (re-shard/cross-domain)|
+The metrics the **reference implementation actually emits** (the earlier
+aspirational `flush_size`/`flush_timer`/`ineligible`/`bsl_decoalesce_*` names are
+**not** emitted — there is no flush timer (§5), and decoalesced members are
+counted on the shared `bsl_frames_forwarded_total`):
+
+| Metric (label)                                   | Where         | Description                                                                 |
+| ------------------------------------------------ | ------------- | -------------------------------------------------------------------------- |
+| `bsp_coalesce_bundles_total`                     | proxy         | Bundle datagrams emitted (origin pack **and** verbatim relay re-emit)      |
+| `bsp_coalesce_members_total`                     | proxy         | Member transactions packed into bundles                                    |
+| `bsp_coalesce_members_per_bundle`                | proxy         | Histogram of members/bundle (achieved R)                                   |
+| `bsp_coalesce_flush_total{reason}`               | proxy         | Flushes by reason: `batch` (origin within-batch), `relay` (spine verbatim), `encode_error` |
+| `bsp_packets_dropped_total{reason}`              | proxy         | Relay rejects: `bundle_short`, `bundle_malformed` (failed magic/length check) |
+| `bsp_spine_tx_oversize_drops`                    | afxdp spine   | Bundle `62 + len > frame-size` dropped at the AF_XDP TX (§10/§20)          |
+| `bsp_spine_tx_saturated_drops`                   | afxdp spine   | AF_XDP TX ring saturated                                                   |
+| `bsl_frames_received_total{type="brc142"}`       | listener      | Bundles received at the edge                                               |
+| `bsl_frames_dropped_total{reason="bundle_decode_error"}` | listener | Bundles that failed to decode                                          |
+| `bsl_frames_forwarded_total`                     | listener      | Decoalesced member frames forwarded (shared with non-bundle frames)        |
+| `bsl_bundles_rebucketed_total`                   | listener      | Bundles re-bucketed to the local ShardBits generation before delivery (§11) |
+| `consumer_egress_packets_total` vs `consumer_egress_txs_total` | listener-1bsv | Wire datagrams (bill on this) vs member transactions (receipts); diverge only when a bundle is delivered **whole** to a bundle-capable consumer |
 
 ---
 
@@ -310,11 +356,21 @@ without adding density. Recommended starting point at 1500: `≤ 250 µs`–`1 m
 | Datagram shorter than 66-byte header   | Silent drop                                     |
 | `PayloadLen` > datagram remainder      | Silent drop (truncated)                         |
 | Member `TxLen` runs past `PayloadLen`  | Silent drop (truncated member section)          |
-| `TxCount` members not consumed exactly | Malformed; drop bundle                          |
-| Member group ≠ `GroupIdx` at `ShardBits` | Malformed bundle (encoder bug); drop          |
-| Member tx > MTU budget                 | Encoder MUST route via BRC-130, never pack      |
+| `TxCount` members not consumed exactly | Malformed; drop bundle (`ErrCountMismatch`)     |
+| Member group ≠ `GroupIdx` at `ShardBits` | Encoder invariant — origin MUST pack only same-group members (not decoder-enforced) |
+| Member tx > MTU budget                 | Encoder invariant — origin MUST route via BRC-130, never pack |
 
----
+> **Implementation note (§20).** The reference impl makes these drops **counted,
+> not silent** (`bundle_short` / `bundle_malformed` on the relay; `bundle_decode_error`
+> on the listener decoder) — silence would hide upstream corruption, so each drop
+> increments a labelled counter. The decoder (`bundle.Decode`) enforces magic,
+> short-header, `PayloadLen ≤ datagram`, per-member truncation, **and exact
+> consumption** (`ErrCountMismatch` when the `TxCount` members do not consume
+> `PayloadLen` exactly — a `TxCount`/`PayloadLen` disagreement). The one row it does
+> **not** enforce is *"member group ≠ `GroupIdx`"*: that is an **encoder invariant**
+> (like the BRC-130-routing row), not a decode-time check — verifying it would cost
+> a hash per member and a routing engine the decoder does not carry, so the decoder
+> trusts the coalescing origin to pack only same-group members.
 
 ## 17. Constants Reference
 
@@ -323,22 +379,46 @@ without adding density. Recommended starting point at 1500: `≤ 250 µs`–`1 m
 | FrameVerBundle      | 8     | 0x08   | BRC-142 bundle frame version             |
 | BundleHeaderSize    | 66    | 0x42   | Bundle header size in bytes              |
 | FlagTxIDsPresent    | 1     | 0x01   | Flags bit0: per-member TxIDs present      |
-| MemberLenSize       | 2     | 0x02   | Per-member length prefix size            |
-| MemberTxIDSize      | 32    | 0x20   | Per-member TxID size (when present)       |
 | MaxMembers          | 65535 | 0xFFFF | TxCount ceiling (uint16)                 |
-| MaxMemberTx         | 65535 | 0xFFFF | Largest member tx (uint16 TxLen)         |
+| MaxMemberTxLen      | 65535 | 0xFFFF | Largest member tx **length** (uint16 TxLen) — a length ceiling, distinct from the `MaxMembers` count |
+
+The member-section field sizes — length prefix `2` and per-member TxID `32` — are
+fixed by the member format (§3) and kept unexported in the reference codec
+(`memberLenSize` / `memberTxIDSize`); they are structural, not part of the public
+constant API, so the brief BRC omits them (the member-format table already states
+them).
 
 ---
 
-## 18. Infrastructure Impact
+## 18. Infrastructure Impact (as shipped)
 
-- **Proxy** — gains an opt-in coalescing stage: bucket by `(group, subtree)`, pack
-  to MTU/delay, emit FrameVer 0x08. Default-off; per-flow opt-in.
-- **Listener** — gains a `decoalesce` step ahead of the existing
-  filter/own-exclusion/fan-out path (edge-decoalesce, default) and an optional
-  consumer-decoalesce mode. Re-bucketing (relay) reuses decoalesce + coalesce.
+- **Proxy (`shard-proxy`, OSS)** — opt-in coalescing stage at an **origin** proxy:
+  bucket eligible BRC-124/128 frames by `(sender, group, subtree)` within a receive
+  batch, pack to the MTU/count cap, stamp, emit FrameVer 0x08. Plus a verbatim
+  **relay** path (`ProcessBundle`): a node that *receives* a bundle re-emits it
+  unchanged to the group in its header. Default-off (`-coalesce`).
+- **Commercial proxy (`shard-proxy-1bsv`)** — coalesces on the **origin** modes
+  (collapsed `-xdp-mode kernel`, ingress); the **spine** relays bundles verbatim
+  (one bundle → one AF_XDP TX descriptor). `-mode collapsed -xdp-mode native|skb`
+  + `-coalesce` is a **fatal** combo: the in-place AF_XDP TX cannot carry a
+  heap-allocated bundle datagram. (Why not coalesce at the spine: the coalescing
+  divert needs the per-source IP, which a spine re-emit does not have — §20.)
+- **Listener (`shard-listener`, OSS)** — `processBundle` runs ahead of the existing
+  filter/own-exclusion/fan-out path: filter + gap-track + dedup at **bundle**
+  granularity, then **edge-decoalesce** (split into BRC-124/128 frames, re-stamp
+  per-tx egress SeqNum) — the default. An optional `BundleSink`/`fanout.SendBundle`
+  seam delivers whole bundles to consumers that advertise `BundleCapable`
+  (consumer-decoalesce). A bundle built at a different `ShardBits` generation is
+  **re-bucketed to the local generation** in `processBundle` before delivery
+  (`bundle.Rebucketer`), so neither delivery mode over-delivers a coarser bundle to
+  a finer subscriber (§11/§20).
+- **Commercial listener (`shard-listener-1bsv`)** — `policy.ConsumerSpec.BundleCapable`
+  (broker-pushed) selects whole-bundle delivery; the meter records **wire packets
+  (bill) and member transactions (`Txs`, receipts)** separately, so a whole-bundle
+  delivery bills one packet for N transactions.
 - **Retry endpoint** — caches/retransmits a bundle as an opaque frame keyed by
-  `(HashKey ∥ SeqNum)`; no new logic beyond the larger frame.
+  `(HashKey ∥ SeqNum)`; group derived from the bundle header. No new logic beyond
+  the larger frame.
 - **Firewall / classifiers** — magic and `ProtoVer` are at the same offsets; the
   TxID/HashKey/SeqNum offsets differ from BRC-124, so any classifier that reads
   those fields must branch on FrameVer 0x08.
@@ -354,3 +434,30 @@ without adding density. Recommended starting point at 1500: `≤ 250 µs`–`1 m
 - [BRC-130: Fragmentation](brc-130-fragmentation.md) — the inverse; mutually exclusive per datagram
 - [BRC-139: Shard Manifest](brc-139-shard-manifest.md) — `ShardBits`/generation coordination, re-shard `Successor`
 - [coalescing-frame-format-DRAFT.md](coalescing-frame-format-DRAFT.md) — design rationale + simulation results
+
+---
+
+## 20. Implementation status & spec delta
+
+The wire format (§2, §3), constants (§17), addressing/flow identity (§4),
+retransmission (§7), edge-/consumer-decoalesce (§8), re-bucketing (§11), and EF
+handling (§6) are implemented as specified. The rows below are **deliberate
+deployment decisions** (not gaps) — they do **not** change the wire format, so an
+independent implementation that follows §2–§17 interoperates.
+
+| Topic | Decision | Rationale |
+| --- | --- | --- |
+| Flush trigger (§5/§8/§14) | **Within-batch flush** — pack one `recvmmsg` batch, flush at batch end; **no timer, no delay knob** | Zero added latency; the limit of the "window irrelevant at 1500 MTU" finding. A delay timer is **deferred** while the design targets 1500 MTU (bundles MTU-cap quickly). Bundles form under load; at low rate it degrades to ~1 member/bundle |
+| Opt-in granularity (§5/§1) | **Per proxy** (a `-coalesce` flag) | Per-flow opt-in is a possible future refinement; per-proxy is sufficient for the pps win and matches how operators run the fleet |
+| Where coalescing runs (§1/§18) | **Origin only** (collapsed/ingress); the **spine relays, does not coalesce** | The coalescing divert keys the bundle HashKey on the per-source IP for own-traffic exclusion; a spine re-emit has `src=nil`, so coalescing there would mis-key the flow |
+| Re-bucketing (§11) | **Implemented at the listener** (the delivery edge), via `processBundle` generation-alignment; the mid-fabric spine relay stays verbatim | Re-bucket once where subscribers attach, not per hop. Own-traffic exclusion does not survive a cross-generation re-stamp (documented §11 caveat) |
+| Drop visibility (§16) | Drops are **counted, not silent** (`bundle_short`/`bundle_malformed`/`bundle_decode_error`/`ErrCountMismatch`) | Silence hides upstream corruption. The one un-enforced row (member group ≠ GroupIdx) is an **encoder invariant**, not a decode-time check (a hash + routing engine per member) |
+| Metric names (§15) | Actual emitted names differ from the original draft | See the §15 table (the real names) |
+
+**Congruence with [PR #164](https://github.com/bitcoin-sv/BRCs/pull/164)
+(`transactions/0142.md`):** congruent on wire format and behavior. The member-length
+ceiling is named **`MaxMemberTxLen`** consistently in the PR, this doc, and the code
+(`shard-common/bundle`). The member field sizes (`2`, `32`) stay unexported in the
+codec and appear in both documents' member-format tables, so the brief PR correctly
+omits them from its constants list. The PR's error-handling table is a deliberate
+subset of §16. **No PR changes are required.**
