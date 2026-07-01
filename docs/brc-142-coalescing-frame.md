@@ -20,8 +20,8 @@ the replicated fabric and per-tunnel egress hops.
 > spine relay, `shard-listener-1bsv` consumer-decoalesce + per-member metering.
 > **§20 records the deliberate deployment decisions** (within-batch flush, spine
 > relays / origin-only coalescing, listener-side re-bucketing, per-proxy opt-in).
-> Design rationale, alternatives, and the simulation results that fixed the
-> parameters below are in [coalescing-frame-format-DRAFT.md](coalescing-frame-format-DRAFT.md).
+> Design rationale, alternatives, and the deliberate deployment decisions that
+> fixed the parameters below are in [§20](#20-implementation-status--spec-delta).
 
 ---
 
@@ -433,7 +433,7 @@ them).
 - [BRC-129: Multicast Addressing](brc-129-multicast-addressing.md) — group/subtree addressing, SSM scope
 - [BRC-130: Fragmentation](brc-130-fragmentation.md) — the inverse; mutually exclusive per datagram
 - [BRC-139: Shard Manifest](brc-139-shard-manifest.md) — `ShardBits`/generation coordination, re-shard `Successor`
-- [coalescing-frame-format-DRAFT.md](coalescing-frame-format-DRAFT.md) — design rationale + simulation results
+- [§20 Implementation status & spec delta](#20-implementation-status--spec-delta) — design rationale + deliberate deployment decisions
 
 ---
 
