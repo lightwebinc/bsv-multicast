@@ -15,9 +15,8 @@ the replicated fabric and per-tunnel egress hops.
 >
 > **Reference implementation: SHIPPED** across the data plane — `shard-common`
 > bundle codec (`v0.14.0`), `shard-proxy` coalescing + verbatim relay,
-> `shard-listener` edge-/consumer-decoalesce (`v1.6.5`), `retry-endpoint` bundle
-> cache — and the commercial layer — `shard-proxy-1bsv` origin-side coalescing +
-> spine relay, `shard-listener-1bsv` consumer-decoalesce + per-member metering.
+> `shard-listener` edge-/consumer-decoalesce (`v1.6.5`), and `retry-endpoint`
+> bundle cache. Commercial implementations exist and interoperate.
 > **§20 records the deliberate deployment decisions** (within-batch flush, spine
 > relays / origin-only coalescing, listener-side re-bucketing, per-proxy opt-in).
 > Design rationale, alternatives, and the deliberate deployment decisions that
@@ -268,14 +267,13 @@ routes each bundle by its tagged `ShardBits`; past `TransitionEpoch` the old
 generation retires.
 
 > **Implementation status (§20) — ENFORCED at the delivery edge.** The **listener**
-> (`shard-listener` `processBundle`, used by both the OSS and the `…-1bsv`
-> commercial listener) applies the rule: before filter/dedup/delivery it compares
+> (`shard-listener` `processBundle`) applies the rule: before filter/dedup/delivery it compares
 > the bundle's `ShardBits` to its own generation, and on a mismatch re-buckets to
 > the local `ShardBits` (`bundle.Rebucketer` — split + re-coalesce each member into
 > its correct local group) so neither edge- nor consumer-decoalesce can
 > over-deliver a coarser bundle to a finer subscriber. Re-bucketing is applied
-> **once, at the delivery edge** (where subscribers attach), not at every hop: the
-> mid-fabric `shard-proxy-1bsv` spine relay (`Forwarder.ProcessBundle`)
+> **once, at the delivery edge** (where subscribers attach), not at every hop: a
+> mid-fabric relay
 > deliberately re-emits **verbatim** — it forwards toward listeners, it does not
 > deliver to subscribers, so it has no finer-subscriber to protect. Metric
 > `bsl_bundles_rebucketed_total`. **Caveat:** re-bucketing re-stamps child-flow
@@ -337,13 +335,14 @@ counted on the shared `bsl_frames_forwarded_total`):
 | `bsp_coalesce_members_per_bundle`                | proxy         | Histogram of members/bundle (achieved R)                                   |
 | `bsp_coalesce_flush_total{reason}`               | proxy         | Flushes by reason: `batch` (origin within-batch), `relay` (spine verbatim), `encode_error` |
 | `bsp_packets_dropped_total{reason}`              | proxy         | Relay rejects: `bundle_short`, `bundle_malformed` (failed magic/length check) |
-| `bsp_spine_tx_oversize_drops`                    | afxdp spine   | Bundle `62 + len > frame-size` dropped at the AF_XDP TX (§10/§20)          |
-| `bsp_spine_tx_saturated_drops`                   | afxdp spine   | AF_XDP TX ring saturated                                                   |
 | `bsl_frames_received_total{type="brc142"}`       | listener      | Bundles received at the edge                                               |
 | `bsl_frames_dropped_total{reason="bundle_decode_error"}` | listener | Bundles that failed to decode                                          |
 | `bsl_frames_forwarded_total`                     | listener      | Decoalesced member frames forwarded (shared with non-bundle frames)        |
 | `bsl_bundles_rebucketed_total`                   | listener      | Bundles re-bucketed to the local ShardBits generation before delivery (§11) |
-| `consumer_egress_packets_total` vs `consumer_egress_txs_total` | listener-1bsv | Wire datagrams (bill on this) vs member transactions (receipts); diverge only when a bundle is delivered **whole** to a bundle-capable consumer |
+
+A relay implementation SHOULD count oversize/ring-saturated TX drops; a metering
+implementation MAY bill on receiver wire datagrams while crediting member
+transactions as receipts.
 
 ---
 
@@ -396,13 +395,8 @@ them).
   bucket eligible BRC-124/128 frames by `(sender, group, subtree)` within a receive
   batch, pack to the MTU/count cap, stamp, emit FrameVer 0x08. Plus a verbatim
   **relay** path (`ProcessBundle`): a node that *receives* a bundle re-emits it
-  unchanged to the group in its header. Default-off (`-coalesce`).
-- **Commercial proxy (`shard-proxy-1bsv`)** — coalesces on the **origin** modes
-  (collapsed `-xdp-mode kernel`, ingress); the **spine** relays bundles verbatim
-  (one bundle → one AF_XDP TX descriptor). `-mode collapsed -xdp-mode native|skb`
-  + `-coalesce` is a **fatal** combo: the in-place AF_XDP TX cannot carry a
-  heap-allocated bundle datagram. (Why not coalesce at the spine: the coalescing
-  divert needs the per-source IP, which a spine re-emit does not have — §20.)
+  unchanged to the group in its header. Default-off (`-coalesce`). Commercial
+  variants coalesce at the origin only and relay verbatim mid-fabric.
 - **Listener (`shard-listener`, OSS)** — `processBundle` runs ahead of the existing
   filter/own-exclusion/fan-out path: filter + gap-track + dedup at **bundle**
   granularity, then **edge-decoalesce** (split into BRC-124/128 frames, re-stamp
@@ -412,10 +406,6 @@ them).
   **re-bucketed to the local generation** in `processBundle` before delivery
   (`bundle.Rebucketer`), so neither delivery mode over-delivers a coarser bundle to
   a finer subscriber (§11/§20).
-- **Commercial listener (`shard-listener-1bsv`)** — `policy.ConsumerSpec.BundleCapable`
-  (broker-pushed) selects whole-bundle delivery; the meter records **wire packets
-  (bill) and member transactions (`Txs`, receipts)** separately, so a whole-bundle
-  delivery bills one packet for N transactions.
 - **Retry endpoint** — caches/retransmits a bundle as an opaque frame keyed by
   `(HashKey ∥ SeqNum)`; group derived from the bundle header. No new logic beyond
   the larger frame.
@@ -448,7 +438,7 @@ independent implementation that follows §2–§17 interoperates.
 | Topic | Decision | Rationale |
 | --- | --- | --- |
 | Flush trigger (§5/§8/§14) | **Within-batch flush** — pack one `recvmmsg` batch, flush at batch end; **no timer, no delay knob** | Zero added latency; the limit of the "window irrelevant at 1500 MTU" finding. A delay timer is **deferred** while the design targets 1500 MTU (bundles MTU-cap quickly). Bundles form under load; at low rate it degrades to ~1 member/bundle |
-| Opt-in granularity (§5/§1) | **Per proxy** (a `-coalesce` flag) | Per-flow opt-in is a possible future refinement; per-proxy is sufficient for the pps win and matches how operators run the fleet |
+| Opt-in granularity (§5/§1) | **Per proxy** (a `-coalesce` flag) | Per-flow opt-in is a possible future refinement; per-proxy is sufficient for the pps win and matches how operators run the reference deployment |
 | Where coalescing runs (§1/§18) | **Origin only** (collapsed/ingress); the **spine relays, does not coalesce** | The coalescing divert keys the bundle HashKey on the per-source IP for own-traffic exclusion; a spine re-emit has `src=nil`, so coalescing there would mis-key the flow |
 | Re-bucketing (§11) | **Implemented at the listener** (the delivery edge), via `processBundle` generation-alignment; the mid-fabric spine relay stays verbatim | Re-bucket once where subscribers attach, not per hop. Own-traffic exclusion does not survive a cross-generation re-stamp (documented §11 caveat) |
 | Drop visibility (§16) | Drops are **counted, not silent** (`bundle_short`/`bundle_malformed`/`bundle_decode_error`/`ErrCountMismatch`) | Silence hides upstream corruption. The one un-enforced row (member group ≠ GroupIdx) is an **encoder invariant**, not a decode-time check (a hash + routing engine per member) |
@@ -460,4 +450,5 @@ ceiling is named **`MaxMemberTxLen`** consistently in the PR, this doc, and the 
 (`shard-common/bundle`). The member field sizes (`2`, `32`) stay unexported in the
 codec and appear in both documents' member-format tables, so the brief PR correctly
 omits them from its constants list. The PR's error-handling table is a deliberate
-subset of §16. **No PR changes are required.**
+subset of §16. The two documents are kept congruent; editorial deltas are pushed
+to the PR as found.

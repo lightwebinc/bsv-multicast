@@ -20,7 +20,7 @@ All multi-byte integers are big-endian. 8-byte alignment for all fields after of
 | 40     | 8    | 8B    | HashKey        | Stable per-flow XXH64 identifier; 0 = unstamped           |
 | 48     | 8    | 8B    | SeqNum         | Monotonic per-flow counter (starts at 1); 0 = unstamped   |
 | 56     | 32   | 8B    | Subtree ID     | 32-byte batch identifier; zeros = unset                  |
-| 88     | 4    | 8B    | Payload length | uint32 BE; max 10 MiB                                    |
+| 88     | 4    | 8B    | Payload length | uint32 BE; bound is application-defined                  |
 | 92     | \*   | —     | BSV tx payload | Raw serialised transaction bytes                         |
 
 ### Field Details

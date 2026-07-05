@@ -7,7 +7,7 @@ System-level design document describing the end-to-end NACK retransmission pipel
 ## 1. Full Pipeline
 
 ```text
-                          multicast fabric (FF05::<shard>)
+                          multicast fabric (FF05::B:<shard>)
                          ┌──────────────────────────────────────────────────┐
                          │                                                  │
 BSV Source ──► shard-proxy ──┬──► listener-1 ──► downstream consumer
@@ -17,7 +17,7 @@ BSV Source ──► shard-proxy ──┬──► listener-1 ──► downstr
                                      └──► retry-endpoint (caches all frames)
 ```
 
-- **Proxy** receives transactions, stamps `HashKey` (XXH64 of sender+group+subtree) and `SeqNum` (monotonic per-flow counter), derives shard group from TxID, multicasts to `FF05::<shard>`.
+- **Proxy** receives transactions, stamps `HashKey` (XXH64 of sender+group+subtree) and `SeqNum` (monotonic per-flow counter), derives shard group from TxID, multicasts to `FF05::B:<shard>`.
 - **Listeners** subscribe to shard groups, decode frames, track per-flow `SeqNum` gaps (keyed by `HashKey`), forward to consumers.
 - **Retry endpoint** subscribes to all shard groups, caches raw frames indexed by `HashKey ∥ SeqNum` (single 16-byte key).
 
@@ -60,6 +60,21 @@ Listener receives:  SeqNum 1, 2, 3, [gap], 6, 7, ...
 
 The NACK carries the `HashKey` (stable per-flow identifier) and `StartSeq`/`EndSeq` (missing sequence range). The retry endpoint looks up the frame using the 16-byte cache key `HashKey ∥ StartSeq`. The listener opens a per-request ephemeral UDP socket (`[::]:0`), sends the NACK, and waits up to 300 ms for a single response (`ACK`, `MISS`, or — when the endpoint runs with `-rl-throttle-response` — `THROTTLED`).
 
+### Re-baseline on emitter change (v1.7.0/v1.7.1)
+
+Not every forward jump is a gap. A jump larger than `-nack-max-forward-jump`
+(default 4096), or one implausible against the flow's smoothed inter-arrival
+estimate (`ewmaIPG` in `shard-listener/nack/nack.go` — the elapsed time at the
+observed rate could not have carried that many frames), signals an **emitter
+change** (restart / re-key), not loss. The tracker **re-baselines** the flow
+instead of registering thousands of phantom gaps: pending phantom entries are
+dropped, the rate estimate resets to re-learn the new cadence, and the
+`SeqRebaselined` metric increments. When the pre-jump rate estimate was settled
+(≥ 16 contiguous in-order frames), a rate-plausible **transition tail** — the
+≈ `elapsed / ewmaIPG` frames a real outage of that duration would have lost,
+capped at the max forward jump — is still NACK-recovered, so a genuine outage
+that merely looks like a jump is not silently skipped.
+
 ---
 
 ## 3. Tier Model
@@ -79,7 +94,7 @@ Tiers represent proximity to the transaction source. Lower tier = closer to sour
      ▼
 [Proxy] ──multicast──► [Tier-0 Retry Endpoint]
                               │
-                         NACK forwarding (Phase 2)
+                         NACK proxying (-proxy-enabled)
                               │
                               ▼
                         [Tier-1 Retry Endpoint]  (HasParent)
@@ -89,6 +104,14 @@ Tiers represent proximity to the transaction source. Lower tier = closer to sour
 ```
 
 Listeners try Tier 0 first. On MISS, they advance to Tier 1, then Tier 2, etc.
+
+NACK proxying is shipped: an endpoint started with `-proxy-enabled` forwards a
+cache-miss NACK to a configured upstream (`-upstream-retry-endpoints`), setting
+the NACK **Proxied** flag (bit 0) and advertising `HasParent` in its ADVERT.
+The upstream always serves a proxied NACK via unicast; the downstream endpoint
+re-caches the recovered frame and multicast-retransmits it into its own domain.
+The Proxied flag bounds any proxy chain to a single hop. See
+[BRC-126 § NACK Proxying](brc-126-retransmission-protocol.md#nack-proxying-cross-domain-recovery).
 
 ---
 
@@ -151,6 +174,12 @@ this exact gap is likely already propagating — so the listener parks the gap
 briefly and retries the same endpoint rather than escalating or burning a retry.
 The per-source-IP flood tier never emits `THROTTLED` (it would enable
 reflection); it stays silent and the listener falls back to timeout + backoff.
+
+A forward jump exceeding `-nack-max-forward-jump` or implausible against the
+flow's rate estimate never enters `PENDING`: the flow is **re-baselined**
+(emitter change — see §2), phantom gaps are dropped (`SeqRebaselined`), and
+only a rate-plausible transition tail is NACK-recovered once the estimate has
+settled.
 
 ---
 

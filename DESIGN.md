@@ -29,9 +29,11 @@ Craig S. Wright in
 - [Sharding Mechanism](#sharding-mechanism)
 - [Frame Format](#frame-format)
 - [Component Deep Dives](#component-deep-dives)
+- [Ingress Authorization (Miner-tier Gate)](#ingress-authorization-miner-tier-gate)
 - [Retransmission and Reliability](#retransmission-and-reliability)
 - [Subtree Filtering](#subtree-filtering)
 - [Fragmentation (BRC-130)](#fragmentation-brc-130)
+- [Transaction Coalescing (BRC-142)](#transaction-coalescing-brc-142)
 - [Subtree Group Announcement (BRC-127)](#subtree-group-announcement-brc-127)
 - [Block Announcement Frame Format (BRC-131)](#block-announcement-frame-format-brc-131)
 - [Subtree Data Frame Format (BRC-132)](#subtree-data-frame-format-brc-132)
@@ -85,7 +87,7 @@ The multicast pipeline consists of three tiers:
 │                    Deploys: shard-proxy nodes                               │
 │                  Stateless, deterministic, horizontally scalable            │
 └───────────────────────────────┬─────────────────────────────────────────────┘
-                                │  IPv6 UDP Multicast (FF05::<shard>)
+                                │  IPv6 UDP Multicast (FF05::B:<shard>)
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -139,7 +141,7 @@ responsibility:
 
 | Repository                                                  | Purpose                                    | Packages                                           |
 | ----------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------- |
-| [shard-common](https://github.com/lightwebinc/shard-common) | Protocol primitives shared across services | `frame`, `shard`, `seqhash`, `sequence`, `txidset` |
+| [shard-common](https://github.com/lightwebinc/shard-common) | Protocol primitives shared across services | `frame`, `shard`, `bundle`, `seqhash`, `sequence`, `txidset`, `cache`, `pow`, `manifest`, `netjoin`, … (full list in the repo README) |
 
 ### Infrastructure Automation
 
@@ -197,7 +199,7 @@ Each service has a dedicated chart repository, consumed by
               │ Node A    │               │ Node B    │                 │ Node C    │
               │ (proxy)   │               │ (proxy)   │                 │ (proxy)   │
               └─────┬─────┘               └─────┬─────┘                 └─────┬─────┘
-                    │  IPv6 UDP Multicast (FF05::<shard>, port 9001)          │
+                    │  IPv6 UDP Multicast (FF05::B:<shard>, port 9001)        │
                     └───────────────────────────┼─────────────────────────────┘
                                                 │
                                 ┌───────────────┴───────────────┐
@@ -220,7 +222,7 @@ Each service has a dedicated chart repository, consumed by
                                     └──────────────┘ └──────────────┘             │
                                                                                   │
                                                    NACK Retransmission ◄──────────┘
-                                              (re-multicast to FF05::<shard>)
+                                              (re-multicast to FF05::B:<shard>)
 ```
 
 ---
@@ -240,14 +242,14 @@ Each service has a dedicated chart repository, consumed by
    ┌─────────────────────────────────────────────────────────────────────────┐
    │ • Decode frame (extract TxID)                                           │
    │ • Stamp HashKey/SeqNum in-place (BRC-124 only, bytes 40–55)             │
-   │ • Derive multicast group: FF05::<groupIndex> from TxID top bits         │
+   │ • Derive multicast group: FF05::B:<groupIndex> from TxID top bits       │
    │ • Forward verbatim to all egress interfaces                             │
    └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 3. Multicast Fabric
    ┌─────────────────────────────────────────────────────────────────────────┐
-   │ FF05::<groupIndex>:9001 delivered to all joined subscribers             │
+   │ FF05::B:<groupIndex>:9001 delivered to all joined subscribers           │
    │ (MLD snooping / PIM distribution tree)                                  │
    └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -291,8 +293,8 @@ retry-endpoint
 │ • Receive NACK on port 9300                                             │
 │ • Rate limit (IP, HashKey, SeqNum)                                      │
 │ • Lookup frame in cache by HashKey + SeqNum (single 16-byte key)        │
-│ • If found: re-multicast to FF05::<shard>:9001 (if -retransmit-multicast│
-│   enabled); unicast to NACK source (if -retransmit-unicast); send ACK   │
+│ • If found: re-multicast to FF05::B:<shard>:9001 (-beacon-flags-        │
+│   multicast); unicast to NACK source (-beacon-flags-unicast); send ACK  │
 │ • If not found: send 16-byte MISS (listener escalates to next endpoint) │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -315,17 +317,17 @@ The multicast group for a transaction is derived purely from its transaction ID:
 
 ```text
 groupIndex = (txid[0:4] as uint32 BE) >> (32 - shardBits)
-IPv6 group = [FFsc::groupIndex]
+IPv6 group = [FFsc::<group-id>:<groupIndex>]   (default group-id 0x000B)
 ```
 
 **Example with shard_bits=2:**
 
 | txid[0:4] (hex) | txid[0:4] (uint32) | >> 30 | groupIndex | Multicast Address |
 | --------------- | ------------------ | ----- | ---------- | ----------------- |
-| 0x12345678      | 305419896          | 0     | 0          | FF05::0           |
-| 0x87654321      | 2271560481         | 3     | 3          | FF05::3           |
-| 0xABCD1234      | 2882343444         | 2     | 2          | FF05::2           |
-| 0x4567ABCD      | 1164413357         | 1     | 1          | FF05::1           |
+| 0x12345678      | 305419896          | 0     | 0          | FF05::B:0         |
+| 0x87654321      | 2271560481         | 3     | 3          | FF05::B:3         |
+| 0xABCD1234      | 2882343444         | 2     | 2          | FF05::B:2         |
+| 0x4567ABCD      | 1164413357         | 1     | 1          | FF05::B:1         |
 
 ### Consistent Hashing Property
 
@@ -342,6 +344,9 @@ Group 1 splits into:  1a (txid[0] bit 31 = 0), 1b (txid[0] bit 31 = 1)
 
 **Benefit:** When increasing shard_bits, subscribers only need to join
 additional groups. Existing subscriptions remain valid.
+
+A worked walkthrough of the top-bits extraction arithmetic is in
+[shard_bit_extraction.pdf](docs/explanations/shardbits/shard_bit_extraction.pdf).
 
 ### IPv6 Multicast Address Layout (IANA-aligned)
 
@@ -419,7 +424,7 @@ BRC-124 frame to the normal filter → egress → gap-tracking pipeline.
 **BRC-132 (Subtree Data Frame Format):** BRC-132 defines Frame Version `0x05`
 for distributing complete subtree data payloads (transaction hashes and optional
 fee/size metadata) over the multicast fabric. Frames are delivered to the
-`GroupSubtreeAnnounce` group (`FF0X::B:FFFB`). Two message types are defined:
+`GroupSubtreeDataAnnounce` group (`FF0X::B:FFFB`). Two message types are defined:
 `HashesOnly` (32 bytes/node) and `FullNodes` (48 bytes/node, includes fee and
 size). The 92-byte header is layout-identical to BRC-124. Payloads of 32–48 MB
 (at 1M nodes) are always fragmented via BRC-130 (`OrigFrameVer=0x05`). Gap
@@ -461,6 +466,21 @@ fabric. No fragmentation is required.
 
 **→
 [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md)**
+
+**BRC-142 (Transaction Bundle / Coalescing):** BRC-142 packs many small
+transactions destined for the same shard group and subtree into a single
+datagram (Frame Version `0x08`, 66-byte bundle header) — the inverse of BRC-130
+fragmentation — to cut packets-per-second on the fabric. A bundle carries a
+single `HashKey`/`SeqNum` and rides the BRC-126 NACK/retransmission machinery
+as one "fat frame"; gap tracking and retry are at bundle granularity. Bundles
+never exceed the path MTU (coalescing and fragmentation are mutually exclusive
+per datagram). Coalescing is an opt-in origin-proxy stage (`-coalesce`, default
+off); relays re-emit bundles verbatim; listeners decoalesce at the edge by
+default (whole-bundle consumer delivery is opt-in), re-bucketing bundles built
+at a different `ShardBits` generation before delivery.
+
+**→
+[BRC-142 Coalescing (Bundle) Frame Format](docs/brc-142-coalescing-frame.md)**
 
 ---
 
@@ -517,6 +537,9 @@ and/or multicast consumers, performs NACK-based gap recovery.
 
 **Key Characteristics:**
 
+- Role modes: `-mode collapsed` (default: join + demux + gap/NACK + fan-out),
+  `receiver` (multicast half only), `delivery` (consumer half: unicast ingest +
+  fan-out; no multicast join, no gap/NACK)
 - SO_REUSEPORT multi-worker receive (kernel-level source affinity)
 - Dual-level filtering: MLD group join + userspace shard/subtree filter
 - NORM-inspired gap tracking per flow via HashKey/SeqNum monotonic counter
@@ -612,7 +635,7 @@ NACK Server (NACK_WORKERS goroutines)
 
 Retransmit Egress
   ┌──────────────────┐
-  │ Multicast send   │──▶ FF05::<shard>:9001
+  │ Multicast send   │──▶ FF05::B:<shard>:9001
   └──────────────────┘
 ```
 
@@ -637,8 +660,11 @@ encode/decode, `EncodeFragment`/`DecodeFragment`/`IsFragment`,
 `EncodeSubtreeData`/`DecodeSubtreeData`/`IsSubtreeDataFrame`,
 `BlockMsgCoinbase`, `DecodeBlock`, `FrameVerV6`,
 `DecodeAnchor`/`IsAnchorFrame`), `shard` (txid → multicast group derivation),
-`seqhash` (XXH64 flow hash for HashKey), `sequence` (per-flow monotonic
-counters).
+`bundle` (BRC-142 bundle encode/decode + re-bucketing), `seqhash` (XXH64 flow
+hash for HashKey), `sequence` (per-flow monotonic counters), `txidset` (TxID
+dedup), `cache` (pluggable memory/Redis/Aerospike backend), `pow` (stateless
+block-header PoW check), `manifest` (BRC-139 registry + adoption gates), and
+`netjoin` (SSM join/leave management). Full list in the repo README.
 
 **→ [shard-common README](https://github.com/lightwebinc/shard-common)** —
 package API,
@@ -695,7 +721,7 @@ fit per device + bandwidth):
   `-tcp-listen-port`) accepts transactions + BRC-134 anchor only. Privileged
   BRC-131/133/132 frames are dropped at `forwarder.DispatchClass` and counted
   (`bsp_privileged_frame_rejected_total{frame_type}`). Exposed to all
-  consumers; the broker's consumer deployment path is unchanged.
+  consumers.
 - **Miner ingress** (`-miner-listen-port`, e.g. 9000; `-miner-tcp-listen-port`)
   accepts every class, including the privileged ones. Opening it is the
   proxy's "accept block/coinbase/subtree data?" switch (both `0` ⇒ the proxy
@@ -708,13 +734,13 @@ accept-all for collapsed/dev single-port nodes.
 
 The gate above is the application-layer enforcement point (it holds even if a
 firewall is misconfigured). Operationally, *which* peers can reach the miner
-port is the network-access layer and is where the broker's miner-tier label
-gets teeth: a miner-tier tunnel is routed to the edge's miner port and its
-inner address is admitted by a firewall source set; consumer tunnels reach
-only 8725. Miners that are not customers are added to the miner source set out
-of band — no subscription record required. The open data plane stays
-tier-agnostic (just sockets + a frame-class gate); the broker (proprietary)
-supplies the routing and source roster.
+port is the network-access layer: an operator's control plane / subscription
+system routes miner-tier peers to the edge's miner port and maintains the
+firewall source set that admits them; consumer paths reach only 8725. Miners
+that are not customers can be added to the miner source set out of band — no
+subscription record required. The open data plane stays tier-agnostic (just
+sockets + a frame-class gate); the operator's control plane supplies the
+routing and source roster.
 
 ### Permissionless gate: proof of work
 
@@ -976,6 +1002,46 @@ fragDataSize derivation, error handling, constants reference
 
 ---
 
+## Transaction Coalescing (BRC-142)
+
+BRC-142 is the inverse of BRC-130: instead of splitting one oversized
+transaction across many datagrams, it packs many small transactions destined
+for the same shard group and subtree into a single bundle datagram (Frame
+Version `0x08`). The motivation is packets-per-second — the dominant
+data-plane forwarding cost on the replicated fabric and per-tunnel egress
+hops; a payload that would cross the fabric as N small packets crosses it as
+one.
+
+A bundle cannot reuse the BRC-124 header layout (there is no single TxID for N
+transactions), so it carries a dedicated 66-byte header: magic/version, a
+shared `SubtreeID`, a single per-`(sender, group, subtree)` `HashKey`/`SeqNum`,
+`GroupIdx` + `ShardBits` (pinning the shard generation), `TxCount`, and
+`PayloadLen`. Members are length-prefixed transactions (`TxLen` + optional
+32-byte TxID + raw tx bytes); standard and EF members self-identify and may be
+mixed.
+
+The reference proxy coalesces at the **origin** only (opt-in `-coalesce`,
+default off), packing eligible frames within one receive batch and flushing at
+batch end — no timer, near-zero added latency. A bundle never exceeds the path
+MTU (a transaction that would need BRC-130 is never a member; the two are
+mutually exclusive per datagram). Relays re-emit bundles verbatim. NACK
+retransmission (BRC-126) operates at bundle granularity: the retry endpoint
+caches a bundle as one opaque frame keyed `HashKey ∥ SeqNum`.
+
+Listeners **edge-decoalesce** by default — split the bundle back into
+individual frames before per-consumer egress, so the consumer contract is
+unchanged; whole-bundle (consumer-decoalesce) delivery is opt-in. A bundle
+built at a different `ShardBits` generation is re-bucketed to the local
+generation at the delivery edge before delivery. Malformed or truncated
+bundles are dropped and counted, not silently discarded
+(`bundle_short`/`bundle_malformed`/`bundle_decode_error`).
+
+**→ [BRC-142 Coalescing (Bundle) Frame Format](docs/brc-142-coalescing-frame.md)**
+— bundle header layout, member format, MTU sizing, bundle-unit NACK,
+re-bucketing rules, deployment decisions
+
+---
+
 ## Subtree Group Announcement (BRC-127)
 
 BRC-127 defines the dynamic subtree group announcement protocol. Producers
@@ -1047,7 +1113,7 @@ Two message types are defined:
 - **FullNodes (`MsgType 0x02`)** — 48-byte entry per node (TxHash + Fee + Size),
   same prefix and conflict set.
 
-Both types are delivered on the **GroupSubtreeAnnounce** group (`FF0X::B:FFFB`).
+Both types are delivered on the **GroupSubtreeDataAnnounce** group (`FF0X::B:FFFB`).
 BRC-127 subtree group announcements use a separate group
 (`GroupSubtreeGroupAnnounce`, `FF0X::B:FFFC`).
 
@@ -1177,8 +1243,8 @@ The fabric runs in either Source-Specific Multicast (SSM, **the default and
 first-class mode**) or Any-Source Multicast (ASM, a **lab/dev fallback** —
 `sourceMode: asm`). SSM is required for **inter-domain** operation (RFC 8815
 forbids inter-domain ASM) and gives RP-less, loop-free source trees; it is the
-default across the Helm charts, integrated-infra, and the fleet's spine-multicast
-fabrics. ASM is retained only for smcroute collapsed-unicast labs (and the bare
+default across the Helm charts and integrated-infra. ASM is retained only for
+smcroute collapsed-unicast labs (and the bare
 binary CLI default, since a bare invocation is a lab/dev scenario). SSM vs ASM is
 a deployment/transport mode only — frame format, NACK protocol, HashKey
 computation, and shard derivation are unchanged. Under SSM, receivers
@@ -1515,6 +1581,9 @@ processing, flush OTLP exporter.
 - [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md) —
   periodic participant configuration announcement (shard_bits, joined groups,
   GenerationID); beacon-group distribution
+- [BRC-142 Coalescing (Bundle) Frame Format](docs/brc-142-coalescing-frame.md)
+  — bundle header layout, member format, MTU sizing, bundle-unit NACK,
+  re-bucketing rules
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams, escalation state machine, flood prevention
 
@@ -1559,8 +1628,9 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 
 | Service                     | Port         | Protocol | Purpose                                      |
 | --------------------------- | ------------ | -------- | -------------------------------------------- |
-| shard-proxy (UDP ingress)   | 9000         | UDP      | Frame ingress                                |
+| shard-proxy (UDP ingress)   | 8725         | UDP      | User/tx frame ingress                        |
 | shard-proxy (TCP ingress)   | configurable | TCP      | Reliable frame ingress (disabled by default) |
+| shard-proxy (miner ingress) | configurable | UDP/TCP  | Privileged miner-tier ingress (`-miner-listen-port`, e.g. 9000; disabled by default) |
 | shard-proxy (egress)        | 9001         | UDP      | Multicast egress                             |
 | shard-listener (multicast)  | 9001         | UDP      | Multicast receive                            |
 | shard-listener (NACK)       | 9300         | UDP      | NACK send                                    |
@@ -1575,6 +1645,7 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 | shard-proxy    | 9100 | `/metrics`, `/healthz`, `/readyz` |
 | shard-listener | 9200 | `/metrics`, `/healthz`, `/readyz` |
 | retry-endpoint | 9400 | `/metrics`, `/healthz`, `/readyz` |
+| shard-manifest | 9091 | `/metrics`, `/healthz`, `/readyz` (`bsm_` prefix) |
 
 ### Default AS Numbers
 
@@ -1595,8 +1666,5 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 | BRC-132 | 92 bytes    | Yes (per-subtree)    | No (ctrl-plane)          |
 | BRC-133 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane coinbase) |
 | BRC-134 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane anchor)   |
-
----
-
-_Document Version: 1.15_  
-_Last Updated: 2026-06-09_
+| BRC-135 | 92 bytes    | Yes (emitter-stamped HashKey/SeqNum) | No (ctrl-plane header egress) |
+| BRC-142 | 66 bytes (bundle) | Yes (per-bundle HashKey/SeqNum) | Yes (members share one group + subtree) |

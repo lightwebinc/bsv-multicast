@@ -20,7 +20,7 @@ Retry endpoints cache BRC-124 frames received via multicast and respond to NACK 
 
 ## ADVERT Wire Format (`MsgType 0x20`) — 56 bytes
 
-Sent periodically (default **60 s**, configurable via `-beacon-interval`) to the beacon group determined by `-beacon-scope`. Valid values: `site` → `FF05::B:FFFD`; `global` → `FF0E::B:FFFD`; `both` → sends to both site and global groups. Listeners derive TTL as `3 × BeaconInterval`. Org scope (`FF08::B:FFFD`, scope byte `0x08`) is defined in the wire format but not yet a supported `-beacon-scope` value.
+Sent periodically (default **60 s**, configurable via `-beacon-interval`) to the beacon group determined by `-beacon-scope`. Valid values: `site` → `FF05::B:FFFD`; `org` → `FF08::B:FFFD`; `global` → `FF0E::B:FFFD`; `both` / `all` → sends to all three groups (site + org + global). Listeners derive TTL as `3 × BeaconInterval`.
 
 ```text
 Offset  Size  Field
@@ -118,7 +118,7 @@ Offset  Size  Field
      0     4  Magic (0xE3E1F3E8)
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x12 (ACK)
-     7     1  Flags (0x01=multicast_sent)
+     7     1  Flags (0x01=multicast_sent, 0x02=unicast_sent)
      8     8  SeqNum — SeqNum of the retransmitted frame
 ```
 
@@ -187,17 +187,17 @@ Operator assigns `-tier` (0–254) and `-preference` (0–255, default 128) on e
 
 ## Configurable Retransmit Modes
 
-| Flag                    | Default | Meaning                                              |
-| ----------------------- | ------- | ---------------------------------------------------- |
-| `-retransmit-multicast` | `true`  | Send cached frame to multicast group on NACK hit     |
-| `-retransmit-unicast`   | `false` | Send cached frame unicast to NACK source on NACK hit |
-| `-suppress-miss`        | `false` | Do not send MISS responses                           |
-| `-suppress-ack`         | `false` | Do not send ACK responses                            |
+| Flag                      | Default | Meaning                                              |
+| ------------------------- | ------- | ---------------------------------------------------- |
+| `-beacon-flags-multicast` | `true`  | Send cached frame to multicast group on NACK hit (also advertised in the ADVERT Flags) |
+| `-beacon-flags-unicast`   | `false` | Send cached frame unicast to NACK source on NACK hit (also advertised in the ADVERT Flags) |
+| `-suppress-miss`          | `false` | Do not send MISS responses                           |
+| `-suppress-ack`           | `false` | Do not send ACK responses                            |
 
 ### Deployment profiles
 
 - **On-fabric (default):** multicast retransmit + ACK + MISS
-- **Edge endpoint:** `-retransmit-unicast=true -retransmit-multicast=false`
+- **Edge endpoint:** `-beacon-flags-unicast=true -beacon-flags-multicast=false`
 - **High-volume:** `-suppress-ack=true` to reduce response traffic; MISS preserved for escalation
 
 ---

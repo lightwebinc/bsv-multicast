@@ -35,9 +35,9 @@ and anchor transactions over reserved control groups.
 | [retransmission-infra](https://github.com/lightwebinc/retransmission-infra)   | Retransmission (deploy) | Ansible/Terraform automation for `retry-endpoint` nodes                             |
 | [shard-manifest](https://github.com/lightwebinc/shard-manifest)   | Manifest                | BRC-139 announcer; periodic `shard_bits` + joined-groups beacon                             |
 | [manifest-infra](https://github.com/lightwebinc/manifest-infra)   | Manifest (deploy)       | Ansible/Terraform automation for `shard-manifest` nodes                                     |
-| [shard-common](https://github.com/lightwebinc/shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `seqhash`, `sequence`, `txidset`                     |
+| [shard-common](https://github.com/lightwebinc/shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `bundle`, `seqhash`, `sequence`, `txidset`, `cache`, `pow`, `manifest`, `netjoin`, … |
 | [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 senders                  |
-| [multicast-test](https://github.com/lightwebinc/multicast-test)   | Testing                 | Integration test harness: Go + Docker scenarios (`harness/`) and legacy LXD VM lab (`vm-lab/`) |
+| [multicast-test](https://github.com/lightwebinc/multicast-test)   | Testing                 | Integration test suite: Go + Docker scenarios (`harness/`) on an isolated IPv6 bridge       |
 | [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes (deploy)     | k0s-reference + Helm composition of the full stack; distribution-agnostic                   |
 | [integrated-infra](https://github.com/lightwebinc/integrated-infra)         | Collapsed node (deploy) | Ansible/Terraform automation for a collapsed single-host node (`shard-proxy` + `shard-listener` + `retry-endpoint`) |
 | [shard-proxy-helm](https://github.com/lightwebinc/shard-proxy-helm)             | Helm chart              | Chart for `shard-proxy`                                                                     |
@@ -78,7 +78,8 @@ and anchor transactions over reserved control groups.
   Periodic participant configuration announcement (shard_bits + joined groups)
 - [BRC-142 Coalescing (Bundle) Frame](docs/brc-142-coalescing-frame.md) —
   Packs many small txs of one (group, subtree) into one ≤MTU datagram; inverse
-  of BRC-130 (DRAFT)
+  of BRC-130 (PROPOSED — [PR #164](https://github.com/bitcoin-sv/BRCs/pull/164);
+  reference implementation shipped)
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
 

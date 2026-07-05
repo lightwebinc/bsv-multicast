@@ -134,7 +134,7 @@ immediately after the sources payload:
 Offset (within block)  Size  Field
 ---------------------  ----  -----
                     0    16  SuccessorGenerationID  the incoming generation's 128-bit ID
-                   16     1  SuccessorShardBits     1..15; MUST satisfy |Successor - ShardBits| ≤ 1
+                   16     1  SuccessorShardBits     1..12; MUST satisfy |Successor - ShardBits| ≤ 1
                    17     1  SuccessorFlags         bit0 SuccessorSourceModeSSM,
                                                     bits1..7 reserved (=0)
                    18     2  Reserved               MUST be 0
