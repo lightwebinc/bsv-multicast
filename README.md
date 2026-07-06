@@ -80,6 +80,16 @@ and anchor transactions over reserved control groups.
   Packs many small txs of one (group, subtree) into one ≤MTU datagram; inverse
   of BRC-130 (PROPOSED — [PR #164](https://github.com/bitcoin-sv/BRCs/pull/164);
   reference implementation shipped)
+- **BRC-143–146 Non-Multicast Object Family** — header-stripped object formats
+  for unicast delivery/ingest; self-delimiting, inline with BRC-12/BRC-30; no
+  multicast frame header (DRAFT):
+  - [BRC-143 Coinbase Object](docs/brc-143-coinbase-object.md) — raw coinbase;
+    defines the shared 1-byte-tag Stream Composition framing
+  - [BRC-144 Anchor Object](docs/brc-144-anchor-object.md) — raw chained anchor
+  - [BRC-145 Subtree Object](docs/brc-145-subtree-object.md) — hashes-only + root
+    + coinbase-placeholder flag (go-subtree v1.4.2)
+  - [BRC-146 Block Object](docs/brc-146-block-object.md) — 80-byte header +
+    coinbase TxID + ordered subtree roots (block↔subtree association)
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
 
