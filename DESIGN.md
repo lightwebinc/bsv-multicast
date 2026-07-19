@@ -399,9 +399,12 @@ The BRC-124 data-plane frame format (92-byte header, replacing the legacy
 
 **Transaction ingress (framed, bare, EF-native).** A transaction enters on the
 tx port (8725) either *framed* (a BRC-124/128/legacy-BRC-12 frame, identified by
-the leading network magic) or *bare* (a header-stripped transaction, one per
-datagram, detected by the absence of the magic and wrapped into an unstamped
-frame). A single ingress path serves both — there is no separate raw-tx port.
+the leading network magic) or *bare* (a header-stripped transaction, detected by
+the absence of the magic and wrapped into an unstamped frame). A single ingress
+path serves both on both transports — there is no separate raw-tx port: on UDP
+the unit is one transaction per datagram; on TCP the connection grammar-detects
+once (magic-led = framed stream, else = bare stream, self-delimiting by
+transaction structure).
 Under **`-require-ef`** the ingress is *EF-native*: a submission must
 be BRC-30 Extended Format, because Teranode requires EF and the stateless fabric
 cannot extend a raw transaction (extension needs a per-input UTXO lookup — a
