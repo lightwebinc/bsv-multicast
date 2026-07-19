@@ -412,13 +412,16 @@ are exempt, so the relay hot path is untouched. The commercial proxy
 `-require-ef=false` restores raw admission); the OSS proxy's flag remains
 opt-in. See the proxy's `docs/architecture.md` § Transaction ingress.
 
-**Edge transport (commercial): TCP lanes by default.** UDP is unreliable at the
-edge, so commercial submissions default to TCP: a framed lane on the tx port
-(8725, every frame class — same-port carriage over one reliable 5-tuple) plus
-single-class push lanes (BRC-143 subtree → 8726, BRC-144 block → 8727) so each
-flow class has its own 5-tuple for load balancing and flow shaping. Both models
-run simultaneously. UDP ingress is deprecated for commercial submissions but
-fully retained — it remains the fabric relay and AF_XDP line-rate path.
+**Edge transport (commercial): TCP lanes by default.** Commercial submissions
+default to TCP: a framed lane on the tx port (8725, every frame class —
+same-port carriage over one reliable 5-tuple) plus single-class push lanes
+(BRC-143 subtree → 8726, BRC-144 block → 8727) so each flow class has its own
+5-tuple for load balancing and flow shaping. Both models run simultaneously.
+Posture by role: an **ingress-mode collector** (internet-facing) is **TCP-only**
+— its UDP submitter lane is disabled because the public path is unreliable; a
+**collapsed consumer edge supports both TCP and UDP** for tx/subtree/block
+submissions, because consumer tunnels ride a reliable underlay, and UDP remains
+the fabric relay + AF_XDP line-rate path.
 
 Key fields: Network magic, Protocol version, Frame version, Transaction ID,
 HashKey (XXH64 per-flow identifier), SeqNum (monotonic per-flow counter),
