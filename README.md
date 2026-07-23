@@ -78,7 +78,7 @@ and anchor transactions over reserved control groups.
   Periodic participant configuration announcement (shard_bits + joined groups)
 - [BRC-142 Coalescing (Bundle) Frame](docs/brc-142-coalescing-frame.md) —
   Packs many small txs of one (group, subtree) into one ≤MTU datagram; inverse
-  of BRC-130 (PROPOSED — [PR #164](https://github.com/bitcoin-sv/BRCs/pull/164);
+  of BRC-130 (PROPOSED — [PR #164](https://github.com/bsv-blockchain/BRCs/pull/164);
   reference implementation shipped)
 - **Push frame formats** — whole-object delivery/ingest to a consumer reached by
   push (round-robin SDA over a tunnel) rather than announce/pull. Only subtree
@@ -88,10 +88,15 @@ and anchor transactions over reserved control groups.
   gets its own format (PROPOSED):
   - [BRC-143 Subtree Data Frame Format](docs/brc-143-subtree-data.md) — in-band
     merkle root + `uint64` node count + ordered node hashes; coinbase placeholder
-    `0xFF×32` detected by value ([PR #175](https://github.com/bitcoin-sv/BRCs/pull/175))
+    `0xFF×32` detected by value ([PR #175](https://github.com/bsv-blockchain/BRCs/pull/175))
   - [BRC-144 Block Frame Format](docs/brc-144-block-frame.md) — strict parity with
     Teranode's block body: header + counts + ordered subtree roots + full inline
-    coinbase + height + BRC-74 coinbase BUMP ([PR #176](https://github.com/bitcoin-sv/BRCs/pull/176))
+    coinbase + height + BRC-74 coinbase BUMP ([PR #176](https://github.com/bsv-blockchain/BRCs/pull/176))
+- [BRC-148 Shard Domain Partitioning and BEEF Object Plane](docs/brc-148-shard-domain-beef-plane.md)
+  — Partitions the 16-bit shard-index space into object planes by high nibble;
+  allocates the BEEF plane (domain `0x1`, sharded by overlay topic) with
+  per-domain BRC-139 manifest coordination (PROPOSED —
+  [PR #181](https://github.com/bsv-blockchain/BRCs/pull/181))
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
 

@@ -2,7 +2,7 @@
 
 BRC-131 defines a new frame version (0x04) for distributing block-level metadata over the multicast fabric. Block announcements and coinbase transactions are delivered to all subscribers via a dedicated control-plane multicast group, independently of the shard groups used for transaction distribution.
 
-> **Canonical BRC:** [BRC-131](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0131.md)
+> **Canonical BRC:** [BRC-131](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0131.md)
 
 ---
 
@@ -185,4 +185,4 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 - [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener) — `processBlockFrame`, `egress.SendBlock`
 - [retry-endpoint/ingress](https://github.com/lightwebinc/retry-endpoint/tree/main/ingress) — `processBlockFrame`
 - [retry-endpoint/retransmit](https://github.com/lightwebinc/retry-endpoint/tree/main/retransmit) — V4-aware retransmit routing
-- [BRC-131: Multicast Block Announcement Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0131.md) — published BRC
+- [BRC-131: Multicast Block Announcement Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0131.md) — published BRC

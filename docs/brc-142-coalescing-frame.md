@@ -8,7 +8,7 @@ across many datagrams; BRC-142 merges many small transactions into one. The goal
 is to cut **packets-per-second** — the dominant data-plane forwarding cost — on
 the replicated fabric and per-tunnel egress hops.
 
-> **Status: PROPOSED — [bitcoin-sv/BRCs PR #164](https://github.com/bitcoin-sv/BRCs/pull/164)**
+> **Status: PROPOSED — [bsv-blockchain/BRCs PR #164](https://github.com/bsv-blockchain/BRCs/pull/164)**
 > (opened 2026-06-29, awaiting review). The brief normative text is the PR
 > (`transactions/0142.md`); this document is the detailed design and rationale and
 > is kept congruent with it.
@@ -444,7 +444,7 @@ independent implementation that follows §2–§17 interoperates.
 | Drop visibility (§16) | Drops are **counted, not silent** (`bundle_short`/`bundle_malformed`/`bundle_decode_error`/`ErrCountMismatch`) | Silence hides upstream corruption. The one un-enforced row (member group ≠ GroupIdx) is an **encoder invariant**, not a decode-time check (a hash + routing engine per member) |
 | Metric names (§15) | Actual emitted names differ from the original draft | See the §15 table (the real names) |
 
-**Congruence with [PR #164](https://github.com/bitcoin-sv/BRCs/pull/164)
+**Congruence with [PR #164](https://github.com/bsv-blockchain/BRCs/pull/164)
 (`transactions/0142.md`):** congruent on wire format and behavior. The member-length
 ceiling is named **`MaxMemberTxLen`** consistently in the PR, this doc, and the code
 (`shard-common/bundle`). The member field sizes (`2`, `32`) stay unexported in the

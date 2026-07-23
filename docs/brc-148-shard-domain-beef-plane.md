@@ -4,24 +4,24 @@ Jeff Harris (jeff@lightweb.net)
 
 > **Status:** Draft — official submission prepared as BRC-148 (145–147 are
 > claimed by open PRs in the
-> [BRCs repository](https://github.com/bitcoin-sv/BRCs)). Extends
-> [BRC-129](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md)
+> [BRCs repository](https://github.com/bsv-blockchain/BRCs)). Extends
+> [BRC-129](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md)
 > (addressing) and forward-extends
-> [BRC-139](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0139.md)
+> [BRC-139](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
 > (shard manifest).
 
 ## Abstract
 
 This BRC extends the IPv6 multicast group address scheme of
-[BRC-129](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md) by
+[BRC-129](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md) by
 partitioning the 16-bit shard-index space into independent **object planes**,
 each identified by a 4-bit domain selector in the high nibble of the index. The
 existing transaction plane (raw and Extended Format transactions) is retained
 unchanged as domain `0x0`; a new **BEEF object plane** is allocated as domain
 `0x1` to carry
-[BRC-62](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0062.md),
-[BRC-95](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0095.md), and
-[BRC-96](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0096.md)
+[BRC-62](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md),
+[BRC-95](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0095.md), and
+[BRC-96](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0096.md)
 BEEF-family transaction objects for peer-to-peer and overlay synchronisation.
 The BEEF plane shards by **overlay topic**: each object carries a topic
 identifier from which its multicast group is derived by the BRC-129 top-bits
@@ -86,7 +86,7 @@ This BRC is licensed under the Open BSV License.
 
 ## Motivation
 
-[BRC-129](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md)
+[BRC-129](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md)
 allocates the bottom 32 bits of the IANA Bitcoin multicast allocation
 (`FF0X::B`) as a 16-bit group-id (default `0x000B`) followed by a 16-bit shard
 index. It caps `shard_bits` at 12 so that all transaction shard groups occupy
@@ -98,7 +98,7 @@ BEEF-family transactions are exactly such a purpose-specific service. Unlike the
 transaction plane — whose consumers are miners and settlement infrastructure
 requiring raw or Extended Format transactions — BEEF objects carry ancestry and
 Merkle-path proofs
-([BRC-74](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0074.md))
+([BRC-74](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0074.md))
 for **peer-to-peer and overlay synchronisation**: SPV wallets, overlay services,
 and application-layer indexers that validate without a UTXO set. The two use
 cases do not overlap. A BEEF object is never a substitute for the settlement
@@ -107,12 +107,12 @@ proof ancestry. They are distinct planes of operation with distinct classes of
 both publishers and subscribers.
 
 Overlay networks identify themselves by **topic**. A
-[BRC-22](https://github.com/bitcoin-sv/BRCs/blob/master/overlays/0022.md)
+[BRC-22](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0022.md)
 submission is a BEEF object plus a list of topic names; per-topic managers
 decide admittance;
-[BRC-87](https://github.com/bitcoin-sv/BRCs/blob/master/overlays/0087.md) names
+[BRC-87](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0087.md) names
 topics (`tm_*`); and under
-[BRC-88](https://github.com/bitcoin-sv/BRCs/blob/master/overlays/0088.md) a
+[BRC-88](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0088.md) a
 broadcaster discovers the hosts interested in a topic via SHIP advertisements
 and then propagates the object to each host point-to-point over HTTPS. That
 per-host fan-out is the step that does not scale as topics and hosts multiply.
@@ -148,7 +148,7 @@ This BRC specifies:
 ### Relationship to BRC-129
 
 This BRC supersedes the
-[BRC-129](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md)
+[BRC-129](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md)
 section *"Free Space and Specialty Transmission Domains"* and refines the
 *"Data-Plane Shard Groups"* derivation. All other BRC-129 provisions — the IANA
 allocation, the group-id field (bytes `[12:14]`, default `0x000B`), the
@@ -267,9 +267,9 @@ marker, so a single plane carries them without a per-format sub-allocation:
 
 | Object                        | Leading marker            | Reference |
 | ----------------------------- | ------------------------- | --------- |
-| BEEF                          | `0100BEEF`                | [BRC-62](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0062.md) |
-| Atomic BEEF                   | `01010101` + 32-byte TXID | [BRC-95](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0095.md) |
-| BEEF V2 (TXID-only extension) | `0200BEEF`                | [BRC-96](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0096.md) |
+| BEEF                          | `0100BEEF`                | [BRC-62](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md) |
+| Atomic BEEF                   | `01010101` + 32-byte TXID | [BRC-95](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0095.md) |
+| BEEF V2 (TXID-only extension) | `0200BEEF`                | [BRC-96](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0096.md) |
 
 The fabric never parses BEEF structure. Sharding, identity, and filtering key
 on envelope fields fixed at ingress — the submitted topic (TopicID), a hash of
@@ -370,7 +370,7 @@ requires a payload parse:
    fabric holds no per-topic state and filters resolve by hash lookup.
 2. **BEEF version** (payload bytes 0–3, immediately after the header) — the
    **encoding-capability axis**. Cardinality is small and closed: the three
-   markers in the Payload table above. [BRC-62](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0062.md)
+   markers in the Payload table above. [BRC-62](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md)
    fixes the version word as a Uint32LE sequence beginning at `4022206465`
    (`0100BEEF`) whose marker remains `BEEF` only through `4022271999` — at most
    65,535 format versions. The version identifies an *encoding*, never an
@@ -401,8 +401,8 @@ subscriber-to-node placement.
 A listener that serves the BEEF plane MUST:
 
 1. Join the plane's domain-tagged groups (per source mode) and receive frames
-   using the same [BRC-124](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0124.md) /
-   [BRC-126](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0126.md)
+   using the same [BRC-124](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md) /
+   [BRC-126](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md)
    machinery as the transaction plane, with retransmission keying and
    sequencing per *Frame carriage* below: flows are tracked per
    (sender, group), gap-detected on `SeqNum`, and recovered by NACK
@@ -420,12 +420,12 @@ These obligations are identical for every conforming listener implementation.
 #### Frame carriage
 
 Objects on the BEEF plane are carried in multicast frames that reuse the
-[BRC-124](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0124.md)
+[BRC-124](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md)
 92-byte header layout with a distinct `FrameVersion`, preserving HashKey/SeqNum
 stamping and
-[BRC-126](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0126.md)
+[BRC-126](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md)
 NACK retransmission; objects that exceed the path MTU are fragmented per
-[BRC-130](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0130.md).
+[BRC-130](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md).
 The concrete frame format is specified in a companion BRC; this BRC constrains
 the header fields that addressing, retransmission, and filtering depend on
 (Appendix A renders them as an informative reference layout):
@@ -460,7 +460,7 @@ has elected the topic.
 
 ### Per-Domain Shard Coordination (BRC-139 Extension)
 
-[BRC-139](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0139.md)
+[BRC-139](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
 advertises a single `shard_bits` and generation for the fabric. This BRC adds an
 optional, backward-compatible **Domains** payload section so each plane advertises
 and coordinates its own parameters.
@@ -622,11 +622,11 @@ planes MUST be published from the announced global source set.
 - **Live tail, not history.** Multicast delivery begins at join time; NACK
   recovers transit gaps, not missed history. A host bootstrapping a topic
   acquires history through the overlay synchronisation protocols
-  ([BRC-88](https://github.com/bitcoin-sv/BRCs/blob/master/overlays/0088.md)
+  ([BRC-88](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0088.md)
   propagation,
-  [BRC-76](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0076.md)
+  [BRC-76](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0076.md)
   Graph Aware Sync,
-  [BRC-136](https://github.com/bitcoin-sv/BRCs/blob/master/overlays/0136.md)
+  [BRC-136](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0136.md)
   block-anchored sync) and uses this plane for the live tail thereafter.
 - **No settlement guarantee.** Because the planes do not bridge, a transaction
   submitted only to the BEEF plane is not delivered to transaction-plane
@@ -642,7 +642,7 @@ This appendix renders the *Frame carriage* constraints as a concrete layout for
 implementers. It is informative: the companion frame-format BRC is
 authoritative for the frame, and the `FrameVersion` value `0x09` is provisional
 (the next unassigned code after BRC-142's `0x08`). The header reuses the
-[BRC-124](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0124.md)
+[BRC-124](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md)
 92-byte layout at identical offsets, so existing firewalls, classifiers, and
 retry infrastructure require no changes.
 
@@ -665,9 +665,9 @@ retry infrastructure require no changes.
 
 | Payload `[0:4]` | Type | Encoding | Reference |
 | --------------- | ---- | -------- | --------- |
-| `0100BEEF` | `uint32` LE (4022206465) | BEEF | [BRC-62](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0062.md) |
-| `0200BEEF` | `uint32` LE (4022206466) | BEEF V2 (TXID-only extension) | [BRC-96](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0096.md) |
-| `01010101` | 4-byte prefix (32-byte subject TxID follows) | Atomic BEEF | [BRC-95](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0095.md) |
+| `0100BEEF` | `uint32` LE (4022206465) | BEEF | [BRC-62](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md) |
+| `0200BEEF` | `uint32` LE (4022206466) | BEEF V2 (TXID-only extension) | [BRC-96](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0096.md) |
+| `01010101` | 4-byte prefix (32-byte subject TxID follows) | Atomic BEEF | [BRC-95](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0095.md) |
 
 The version word is the version filter's input — an encoding-capability gate
 only, never an overlay namespace (see *Delivery identifiers and filtering*).
@@ -678,42 +678,42 @@ order for BRC-62/BRC-96) and any **per-format sub-type byte** (the payload
 marker is self-identifying at a fixed offset).
 
 Objects exceeding the path MTU are carried as
-[BRC-130](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0130.md)
+[BRC-130](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md)
 fragments (`FrameVer 0x03`, 104-byte header, `OrigFrameVer = 0x09`) with bytes
 0–91 layout-identical to the table above; the interaction with filtering is
 specified in *Frame carriage*.
 
 ## References
 
-- [BRC-22: Overlay Network Data Synchronization](https://github.com/bitcoin-sv/BRCs/blob/master/overlays/0022.md)
+- [BRC-22: Overlay Network Data Synchronization](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0022.md)
   — topical submission and admittance model the plane transports
-- [BRC-62: Background Evaluation Extended Format (BEEF) Transactions](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0062.md)
+- [BRC-62: Background Evaluation Extended Format (BEEF) Transactions](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md)
   — BEEF encoding carried on the object plane
-- [BRC-74: BSV Unified Merkle Path (BUMP) Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0074.md)
+- [BRC-74: BSV Unified Merkle Path (BUMP) Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0074.md)
   — proof payload embedded in BEEF
-- [BRC-95: Atomic BEEF Transactions](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0095.md)
+- [BRC-95: Atomic BEEF Transactions](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0095.md)
   — explicit-subject BEEF encoding
-- [BRC-76: Graph Aware Sync Protocol](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0076.md)
+- [BRC-76: Graph Aware Sync Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0076.md)
   — overlay history synchronisation complementing the live tail
-- [BRC-87: Standardized Naming Conventions for BRC-22 Topic Managers and BRC-24 Lookup Services](https://github.com/bitcoin-sv/BRCs/blob/master/overlays/0087.md)
+- [BRC-87: Standardized Naming Conventions for BRC-22 Topic Managers and BRC-24 Lookup Services](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0087.md)
   — `tm_*` topic naming hashed into TopicIDs
-- [BRC-88: Overlay Services Synchronization Architecture](https://github.com/bitcoin-sv/BRCs/blob/master/overlays/0088.md)
+- [BRC-88: Overlay Services Synchronization Architecture](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0088.md)
   — SHIP/SLAP host discovery and the per-host propagation this plane subsumes
-- [BRC-96: BEEF V2 Txid Only Extension](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0096.md)
+- [BRC-96: BEEF V2 Txid Only Extension](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0096.md)
   — TXID-only BEEF encoding
-- [BRC-124: Multicast Transaction Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0124.md)
+- [BRC-124: Multicast Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md)
   — data-frame header reused by object-plane frames
-- [BRC-126: Multicast Transaction NACK Retransmission Protocol](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0126.md)
+- [BRC-126: Multicast Transaction NACK Retransmission Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md)
   — retransmission machinery inherited by object planes
-- [BRC-128: Multicast Extended Transaction Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0128.md)
+- [BRC-128: Multicast Extended Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0128.md)
   — Extended Format frames on the transaction plane
-- [BRC-129: IPv6 Multicast Group Address Assignments](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md)
+- [BRC-129: IPv6 Multicast Group Address Assignments](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md)
   — base addressing scheme this BRC extends
-- [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0130.md)
+- [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md)
   — fragmentation for large objects
-- [BRC-136: Block-Anchored Overlay Synchronization via Block-Aligned Sparse Merkle Trees (BASM)](https://github.com/bitcoin-sv/BRCs/blob/master/overlays/0136.md)
+- [BRC-136: Block-Anchored Overlay Synchronization via Block-Aligned Sparse Merkle Trees (BASM)](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0136.md)
   — block-anchored overlay history synchronisation
-- [BRC-139: Multicast Shard Manifest Announcement Protocol](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0139.md)
+- [BRC-139: Multicast Shard Manifest Announcement Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
   — manifest protocol this BRC forward-extends
 - [RFC 4607: Source-Specific Multicast for IP](https://www.rfc-editor.org/rfc/rfc4607)
   — SSM address range

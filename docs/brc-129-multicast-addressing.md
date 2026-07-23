@@ -2,7 +2,7 @@
 
 BRC-129 defines the IPv6 multicast group address scheme for the BSV transaction sharding pipeline, including data-plane shard groups, control-plane beacon groups, and reserved indices. The scheme is aligned with IANA's IPv6 multicast address allocation practice and the IANA-assigned Bitcoin group `FF0X::B`.
 
-> **Canonical BRC:** [BRC-129](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md)
+> **Canonical BRC:** [BRC-129](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md)
 
 ---
 
@@ -180,7 +180,7 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 
 ## References
 
-- [BRC-129: IPv6 Multicast Group Address Assignments](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md) — published BRC
+- [BRC-129: IPv6 Multicast Group Address Assignments](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md) — published BRC
 - [BRC-139: Shard Manifest Announcement](brc-139-shard-manifest.md) — distributes the publisher source set for SSM data-plane source discovery
 - [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm) — deployment postures and fabric prerequisites
 - [RFC 4607](https://www.rfc-editor.org/rfc/rfc4607) — Source-Specific Multicast (`FF3x::/32` range)

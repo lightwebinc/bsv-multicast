@@ -2,7 +2,7 @@
 
 BRC-139 defines the protocol by which multicast participants periodically advertise their `shard_bits` configuration and the set of shard groups they are joined to. Manifest datagrams are emitted directly to the beacon multicast group (`GroupBeacon`, index `0xFFFD`) at a configurable scope. This BRC supports operator visibility into network-wide sharding configuration, enables divergence detection, and defines the consumer profile for automated, rate-limited shard coordination (see the normative consumer rules below).
 
-> **Canonical BRC:** [BRC-139](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0139.md)
+> **Canonical BRC:** [BRC-139](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
 
 ---
 
@@ -418,6 +418,6 @@ guidance:
 - [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md)
 - [BRC-127: Subtree Group Announcement](brc-127-subtree-announce.md)
 - [BRC-129: Multicast Group Addressing](brc-129-multicast-addressing.md)
-- [BRC-139: Shard Manifest Announcement (canonical)](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0139.md)
+- [BRC-139: Shard Manifest Announcement (canonical)](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
 - [Automatic Shard Configuration](../DESIGN.md#automatic-shard-configuration)
 - [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm)

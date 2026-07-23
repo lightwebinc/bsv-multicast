@@ -2,7 +2,7 @@
 
 BRC-128 defines BRC-30 Extended Format transaction payloads inside the standard BRC-124 frame. The 92-byte header is unchanged; Frame Version remains `0x02`.
 
-> **Canonical BRC:** [BRC-128](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0128.md)
+> **Canonical BRC:** [BRC-128](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0128.md)
 
 ---
 
@@ -70,8 +70,8 @@ BRC-124 and BRC-128 frames coexist on the same multicast groups.
 
 ## References
 
-- [BRC-12: Raw Transaction Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0012.md)
-- [BRC-30: Transaction Extended Format (EF)](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0030.md)
-- [BRC-124: Multicast Transaction Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0124.md)
+- [BRC-12: Raw Transaction Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0012.md)
+- [BRC-30: Transaction Extended Format (EF)](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0030.md)
+- [BRC-124: Multicast Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md)
 - **Canonical source:** `shard-common/frame/frame.go`
-- [BRC-128: Multicast Extended Transaction Frame Format](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0128.md) — published BRC
+- [BRC-128: Multicast Extended Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0128.md) — published BRC

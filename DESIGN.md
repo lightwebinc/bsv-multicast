@@ -389,6 +389,9 @@ on-wire default is `0x000B` for IANA conformance.
 See
 [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md)
 for full details.
+[BRC-148 Shard Domain Partitioning and BEEF Object Plane](docs/brc-148-shard-domain-beef-plane.md)
+(proposed) partitions the shard-index space into object planes by high nibble
+and allocates a topic-sharded BEEF object plane as domain `0x1`.
 
 ## Frame Format
 
@@ -1642,12 +1645,12 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 #### BRC-12: Raw Transaction Format
 
 - The BRC-12 wire-frame format transports transactions conforming to BRC-12
-- [BSV Blockchain Standards Repository](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0012.md)
+- [BSV Blockchain Standards Repository](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0012.md)
 
 #### BRC-30: Extended Format (EF) Transaction
 
 - The payload format for BRC-128 frames
-- [BSV Blockchain Standards Repository](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0030.md)
+- [BSV Blockchain Standards Repository](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0030.md)
 
 ---
 

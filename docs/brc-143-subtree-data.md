@@ -6,7 +6,7 @@ over a byte stream. It is the counterpart of [BRC-132](brc-132-subtree-data.md)
 (subtree data over the multicast fabric) for a consumer reached by **push**
 (e.g. round-robin SDA delivery over a tunnel) rather than announce/pull.
 
-> **Status: PROPOSED.** Upstream `bitcoin-sv/BRCs`
+> **Status: PROPOSED.** Upstream `bsv-blockchain/BRCs`
 > [PR #175](https://github.com/bsv-blockchain/BRCs/pull/175). Finalized against
 > **go-subtree v1.4.2** (the version Teranode HEAD pins) and Teranode's
 > `subtreevalidation` consumer. Canonical bytes live in the upstream BRC; this
