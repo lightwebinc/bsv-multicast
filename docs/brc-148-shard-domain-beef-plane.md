@@ -1,9 +1,10 @@
-# BRC-145: Multicast Shard Domain Partitioning and the BEEF Object Plane
+# BRC-148: Multicast Shard Domain Partitioning and the BEEF Object Plane
 
 Jeff Harris (jeff@lightweb.net)
 
-> **Status:** Draft — provisional number, not yet submitted to the
-> [BRCs repository](https://github.com/bitcoin-sv/BRCs). Extends
+> **Status:** Draft — official submission prepared as BRC-148 (145–147 are
+> claimed by open PRs in the
+> [BRCs repository](https://github.com/bitcoin-sv/BRCs)). Extends
 > [BRC-129](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0129.md)
 > (addressing) and forward-extends
 > [BRC-139](https://github.com/bitcoin-sv/BRCs/blob/master/transactions/0139.md)
@@ -31,7 +32,7 @@ forward-extends the BRC-139 shard-manifest protocol with a
 per-domain descriptor section so each plane can advertise and coordinate its own
 `shard_bits` and generation transitions without disturbing the others. The
 transaction plane's on-wire addresses, frames, and manifests are byte-identical
-to their pre-BRC-145 form; this is a strictly additive extension.
+to their pre-BRC-148 form; this is a strictly additive extension.
 
 ## Summary (non-normative)
 
@@ -155,7 +156,7 @@ source-mode / address-range rules (ASM `FF0x` vs SSM `FF3x`), the group-id
 override, and the control-plane assignments `0xF800`–`0xFFFF` — remain in force
 unchanged. Domain `0x0` under this BRC is bit-for-bit identical to a BRC-129
 deployment; a participant that implements only BRC-129 interoperates fully with
-the transaction plane of a BRC-145 deployment.
+the transaction plane of a BRC-148 deployment.
 
 Arithmetic correction: BRC-129 states the free band `0x1000`–`0xF7FF` contains
 "56,832 indices." The correct count is `0xF7FF − 0x1000 + 1 = 59,392`
@@ -491,7 +492,7 @@ BRC-139 producers or consumers.
 When `DomainsValid = 1`, the top-level `ShardBits` (offset 36), `GenerationID`
 (offset 48), and any top-level Successor block continue to describe **domain
 `0x0`** exactly as in BRC-139. A BRC-139-only consumer ignores the trailing
-Domains section and remains correct for the transaction plane. A BRC-145 consumer
+Domains section and remains correct for the transaction plane. A BRC-148 consumer
 additionally parses the Domains section for planes `≥ 0x1`. A domain-0 descriptor
 MAY appear in the Domains section; if present it MUST agree with the top-level
 fields, which remain authoritative for domain `0x0`.
