@@ -158,11 +158,6 @@ unchanged. Domain `0x0` under this BRC is bit-for-bit identical to a BRC-129
 deployment; a participant that implements only BRC-129 interoperates fully with
 the transaction plane of a BRC-148 deployment.
 
-Arithmetic correction: BRC-129 states the free band `0x1000`–`0xF7FF` contains
-"56,832 indices." The correct count is `0xF7FF − 0x1000 + 1 = 59,392`
-(equivalently `65536 − 4096 transaction − 2048 control`). This BRC uses the
-corrected figure.
-
 ### Domain-Partitioned Shard Index
 
 The 16-bit shard-index field (address bytes `[14:16]`, "IDX") is partitioned into
