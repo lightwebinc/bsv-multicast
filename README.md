@@ -97,6 +97,10 @@ and anchor transactions over reserved control groups.
   allocates the BEEF plane (domain `0x1`, sharded by overlay topic) with
   per-domain BRC-139 manifest coordination (PROPOSED —
   [PR #181](https://github.com/bsv-blockchain/BRCs/pull/181))
+- [BRC-149 Multicast BEEF Object Frame Format](docs/brc-149-beef-object-frame.md)
+  — Companion to BRC-148: assigns FrameVer `0x09` and fixes the object frame
+  plus the submission/delivery record grammars (open-port `0xBEEF` tag
+  detection) (PROPOSED)
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
 
