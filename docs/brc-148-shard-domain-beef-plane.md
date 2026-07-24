@@ -438,9 +438,11 @@ stamping and
 [BRC-126](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md)
 NACK retransmission; objects that exceed the path MTU are fragmented per
 [BRC-130](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md).
-The concrete frame format is specified in a companion BRC; this BRC constrains
-the header fields that addressing, retransmission, and filtering depend on
-(Appendix A renders them as an informative reference layout):
+The concrete frame format — and the unicast submission/delivery record
+grammars used at ingress and delivery — are specified in
+[BRC-149](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0149.md),
+which assigns `FrameVersion 0x09`. This BRC constrains the header fields that
+addressing, retransmission, and filtering depend on:
 
 - **ContentID (offset 8, 32 bytes)** — SHA-256d over the complete object bytes.
   This is the same hash BRC-130 already requires for reassembly verification of
@@ -655,57 +657,6 @@ planes MUST be published from the announced global source set.
   apply unchanged to all planes; a private group-id isolates every plane
   simultaneously.
 
-## Appendix A (informative): Reference Frame Layout
-
-This appendix renders the *Frame carriage* constraints as a concrete layout for
-implementers. It is informative: the companion frame-format BRC is
-authoritative for the frame, and the `FrameVersion` value `0x09` is provisional
-(the next unassigned code after BRC-142's `0x08`). The header reuses the
-[BRC-124](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md)
-92-byte layout at identical offsets, so existing firewalls, classifiers, and
-retry infrastructure require no changes.
-
-### BEEF object frame (`FrameVer 0x09`, provisional) — 92-byte header + payload
-
-| Offset | Size | Type | Field | Description |
-| ------ | ---- | ---- | ----- | ----------- |
-| 0 | 4 | `uint32` BE | Network Magic | `0xE3E1F3E8` (BSV mainnet P2P magic). Frames with incorrect magic are rejected. |
-| 4 | 2 | `uint16` BE | Protocol Version | `0x02BF` (703). Informational; receivers do not validate. |
-| 6 | 1 | `byte` | Frame Version | `0x09` — BEEF object frame. Any other value is handled by a different decoder. |
-| 7 | 1 | `byte` | Reserved | `0x00`. The BEEF version is **not** duplicated here — it is read from the payload's first four bytes. Reserved for future plane-level message types. |
-| 8 | 32 | `[32]byte` | ContentID | `SHA-256d(payload bytes)` — the object's identity. Keys BRC-130 fragment reassembly (the reassembly-verification hash BRC-130 already requires) and, paired with TopicID, ingress duplicate suppression. MUST NOT be the subject TxID: a proof update re-emits the same subject with different bytes. |
-| 40 | 8 | `uint64` BE | HashKey | `XXH64(senderIPv6 ∥ domain-tagged groupIdx ∥ zeros)`; stamped at ingress; `0` = unset. Per (sender, group) flow — TopicID is **excluded**, bounding gap-tracker state by groups × multicast sources regardless of topic count. The domain-tagged IDX (`0x1nnn`) keeps BEEF flows distinct from transaction-plane flows on the same shard number. |
-| 48 | 8 | `uint64` BE | SeqNum | Per-sender monotonic counter within the (sender, group) flow; stamped at ingress; `0` = unstamped. Drives gap detection, NACK recovery, and retransmit dedup exactly as on the transaction plane. |
-| 56 | 32 | `[32]byte` | TopicID | `SHA-256(UTF-8 topic name)` (e.g. `SHA-256("tm_uhrp_files")`). The delivery-selectivity key: group derivation takes its top bits (`Uint32(TopicID[0:4]) >> (32 − shardBits)`), and listener fan-out filters subscribers on it. Occupies the field that carries the SubtreeID in transaction frames. |
-| 88 | 4 | `uint32` BE | Payload Length | Byte length of the payload. |
-| 92 | \* | `[]byte` | Payload | The BEEF object **verbatim** — no envelope, no re-encoding, proof data intact. |
-
-### Payload leading bytes — BEEF version word
-
-| Payload `[0:4]` | Type | Encoding | Reference |
-| --------------- | ---- | -------- | --------- |
-| `0100BEEF` | `uint32` LE (4022206465) | BEEF | [BRC-62](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md) |
-| `0200BEEF` | `uint32` LE (4022206466) | BEEF V2 (TXID-only extension) | [BRC-96](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0096.md) |
-| `01010101` | 4-byte prefix (32-byte subject TxID follows) | Atomic BEEF | [BRC-95](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0095.md) |
-
-The version word is the version filter's input — an encoding-capability gate
-only, never an overlay namespace (see *Delivery identifiers and filtering*).
-
-Intentionally absent from the header: the **subject TxID** (consumer-level
-semantics inside the payload — explicit in Atomic BEEF, last in topological
-order for BRC-62/BRC-96) and any **per-format sub-type byte** (the payload
-marker is self-identifying at a fixed offset).
-
-Objects exceeding the path MTU are carried as
-[BRC-130](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md)
-fragments (`FrameVer 0x03`, 104-byte header, `OrigFrameVer = 0x09`) with bytes
-0–91 layout-identical to the table above; the interaction with filtering is
-specified in *Frame carriage*.
-
-## Implementations
-
-None yet.
-
 ## References
 
 - [BRC-22: Overlay Network Data Synchronization](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0022.md)
@@ -738,6 +689,8 @@ None yet.
   — block-anchored overlay history synchronisation
 - [BRC-139: Multicast Shard Manifest Announcement Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
   — manifest protocol this BRC forward-extends
+- [BRC-149: Multicast BEEF Object Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0149.md)
+  — companion: the concrete frame and submission/delivery record formats
 - [RFC 4607: Source-Specific Multicast for IP](https://www.rfc-editor.org/rfc/rfc4607)
   — SSM address range
 - [RFC 8815: Deprecating Any-Source Multicast (ASM) for Interdomain Multicast](https://www.rfc-editor.org/rfc/rfc8815)
