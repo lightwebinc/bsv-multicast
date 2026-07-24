@@ -140,7 +140,7 @@ already carries both identifiers.
 
 ## Implementations
 
-Go — reference implementation in the open-source BSV multicast component suite: the frame and submission/delivery record codecs in [shard-common](https://github.com/lightwebinc/shard-common) (`frame`, `objfmt`), open-class ingress in [shard-proxy](https://github.com/lightwebinc/shard-proxy), and filtered delivery in [shard-listener](https://github.com/lightwebinc/shard-listener).
+Go — reference implementation in the open-source BSV multicast component suite: the frame and submission/delivery record codecs in [shard-common](https://github.com/lightwebinc/shard-common) (`frame`, `objfmt`), open-class ingress in [shard-proxy](https://github.com/lightwebinc/shard-proxy), filtered delivery in [shard-listener](https://github.com/lightwebinc/shard-listener), and submission-record production in [beef-generator](https://github.com/lightwebinc/beef-generator).
 
 ## References
 
