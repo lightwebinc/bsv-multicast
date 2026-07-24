@@ -657,6 +657,10 @@ planes MUST be published from the announced global source set.
   apply unchanged to all planes; a private group-id isolates every plane
   simultaneously.
 
+## Implementations
+
+Go — reference implementation across the open-source BSV multicast component suite: [shard-common](https://github.com/lightwebinc/shard-common) (addressing, frame/record codecs, per-domain manifest), [shard-proxy](https://github.com/lightwebinc/shard-proxy) (topical ingress), [shard-listener](https://github.com/lightwebinc/shard-listener) (filtered delivery), [retry-endpoint](https://github.com/lightwebinc/retry-endpoint) (retransmission), and [shard-manifest](https://github.com/lightwebinc/shard-manifest) (per-domain coordination).
+
 ## References
 
 - [BRC-22: Overlay Network Data Synchronization](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0022.md)

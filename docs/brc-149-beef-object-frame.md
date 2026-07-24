@@ -140,7 +140,7 @@ already carries both identifiers.
 
 ## Implementations
 
-None yet.
+Go — reference implementation in the open-source BSV multicast component suite: the frame and submission/delivery record codecs in [shard-common](https://github.com/lightwebinc/shard-common) (`frame`, `objfmt`), open-class ingress in [shard-proxy](https://github.com/lightwebinc/shard-proxy), and filtered delivery in [shard-listener](https://github.com/lightwebinc/shard-listener).
 
 ## References
 
