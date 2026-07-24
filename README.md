@@ -97,6 +97,9 @@ and anchor transactions over reserved control groups.
   allocates the BEEF plane (domain `0x1`, sharded by overlay topic) with
   per-domain BRC-139 manifest coordination (PROPOSED —
   [PR #181](https://github.com/bsv-blockchain/BRCs/pull/181))
+  - [BRC-148 Implementation Plan](docs/brc-148-implementation-plan.md) —
+    OSS component evaluation, per-repo work packages, and unit/E2E/scenario
+    testing design
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
 
