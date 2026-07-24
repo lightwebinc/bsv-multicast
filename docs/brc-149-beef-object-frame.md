@@ -138,10 +138,6 @@ its topics and maps identifiers back locally. Subscribers taking whole
 `FrameVer 0x09` frames instead of a stripped lane need no record; the frame
 already carries both identifiers.
 
-## Implementations
-
-Go — reference implementation in the open-source BSV multicast component suite: the frame and submission/delivery record codecs in [shard-common](https://github.com/lightwebinc/shard-common) (`frame`, `objfmt`), open-class ingress in [shard-proxy](https://github.com/lightwebinc/shard-proxy), filtered delivery in [shard-listener](https://github.com/lightwebinc/shard-listener), and submission-record production in [beef-generator](https://github.com/lightwebinc/beef-generator).
-
 ## References
 
 - [BRC-12: Raw Transaction Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0012.md)
