@@ -266,17 +266,32 @@ benefit for any `k`. Re-shard cutover follows the BRC-139 `Successor` block
 routes each bundle by its tagged `ShardBits`; past `TransitionEpoch` the old
 generation retires.
 
-> **Implementation status (§20) — ENFORCED at the delivery edge.** The **listener**
-> (`shard-listener` `processBundle`) applies the rule: before filter/dedup/delivery it compares
-> the bundle's `ShardBits` to its own generation, and on a mismatch re-buckets to
-> the local `ShardBits` (`bundle.Rebucketer` — split + re-coalesce each member into
-> its correct local group) so neither edge- nor consumer-decoalesce can
-> over-deliver a coarser bundle to a finer subscriber. Re-bucketing is applied
-> **once, at the delivery edge** (where subscribers attach), not at every hop: a
-> mid-fabric relay
-> deliberately re-emits **verbatim** — it forwards toward listeners, it does not
-> deliver to subscribers, so it has no finer-subscriber to protect. Metric
-> `bsl_bundles_rebucketed_total`. **Caveat:** re-bucketing re-stamps child-flow
+> **Implementation status (§20) — ENFORCED at the delivery edge, guarded.** A node
+> that re-buckets — a delivery-edge listener running a finer generation than the
+> fabric, or a cross-generation relay — declares itself with `-rebucket-relay`.
+> `shard-listener` `processBundle`, before filter/dedup/delivery, compares the
+> bundle's `ShardBits` to its own generation and on a mismatch re-buckets to the
+> local `ShardBits` (`bundle.Rebucketer` — split + re-coalesce each member into its
+> correct local group) so neither edge- nor consumer-decoalesce over-delivers a
+> coarser bundle to a finer subscriber. A mismatch on a listener **not** declared a
+> relay is treated as a misconfiguration: it raises `bsl_rebucket_unguarded_total`
+> and a one-shot WARN (delivery still proceeds — refusing would only discard
+> deliverable members). Re-bucketing is applied **once, where subscribers attach**,
+> not per hop: a mid-fabric relay re-emits **verbatim**.
+>
+> **Upstream-loss recovery.** A re-bucketed child's SeqNum is re-stamped from a
+> local counter that advances only for parents that arrive, so a dropped parent
+> leaves no hole in any child stream — child streams are NOT gap-detectable for
+> upstream loss. Loss is detected on the **parent** stream instead: when ≥1
+> re-bucketed member survives the listener's filter, `processBundle` gap-tracks the
+> parent `(HashKey, SeqNum)` — the identity the origin's retry cached — so the
+> BRC-126 NACK path recovers the whole parent bundle, and the recovered parent's
+> re-entry auto-fills the gap. A relay that **re-multicasts** re-stamped children
+> must additionally own a child-generation retry (a `retry-endpoint` joined to the
+> child groups) for the downstream segment to be recoverable. Metrics
+> `bsl_bundles_rebucketed_total`, `bsl_rebucket_unguarded_total`.
+>
+> **Caveat:** re-bucketing re-stamps child-flow
 > HashKeys from a re-emit identity, so own-traffic exclusion (which keys on the
 > original sender's HashKey) does not apply to re-bucketed cross-generation flows —
 > a documented re-shard-boundary limitation, not a common-path regression.
@@ -339,6 +354,7 @@ counted on the shared `bsl_frames_forwarded_total`):
 | `bsl_frames_dropped_total{reason="bundle_decode_error"}` | listener | Bundles that failed to decode                                          |
 | `bsl_frames_forwarded_total`                     | listener      | Decoalesced member frames forwarded (shared with non-bundle frames)        |
 | `bsl_bundles_rebucketed_total`                   | listener      | Bundles re-bucketed to the local ShardBits generation before delivery (§11) |
+| `bsl_rebucket_unguarded_total`                   | listener      | Re-bucketing on a listener not declared `-rebucket-relay` — a generation-mismatch alarm; alert on rate > 0 (§11) |
 
 A relay implementation SHOULD count oversize/ring-saturated TX drops; a metering
 implementation MAY bill on receiver wire datagrams while crediting member
@@ -440,7 +456,7 @@ independent implementation that follows §2–§17 interoperates.
 | Flush trigger (§5/§8/§14) | **Within-batch flush** — pack one `recvmmsg` batch, flush at batch end; **no timer, no delay knob** | Zero added latency; the limit of the "window irrelevant at 1500 MTU" finding. A delay timer is **deferred** while the design targets 1500 MTU (bundles MTU-cap quickly). Bundles form under load; at low rate it degrades to ~1 member/bundle |
 | Opt-in granularity (§5/§1) | **Per proxy** (a `-coalesce` flag) | Per-flow opt-in is a possible future refinement; per-proxy is sufficient for the pps win and matches how operators run the reference deployment |
 | Where coalescing runs (§1/§18) | **Origin only** (collapsed/ingress); the **spine relays, does not coalesce** | The coalescing divert keys the bundle HashKey on the per-source IP for own-traffic exclusion; a spine re-emit has `src=nil`, so coalescing there would mis-key the flow |
-| Re-bucketing (§11) | **Implemented at the listener** (the delivery edge), via `processBundle` generation-alignment; the mid-fabric spine relay stays verbatim | Re-bucket once where subscribers attach, not per hop. Own-traffic exclusion does not survive a cross-generation re-stamp (documented §11 caveat) |
+| Re-bucketing (§11) | **Implemented, relay-declared** (`-rebucket-relay`), via `processBundle` generation-alignment; the mid-fabric spine relay stays verbatim. An undeclared mismatch raises `bsl_rebucket_unguarded_total` + a one-shot WARN. Upstream loss is recovered on the **parent** stream (survivorship-gated `Observe` of the parent HashKey/SeqNum → BRC-126 NACK) | Re-bucket once where subscribers attach, not per hop. Child SeqNums are local (phantom) → track the parent, not the child. Own-traffic exclusion does not survive a cross-generation re-stamp (documented §11 caveat) |
 | Drop visibility (§16) | Drops are **counted, not silent** (`bundle_short`/`bundle_malformed`/`bundle_decode_error`/`ErrCountMismatch`) | Silence hides upstream corruption. The one un-enforced row (member group ≠ GroupIdx) is an **encoder invariant**, not a decode-time check (a hash + routing engine per member) |
 | Metric names (§15) | Actual emitted names differ from the original draft | See the §15 table (the real names) |
 
