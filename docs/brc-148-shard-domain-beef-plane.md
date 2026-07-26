@@ -313,7 +313,10 @@ Properties:
   child group during the generation-transition window.
 - **Multi-topic objects.** A BRC-22 submission may name several topics; the
   object is emitted once per topic, each frame carrying that topic's TopicID.
-  Sibling emissions share a ContentID (see *Frame carriage*).
+  Sibling emissions share a ContentID (see *Frame carriage*). Admission of a
+  multi-topic (`TopicCount > 1`) submission is an authenticated-ingress
+  capability; open/anonymous ingress admits single-topic records only
+  (BRC-149 §Fan-out admission).
 
 **Per-topic throughput bound.** Because a topic occupies one group at a time, a
 single topic's sustained rate is bounded by per-group delivery capacity, and
@@ -331,16 +334,21 @@ does not use it for sharding or identity.
 
 BEEF-plane publishers — overlay hosts, application services, and end users —
 form an **overlay ingress class**, distinct from transaction-plane
-submitters. Admission is operator ingress policy. Each emitted frame is
-delivered to a single topical group, so an object's delivery footprint is
-one group per submitted topic — linear in its topic list, which ingress
-bounds — and reaches only that group's subscribers. The class therefore
-carries the bounded, election-scoped amplification of transaction
-submission — not the network-wide amplification of block or subtree
-ingress — and the expected default policy is **open submission**, exactly
-as for transactions. An operator MAY restrict the
-class (for example on a private deployment); restriction is a local policy
-choice, never an interoperability requirement. A submission is the pair
+submitters. Admission is operator ingress policy, conditioned on the
+submission's topic count. Each emitted frame is delivered to a single
+topical group, so a **single-topic** object's delivery footprint is one
+group — linear and election-scoped, carrying the bounded amplification of
+transaction submission, not the network-wide amplification of block or
+subtree ingress — and single-topic BEEF is admitted as an **open class**,
+exactly as for transactions. A **multi-topic** submission, however, fans one
+object out to one frame per topic — up to a 15× amplification of a single
+submission — so its admission is conditioned on ingress identity:
+open/anonymous ingress admits `TopicCount == 1` and MUST reject
+`TopicCount > 1`, while multi-topic (`TopicCount > 1`) is an
+authenticated-ingress capability where the operator accounts the fan-out
+(BRC-149 §Fan-out admission). This admission split is an interoperability
+requirement; an operator MAY further restrict the class on a private
+deployment. A submission is the pair
 *(topic list, BEEF object)*, mirroring the BRC-22 submit shape. For each submitted topic the
 ingress derives the TopicID, computes the object's ContentID, and emits one
 frame to the topic's group. Publishers submit to operator ingress; the plane's

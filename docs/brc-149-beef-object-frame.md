@@ -106,10 +106,35 @@ lengths violate the bounds above, or whose object exceeds the operator's
 size bound MUST be rejected. A malformed record desynchronises its stream;
 the receiver MUST close the connection.
 
+#### Fan-out admission (multi-topic is an authenticated capability)
+
+`TopicCount` in the wire grammar ranges 1..15, but *admission* of a
+multi-topic record is conditioned on the ingress identity path, because one
+record with `TopicCount` topics fans out to that many full-object frames — an
+up-to-15× amplification of a single submission, attacker-declarable and free
+on an anonymous path with no proof-of-work or membership lever available to
+bound it:
+
+- **Open / public / anonymous ingress** (a record admitted on a public port
+  with no consumer identity) MUST carry `TopicCount == 1`; a public record
+  with `TopicCount > 1` MUST be rejected. The open path therefore never fans
+  out — there is no amplification to bound and no per-submission gate is
+  needed. A public publisher wanting N topics submits N single-topic records,
+  so its ingress effort scales 1:1 with the fan-out it demands.
+- **Authenticated / consumer-tunnel ingress** MAY carry `TopicCount` 1..15.
+  Identity lets the operator account the fan-out: the first **N** topics are
+  admitted free and each additional topic is charged at the operator's
+  standard delivery rate on its delivered bytes (so ingress itself stays
+  unbilled). `N` is an operator/tier policy parameter, not fixed by this spec.
+
+This split is an admission policy over an unchanged wire grammar — the 92-byte
+frame and the record layout are byte-identical on both paths.
+
 #### Detection on shared ports
 
-BEEF is an open ingress class: submission records MAY ride the open
-transaction port alongside the existing grammars, distinguished by leading
+Single-topic BEEF submission records MAY ride the open transaction port
+alongside the existing grammars (multi-topic records require the
+authenticated path per §Fan-out admission), distinguished by leading
 bytes — network magic `0xE3E1F3E8` selects a framed datagram, the `0xBEEF`
 tag selects a submission record, and anything else is a bare transaction
 ([BRC-12](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0012.md)
