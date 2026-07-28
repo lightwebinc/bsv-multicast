@@ -53,7 +53,7 @@ BRC-142's `0x08`).
 | 4 | 2 | `uint16` BE | Protocol Version | `0x02BF` (703). Informational; receivers do not validate. |
 | 6 | 1 | `byte` | Frame Version | `0x09` — BEEF object frame. Any other value is handled by a different decoder. |
 | 7 | 1 | `byte` | Reserved | `0x00` on send; ignored on receive (reserved for future plane-level message types). The BEEF encoding version is **not** duplicated here — it is the payload's first four bytes. |
-| 8 | 32 | `[32]byte` | ContentID | `SHA-256d(payload bytes)` — the object's identity; keys BRC-130 fragment reassembly and, with TopicID, ingress duplicate suppression. Never the subject TxID. |
+| 8 | 32 | `[32]byte` | ContentID | `SHA-256d(payload bytes)` — the object's identity and the BRC-130 reassembly verification hash. With TopicID it keys both fragment reassembly and duplicate suppression (see below). Never the subject TxID. |
 | 40 | 8 | `uint64` BE | HashKey | Per-(sender, group) flow identifier; stamped at ingress; `0` = unset. Derivation and flow semantics per [BRC-148](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0148.md) §Frame carriage (TopicID excluded). |
 | 48 | 8 | `uint64` BE | SeqNum | Per-sender monotonic counter within the (sender, group) flow; stamped at ingress; `0` = unstamped. Drives gap detection, NACK recovery, and retransmit dedup. |
 | 56 | 32 | `[32]byte` | TopicID | `SHA-256(UTF-8 topic name)`. The delivery-selectivity key: group derivation takes its top bits, and fan-out filters subscribers on it. Occupies the field that carries the SubtreeID in transaction frames. |
@@ -80,7 +80,11 @@ Objects exceeding the path MTU are carried as
 [BRC-130](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md)
 fragments (`FrameVer 0x03`, `OrigFrameVer = 0x09`) with bytes 0–91
 layout-identical to the table above, so ContentID and TopicID appear in
-every fragment; ContentID is the reassembly key and verification hash. The
+every fragment; ContentID is the reassembly verification hash. Reassembly
+MUST key slots on the **(ContentID, TopicID) pair**, not on ContentID alone:
+sibling emissions of one object to different topics share a ContentID by
+construction, so a ContentID-only slot key collapses concurrent in-flight
+objects into one slot and silently delivers only the first topic. The
 interaction with filtering is specified in BRC-148 §Frame carriage.
 
 ### Submission record (ingress)

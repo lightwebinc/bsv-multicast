@@ -456,7 +456,9 @@ addressing, retransmission, and filtering depend on:
   This is the same hash BRC-130 already requires for reassembly verification of
   fragmented payloads, so fragmentation needs no special-casing. It MUST NOT be
   the subject TxID: a proof update re-emits the same subject with different
-  bytes, and BRC-130 keys fragment reassembly on this field, so two in-flight
+  bytes. BRC-130 reassembly keys on this field paired with TopicID (a
+  ContentID-only key would collapse sibling topics of one object), so two
+  in-flight
   objects for one subject must never share it.
 - **TopicID (offset 56, 32 bytes)** — the field that carries the SubtreeID in
   transaction frames.
