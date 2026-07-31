@@ -126,10 +126,24 @@ bound it:
   needed. A public publisher wanting N topics submits N single-topic records,
   so its ingress effort scales 1:1 with the fan-out it demands.
 - **Authenticated / consumer-tunnel ingress** MAY carry `TopicCount` 1..15.
-  Identity lets the operator account the fan-out: the first **N** topics are
-  admitted free and each additional topic is charged at the operator's
-  standard delivery rate on its delivered bytes (so ingress itself stays
-  unbilled). `N` is an operator/tier policy parameter, not fixed by this spec.
+  Identity lets the operator bound the fan-out, by either or both of two
+  levers, neither fixed by this spec:
+  - **A hard admission cap `M` ≤ 15.** The operator MAY reject any
+    authenticated record with `TopicCount > M`. `M` = 1 collapses the
+    authenticated path to the open path's behaviour; `M` = 15 imposes no cap.
+  - **A metered allowance `N` ≤ `M`.** The first `N` topics are admitted
+    free and each additional topic is charged at the operator's standard
+    delivery rate on its delivered bytes (so ingress itself stays unbilled).
+
+  An operator that prefers a bounded capability to a priced one sets `M`
+  alone and omits `N` entirely; one that prefers to sell fan-out sets both.
+  Publishers MUST NOT assume any particular `M`, and a rejection for
+  exceeding it is an admission failure, not a malformed record.
+
+  Where an operator delivers a single object to a subscriber that has elected
+  more than one of its topics, whether the subscriber receives one copy or
+  one copy per matched topic is a **delivery policy**, likewise not fixed
+  here; the delivery record identifies one topic per copy either way.
 
 This split is an admission policy over an unchanged wire grammar — the 92-byte
 frame and the record layout are byte-identical on both paths.
