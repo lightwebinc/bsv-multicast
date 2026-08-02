@@ -2,9 +2,10 @@
 
 Jeff Harris (jeff@lightweb.net)
 
-> **Status:** Draft — official submission prepared as BRC-148 (145–147 are
-> claimed by open PRs in the
-> [BRCs repository](https://github.com/bsv-blockchain/BRCs)). Extends
+> **Canonical BRC:** [BRC-148](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0148.md)
+> — merged 2026-07-30 ([PR #181](https://github.com/bsv-blockchain/BRCs/pull/181);
+> draft number restored by [PR #190](https://github.com/bsv-blockchain/BRCs/pull/190)).
+> Extends
 > [BRC-129](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md)
 > (addressing) and forward-extends
 > [BRC-139](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
@@ -448,7 +449,7 @@ NACK retransmission; objects that exceed the path MTU are fragmented per
 [BRC-130](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md).
 The concrete frame format — and the unicast submission/delivery record
 grammars used at ingress and delivery — are specified in
-[BRC-149](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0149.md),
+[BRC-149](brc-149-beef-object-frame.md),
 which assigns `FrameVersion 0x09`. This BRC constrains the header fields that
 addressing, retransmission, and filtering depend on:
 
@@ -699,7 +700,7 @@ planes MUST be published from the announced global source set.
   — block-anchored overlay history synchronisation
 - [BRC-139: Multicast Shard Manifest Announcement Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
   — manifest protocol this BRC forward-extends
-- [BRC-149: Multicast BEEF Object Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0149.md)
+- [BRC-149: Multicast BEEF Object Frame Format](brc-149-beef-object-frame.md)
   — companion: the concrete frame and submission/delivery record formats
 - [RFC 4607: Source-Specific Multicast for IP](https://www.rfc-editor.org/rfc/rfc4607)
   — SSM address range

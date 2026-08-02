@@ -36,10 +36,10 @@ and anchor transactions over reserved control groups.
 | [shard-manifest](https://github.com/lightwebinc/shard-manifest)   | Manifest                | BRC-139 announcer; periodic `shard_bits` + joined-groups beacon                             |
 | [manifest-infra](https://github.com/lightwebinc/manifest-infra)   | Manifest (deploy)       | Ansible/Terraform automation for `shard-manifest` nodes                                     |
 | [shard-common](https://github.com/lightwebinc/shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `bundle`, `seqhash`, `sequence`, `txidset`, `cache`, `pow`, `manifest`, `netjoin`, … |
-| [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 senders                  |
+| [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 + BRC-143/144 push senders |
+| [beef-generator](https://github.com/lightwebinc/beef-generator) | Testing                 | BRC-148/149 BEEF object-plane traffic generator (`beef-gen`)                                |
 | [multicast-test](https://github.com/lightwebinc/multicast-test)   | Testing                 | Integration test suite: Go + Docker scenarios (`harness/`) on an isolated IPv6 bridge       |
 | [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes (deploy)     | k0s-reference + Helm composition of the full stack; distribution-agnostic                   |
-| [integrated-infra](https://github.com/lightwebinc/integrated-infra)         | Collapsed node (deploy) | Ansible/Terraform automation for a collapsed single-host node (`shard-proxy` + `shard-listener` + `retry-endpoint`) |
 | [shard-proxy-helm](https://github.com/lightwebinc/shard-proxy-helm)             | Helm chart              | Chart for `shard-proxy`                                                                     |
 | [shard-listener-helm](https://github.com/lightwebinc/shard-listener-helm)       | Helm chart              | Chart for `shard-listener`                                                                  |
 | [retry-endpoint-helm](https://github.com/lightwebinc/retry-endpoint-helm)       | Helm chart              | Chart for `retry-endpoint`                                                                  |
@@ -78,29 +78,30 @@ and anchor transactions over reserved control groups.
   Periodic participant configuration announcement (shard_bits + joined groups)
 - [BRC-142 Coalescing (Bundle) Frame](docs/brc-142-coalescing-frame.md) —
   Packs many small txs of one (group, subtree) into one ≤MTU datagram; inverse
-  of BRC-130 (PROPOSED — [PR #164](https://github.com/bsv-blockchain/BRCs/pull/164);
+  of BRC-130 (published — [PR #164](https://github.com/bsv-blockchain/BRCs/pull/164);
   reference implementation shipped)
 - **Push frame formats** — whole-object delivery/ingest to a consumer reached by
   push (round-robin SDA over a tunnel) rather than announce/pull. Only subtree
   and block need new formats; a coinbase off the fabric is a plain **BRC-12**
   transaction (delivered inline inside the block frame — Teranode rejects a loose
   coinbase) and an anchor is an ordinary **BRC-30 EF** transaction, so neither
-  gets its own format (PROPOSED):
+  gets its own format (published):
   - [BRC-143 Subtree Data Frame Format](docs/brc-143-subtree-data.md) — in-band
     merkle root + `uint64` node count + ordered node hashes; coinbase placeholder
-    `0xFF×32` detected by value ([PR #175](https://github.com/bsv-blockchain/BRCs/pull/175))
+    `0xFF×32` detected by value ([PR #175](https://github.com/bsv-blockchain/BRCs/pull/175), merged)
   - [BRC-144 Block Frame Format](docs/brc-144-block-frame.md) — strict parity with
     Teranode's block body: header + counts + ordered subtree roots + full inline
-    coinbase + height + BRC-74 coinbase BUMP ([PR #176](https://github.com/bsv-blockchain/BRCs/pull/176))
+    coinbase + height + BRC-74 coinbase BUMP ([PR #176](https://github.com/bsv-blockchain/BRCs/pull/176), merged)
 - [BRC-148 Shard Domain Partitioning and BEEF Object Plane](docs/brc-148-shard-domain-beef-plane.md)
   — Partitions the 16-bit shard-index space into object planes by high nibble;
   allocates the BEEF plane (domain `0x1`, sharded by overlay topic) with
-  per-domain BRC-139 manifest coordination (PROPOSED —
+  per-domain BRC-139 manifest coordination (published —
   [PR #181](https://github.com/bsv-blockchain/BRCs/pull/181))
 - [BRC-149 Multicast BEEF Object Frame Format](docs/brc-149-beef-object-frame.md)
   — Companion to BRC-148: assigns FrameVer `0x09` and fixes the object frame
   plus the submission/delivery record grammars (open-port `0xBEEF` tag
-  detection) (PROPOSED)
+  detection) (published —
+  [PR #183](https://github.com/bsv-blockchain/BRCs/pull/183))
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
 

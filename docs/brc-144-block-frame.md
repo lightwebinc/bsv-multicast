@@ -7,11 +7,12 @@ over a byte stream so a receiver can assemble and validate the block with no
 follow-up fetch. It is the push counterpart of the `BlockAnnounce` payload in
 [BRC-131](brc-131-block-announcements.md).
 
-> **Status: PROPOSED.** Upstream `bsv-blockchain/BRCs`
-> [PR #176](https://github.com/bsv-blockchain/BRCs/pull/176). Field sequence is
-> **strict parity** with Teranode's `model.Block.Bytes()` (HEAD 2026-07-06),
-> each VarInt replaced by a fixed-width big-endian field. Canonical bytes live
-> in the upstream BRC; this doc is the local design mirror.
+> **Canonical BRC:** [BRC-144](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0144.md)
+> — merged 2026-07-30 ([PR #176](https://github.com/bsv-blockchain/BRCs/pull/176);
+> draft number restored by [PR #190](https://github.com/bsv-blockchain/BRCs/pull/190)).
+> Field sequence is **strict parity** with Teranode's `model.Block.Bytes()`
+> (HEAD 2026-07-06), each VarInt replaced by a fixed-width big-endian field.
+> Canonical bytes live in the upstream BRC; this doc is the local design mirror.
 
 ---
 

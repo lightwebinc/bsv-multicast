@@ -23,6 +23,7 @@ Craig S. Wright in
 
 - [Terminology](#terminology)
 - [High-Level Architecture](#high-level-architecture)
+
 - [Repository Overview](#repository-overview)
 - [Network Topology](#network-topology)
 - [Data Flow](#data-flow)
@@ -45,6 +46,8 @@ Craig S. Wright in
 - [Automatic Shard Configuration](#automatic-shard-configuration)
 - [Testing and Validation](#testing-and-validation)
 - [Deployment Considerations](#deployment-considerations)
+- [References and Further Reading](#references-and-further-reading)
+- [Appendix: Quick Reference](#appendix-quick-reference)
 
 ---
 
@@ -152,7 +155,6 @@ responsibility:
 | [retransmission-infra](https://github.com/lightwebinc/retransmission-infra) | Ansible/Terraform for retry endpoint deployment | retry-endpoint      |
 | [manifest-infra](https://github.com/lightwebinc/manifest-infra)             | Ansible/Terraform for manifest deployment       | shard-manifest      |
 | [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes deployment (k0s reference, EKS stub) | full stack via Helm |
-| [integrated-infra](https://github.com/lightwebinc/integrated-infra)         | Collapsed single-host node (Ansible/Terraform)  | all three services  |
 
 ### Helm Charts
 
@@ -172,6 +174,7 @@ Each service has a dedicated chart repository, consumed by
 | Repository                                                        | Purpose                                                                                        |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Traffic generator for load/functional testing                                                  |
+| [beef-generator](https://github.com/lightwebinc/beef-generator)   | BRC-148/149 BEEF object-plane traffic generator (`beef-gen`)                                   |
 | [multicast-test](https://github.com/lightwebinc/multicast-test)   | Integration test suite: Go + Docker scenarios (`harness/`) on an isolated IPv6 bridge          |
 
 ### Meta Repository
@@ -241,7 +244,8 @@ Each service has a dedicated chart repository, consumed by
 2. shard-proxy
    ┌─────────────────────────────────────────────────────────────────────────┐
    │ • Decode frame (extract TxID)                                           │
-   │ • Stamp HashKey/SeqNum in-place (BRC-124 only, bytes 40–55)             │
+   │ • Stamp HashKey/SeqNum in-place (all framed versions except legacy      │
+   │   BRC-12; bytes 40–55)                                                  │
    │ • Derive multicast group: FF05::B:<groupIndex> from TxID top bits       │
    │ • Forward verbatim to all egress interfaces                             │
    └─────────────────────────────────────────────────────────────────────────┘
@@ -390,8 +394,8 @@ See
 [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md)
 for full details.
 [BRC-148 Shard Domain Partitioning and BEEF Object Plane](docs/brc-148-shard-domain-beef-plane.md)
-(proposed) partitions the shard-index space into object planes by high nibble
-and allocates a topic-sharded BEEF object plane as domain `0x1`.
+partitions the shard-index space into object planes by high nibble and
+allocates a topic-sharded BEEF object plane as domain `0x1`.
 
 ## Frame Format
 
@@ -406,38 +410,39 @@ the leading network magic) or *bare* (a header-stripped transaction, detected by
 the absence of the magic and wrapped into an unstamped frame). A single ingress
 path serves both on both transports — there is no separate raw-tx port: on UDP
 the unit is one transaction per datagram; on TCP the connection grammar-detects
-once (magic-led = framed stream, else = bare stream, self-delimiting by
-transaction structure).
+once, three ways (magic-led = framed stream, `0xBEEF`-tagged = BRC-149 BEEF
+submission-record stream, else = bare stream, self-delimiting by transaction
+structure).
 Under **`-require-ef`** the ingress is *EF-native*: a submission must
 be BRC-30 Extended Format, because Teranode requires EF and the stateless fabric
 cannot extend a raw transaction (extension needs a per-input UTXO lookup — a
 wallet operation — and a raw tx shares its extended form's TxID, so a fabric
-re-transmit would collide with ingress dedup). Relayed (already-stamped) frames
-are exempt, so the relay hot path is untouched. The commercial proxy
-(shard-proxy-1bsv) defaults EF-native **on** (BRC-12/124 are deprecated;
-`-require-ef=false` restores raw admission); the OSS proxy's flag remains
-opt-in. See the proxy's `docs/architecture.md` § Transaction ingress.
+re-transmit would collide with ingress dedup). Relayed (already-stamped)
+BRC-124/128 frames are exempt, so the relay hot path is untouched; legacy
+BRC-12 (V1) frames are rejected under `-require-ef` even when stamped (the
+flag is opt-in). See the proxy's `docs/architecture.md` § Transaction ingress.
 
-**Edge transport (commercial): TCP lanes by default.** Commercial submissions
-default to TCP: a framed lane on the tx port (8725, every frame class —
-same-port carriage over one reliable 5-tuple) plus single-class push lanes
-(BRC-143 subtree → 8726, BRC-144 block → 8727) so each flow class has its own
-5-tuple for load balancing and flow shaping. Both models run simultaneously.
-Posture by role: an **ingress-mode collector** (internet-facing) is **TCP-only**
-— its UDP submitter lane is disabled because the public path is unreliable; a
-**collapsed consumer edge supports both TCP and UDP** for tx/subtree/block
-submissions, because consumer tunnels ride a reliable underlay, and UDP remains
-the fabric relay + AF_XDP line-rate path.
+**Edge transport: TCP lanes.** The OSS proxy implements the TCP lanes: a
+framed lane on the tx port (8725, transactions + anchors + BEEF records over
+one reliable 5-tuple) plus single-class push lanes (BRC-143 subtree → 8726,
+BRC-144 block → 8727, open-class BEEF → 8728; all default off —
+`-subtree-listen-port` / `-block-listen-port` / `-beef-listen-port` = 0) so
+each flow class has its own 5-tuple for load balancing and flow shaping. Both
+models run simultaneously. Posture by role: an internet-facing collector is
+typically **TCP-only** — its UDP submitter lane is disabled because the public
+path is unreliable; a collapsed edge supports both TCP and UDP submissions
+over a reliable underlay, and UDP remains the fabric relay path.
 
 Key fields: Network magic, Protocol version, Frame version, Transaction ID,
 HashKey (XXH64 per-flow identifier), SeqNum (monotonic per-flow counter),
 Subtree ID, Payload length, and BSV tx payload. Both BRC-12 (legacy) and
-BRC-124/BRC-128 frames are accepted by all components.
+BRC-124/BRC-128 frames are accepted by all components — except under
+`-require-ef` (opt-in), where legacy BRC-12 is rejected.
 
 **BRC-128 (Extended Format):** BRC-128 frames carry BRC-30 Extended Format (EF)
 transaction payloads inside the standard 92-byte BRC-124 header. Frame Version
 remains `0x02`; the payload is self-identifying via the 6-byte EF marker at
-payload bytes 4–9 (`0x000000000000EF`). All infrastructure components are
+payload bytes 4–9 (`0x0000000000EF`). All infrastructure components are
 payload-agnostic — no changes required to proxy, listener, or retry endpoint.
 
 **→ [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md)**
@@ -514,6 +519,21 @@ at a different `ShardBits` generation before delivery.
 **→
 [BRC-142 Coalescing (Bundle) Frame Format](docs/brc-142-coalescing-frame.md)**
 
+**BRC-149 (BEEF Object Frame):** BRC-149 defines Frame Version `0x09` for the
+BRC-148 BEEF object plane: a 92-byte BRC-124-layout header carrying
+`ContentID` (SHA256d of the BEEF object) at bytes 8–39 and `TopicID` (SHA-256
+of the overlay topic name) in the SubtreeID slot at bytes 56–87, followed by
+the BEEF payload. Submissions enter as `0xBEEF`-tagged records on the open tx
+port (8725) or the optional dedicated lane (8728); the proxy shards by TopicID
+into the BEEF object plane (domain `0x1`, indices `0x1000`–`0x1FFF`) and
+fragments oversized objects via BRC-130 (`OrigFrameVer=0x09`; listener
+reassembly keys on the `(ContentID, TopicID)` pair). Gap tracking and NACK
+retransmission ride the standard BRC-126 machinery.
+
+**→ [BRC-149 Multicast BEEF Object Frame Format](docs/brc-149-beef-object-frame.md)**
+(plane allocation:
+[BRC-148 Shard Domain Partitioning and BEEF Object Plane](docs/brc-148-shard-domain-beef-plane.md))
+
 ---
 
 ## Component Deep Dives
@@ -526,7 +546,9 @@ multicast group, forwards verbatim.
 **Key Characteristics:**
 
 - Zero-copy forwarding: frame never modified after HashKey/SeqNum stamp
-- Multi-CPU design: N UDP workers via SO_REUSEPORT + 1 TCP listener
+- Multi-CPU design: N UDP workers via SO_REUSEPORT (class: transaction) + up
+  to four single-class TCP accept loops (tx ingress, subtree push 8726, block
+  push 8727, BEEF lane 8728)
 - Deterministic: same txid always maps to same group
 - Stateless: no coordination between workers or nodes required
 
@@ -644,8 +666,8 @@ missing frame arrives via multicast or explicit NACK ACK.
 
 - Single-worker multicast receiver (SO_REUSEPORT limitation)
 - Pluggable cache backend (`shard-common/cache`): in-process striped map
-  (default), Redis, or Aerospike; 60 s TTL, single 16-byte key:
-  `HashKey ∥ SeqNum`
+  (default), Redis, or Aerospike; per-class TTLs (tx/BEEF 60 s, block 10 m,
+  subtree 5 m, anchor 2 m), single 16-byte key: `HashKey ∥ SeqNum`
 - Multi-tier rate limiting: per-IP, per-HashKey, per-SeqNum pre-lookup;
   per-group (groupIdx) post-lookup. The honest-congestion tiers (per-HashKey,
   per-SeqNum, per-group) optionally emit THROTTLED (`-rl-throttle-response`)
@@ -657,7 +679,7 @@ missing frame arrives via multicast or explicit NACK ACK.
 ```text
 Multicast Receiver (1 worker, SO_REUSEPORT)
   ┌──────────────────┐
-  │ Join all groups  │──▶ Cache (memory/redis/aerospike, 60 s TTL)
+  │ Join all groups  │──▶ Cache (memory/redis/aerospike, per-class TTL)
   └──────────────────┘
 
 NACK Server (NACK_WORKERS goroutines)
@@ -673,7 +695,8 @@ Retransmit Egress
 
 **Cache:** Single 16-byte key (`HashKey ∥ SeqNum`) → raw frame. Pluggable
 `shard-common/cache` backend (`-cache-backend`): in-process striped map
-(default), Redis, or Aerospike for cross-instance shared cache (60 s TTL). See
+(default), Redis, or Aerospike for cross-instance shared cache (per-class
+TTLs: tx/BEEF 60 s, block 10 m, subtree 5 m, anchor 2 m). See
 [shard-common cache backend](https://github.com/lightwebinc/shard-common/blob/main/docs/cache-backend.md).
 
 **→
@@ -745,32 +768,40 @@ frame may be required to both arrive on an admitted path AND carry valid work.
 
 ### Per-socket frame-class gate (admission control)
 
-The proxy enforces authorization as a property of the **ingress socket**, not
-the host, so one edge serves miners and ordinary consumers interleaved (best
-fit per device + bandwidth):
+The proxy enforces authorization as a property of the **ingress socket** —
+every listen socket carries a fixed ingress class — so one edge serves miners
+and ordinary consumers interleaved (best fit per device + bandwidth):
 
 - **User / transaction ingress** (`-udp-listen-port`, default 8725;
   `-tcp-listen-port`) accepts transactions + BRC-134 anchor only. Privileged
   BRC-131/133/132 frames are dropped at `forwarder.DispatchClass` and counted
   (`bsp_privileged_frame_rejected_total{frame_type}`). Exposed to all
   consumers.
-- **Miner ingress** (`-miner-listen-port`, e.g. 9000; `-miner-tcp-listen-port`)
-  accepts every class, including the privileged ones. Opening it is the
-  proxy's "accept block/coinbase/subtree data?" switch (both `0` ⇒ the proxy
-  ingests transactions only).
-
-`-tx-accept-privileged` (default `false`) reverts the user port to legacy
-accept-all for collapsed/dev single-port nodes.
+- **Push lanes (miner-tier ingress).** Blocks and subtrees enter only as
+  whole-object push frames on dedicated single-class TCP lanes:
+  `-subtree-listen-port` (standard 8726) accepts BRC-143 subtree pushes and
+  `-block-listen-port` (standard 8727) accepts BRC-144 block pushes; the
+  proxy reframes each onto the fabric internally (BRC-132 subtree data;
+  BRC-131 announce with the coinbase carried inline in the block body). Both
+  default `0` (disabled) ⇒ the proxy ingests transactions only. The former
+  miner multicast ingress (`-miner-listen-port` / `-miner-tcp-listen-port` /
+  `-tx-accept-privileged`) was removed 2026-07-07 — privileged classes are
+  never submitted as multicast frames; multicast is fabric-internal
+  transport.
+- **BEEF lane** (`-beef-listen-port`, standard 8728) is a single-class TCP
+  lane for BRC-148/149 BEEF object submissions — an **open** class like
+  transactions (flow separation, not privilege); BEEF records are also
+  accepted on the tx port itself.
 
 ### Network access = tier
 
 The gate above is the application-layer enforcement point (it holds even if a
-firewall is misconfigured). Operationally, *which* peers can reach the miner
-port is the network-access layer: an operator's control plane / subscription
-system routes miner-tier peers to the edge's miner port and maintains the
-firewall source set that admits them; consumer paths reach only 8725. Miners
-that are not customers can be added to the miner source set out of band — no
-subscription record required. The open data plane stays tier-agnostic (just
+firewall is misconfigured). Operationally, *which* peers can reach the push
+lanes is the network-access layer: an operator's control plane / subscription
+system routes miner-tier peers to the edge's push lanes (8726/8727,
+tunnel-bound) and maintains the firewall source set that admits them; consumer
+paths reach only 8725. Miners that are not customers can be added to the
+miner source set out of band — no subscription record required. The open data plane stays tier-agnostic (just
 sockets + a frame-class gate); the operator's control plane supplies the
 routing and source roster.
 
@@ -778,7 +809,8 @@ routing and source roster.
 
 The permissionless mechanism validates the **artifact**, not the emitter. A
 BRC-131 block announce carries the 80-byte header in-frame; the proxy gates it
-(opt-in, `-require-block-pow`) on a cheap stateless check — `hash(header) ≤
+(default on; `-require-block-pow=false` disables) on a cheap stateless check —
+`hash(header) ≤
 target(nBits)` and that target ≤ a configured difficulty floor
 (`-min-pow-bits`). Forging a passing header costs work proportional to the
 floor; verifying costs one double-SHA256. That asymmetry is the spam gate, and
@@ -795,24 +827,24 @@ Rejections increment `bsp_block_pow_rejected_total`. Implemented in
 **The check belongs at the listener too, not only the proxy.** A block
 announcement that originates in another domain arrives over the multicast
 fabric (inter-domain peering) and never passes our proxy — so the **listener**
-independently re-validates before fan-out (opt-in, `-require-block-pow`):
+independently re-validates before fan-out (default on;
+`-require-block-pow=false` disables):
 
 - **Block announce (BRC-131):** same stateless header-PoW check before
   forwarding downstream; a frame failing PoW is dropped (`bsl_frames_dropped_total{reason="block_pow"}`)
   and not gap-tracked, so a junk injection can't pollute recovery state.
-- **Coinbase (BRC-133):** has no in-frame PoW, so it is gated by **correlation**
-  — the listener records the coinbase TxID of every PoW-valid block announce
-  (a shared, TTL-bounded `CoinbaseCorrelator`) and forwards a coinbase frame
-  only if its TxID matches one (`reason="coinbase_uncorrelated"` otherwise). An
-  uncorrelated coinbase (arriving before its block, or matching none) is
-  dropped and re-evaluated if the block arrives and the coinbase is re-sent.
+- **Coinbase (BRC-133):** legacy while the gate is on — a standalone coinbase
+  frame is dropped (`bsl_frames_dropped_total{reason="coinbase_legacy"}`). The
+  coinbase travels inline in the BRC-144 block body instead, where it
+  inherits the announce's PoW; there is no separate coinbase lane to spoof.
 - **Subtree data (BRC-132):** no in-frame PoW and no block to correlate against
-  pre-block; bounded only by admission control + the 60s cache TTL (unanchored
-  subtrees age out). This is the soft edge, called out honestly.
+  pre-block; bounded only by admission control + the 5-minute subtree cache
+  TTL (unanchored subtrees age out). This is the soft edge, called out
+  honestly.
 
 Implemented in `shard-common/pow` + `shard-listener`
-(`listener.Worker.SetBlockPoW`, `CoinbaseCorrelator`), on both the direct and
-the BRC-130-reassembled block paths.
+(`listener.Worker.SetBlockPoW`), on both the direct and the
+BRC-130-reassembled block paths.
 
 > **Anchor transactions (BRC-134) are deliberately ungated — and stay that way.**
 > Anchors are **user-submitted**: any participant may create and emit one, and
@@ -822,7 +854,7 @@ the BRC-130-reassembled block paths.
 
 > **Cross-domain note on signing.** Cryptographic frame signing (a per-frame
 > identity signature against a pubkey allowlist) is a *domain-local* attribution
-> tool — useful inside one commercial domain for billing / abuse attribution,
+> tool — useful inside one operator's domain for billing / abuse attribution,
 > but it does NOT generalise across domains: a signature registry is shared
 > mutable state with revocation/split-brain coordination costs, exactly what
 > multicast set out to avoid. Inter-domain, frames are re-validated by proof of
@@ -865,18 +897,22 @@ are defined in:
 ### NACK Dispatch Flow
 
 ```text
-1. Gap detected (seq > highestConsec + 1)
+1. Gap detected (seq > lastSeqNum + 1)
    → Register in pending map with jitter hold-off
 
 2. Background sweeper (100ms interval)
-   → If past nextAttempt and retries < nack-max-retries:
+   → If past nextAttempt and failed rounds < nack-max-retries
+     (tier hops and THROTTLED holds don't consume the budget):
      → Select endpoint from registry snapshot (Tier ASC, Preference DESC)
      → Open ephemeral UDP socket; send 64-byte NACK; wait ≤300ms
-     → ACK received: cancel gap entry
-     → MISS received: advance endpoint; retry immediately (no backoff)
+     → ACK (bare/multicast) received: cancel gap entry; a unicast-flagged
+       ACK keeps the gap pending through an 80 ms drain, escalating on
+       timeout
+     → MISS received: advance endpoint; retry immediately (a MISS at the
+       deepest endpoint books a failed round and backs off)
      → Timeout: exponential backoff; retry next sweep
 
-3. If retries exhausted or GapTTL exceeded
+3. If failed rounds exhausted or GapTTL exceeded
    → Evict as bsl_gaps_unrecovered_total
 
 4. Multicast repair arrives independently
@@ -886,10 +922,11 @@ are defined in:
 ### Endpoint Discovery
 
 Retry endpoints advertise via periodic ADVERT beacons (see
-[BRC-126](docs/brc-126-retransmission-protocol.md)). Listeners join the site
-beacon group (`FF05::B:FFFD`) and optionally the global beacon group
-(`FF0E::B:FFFD`) to discover endpoints dynamically. Static `-retry-endpoints`
-seeds the registry at lowest priority (`Tier=0xFF, Preference=0`).
+[BRC-126](docs/brc-126-retransmission-protocol.md)) and can emit to several
+scopes at once (`-beacon-scope both|all`). A listener joins the single beacon
+group selected by its `-beacon-scope` (`link|site|org|global`; global to
+discover Tier-0 endpoints across domains). Static `-retry-endpoints` seeds
+the registry at lowest priority (`Tier=0xFF, Preference=0`).
 
 Group address assignments for beacons and the control channel are defined in:
 
@@ -934,13 +971,15 @@ for the full processing pipeline and rate-limit configuration.
 
 **Cache TTL considerations:**
 
-- Default cache TTL: 60 seconds
+- Default cache TTLs are per frame class: 60 s tx/BEEF, 10 m block,
+  5 m subtree, 2 m anchor (`-cache-ttl-*` flags)
 - Trade-off: Longer TTL = higher recovery probability, but more memory
 - Adjust based on expected gap detection latency and network conditions
 
 **Flood prevention:**
 
-- Cache TTL (60 s) bounds the retransmit window; expired frames drop naturally
+- Cache TTL bounds the retransmit window (60 s for tx; longer for
+  control-plane classes); expired frames drop naturally
 - `Tracker.Fill()` suppresses pending NACKs on multicast repair arrival
 - Jitter hold-off and exponential backoff reduce NACK storm risk
 - All drops are counted in metrics
@@ -957,9 +996,8 @@ associate frames with a named batch. In Teranode, this is currently used to
 batch transactions for processing and to link ordered sets of validated
 transactions from block templates. This may be extended to support transaction
 specialization, and some sort of dynamic announcement and hashing mechanism may
-be required later. A rudimentary implementation has been put together in the
-proposed
-[BRC-127: Subtree Group Announcement](https://github.com/lightwebinc/bsv-multicast/blob/main/docs/brc-127-subtree-announce.md).
+be required later. A rudimentary implementation is specified in
+[BRC-127: Subtree Group Announcement](docs/brc-127-subtree-announce.md).
 
 **Use Cases:**
 
@@ -1257,9 +1295,10 @@ header plus variable payload) that each participant emits to the beacon group
 hint. BRC-139 datagrams do not carry a BRC-124 frame header, are not
 proxy-stamped, are not retransmitted, and are never ACKed.
 
-The `shard-manifest` daemon is the canonical announcer; any participant (proxy,
-listener, retry-endpoint, producer) MAY also self-announce its own
-configuration. Consumers detect cross-peer divergence and, when opted in via
+The `shard-manifest` daemon is the canonical announcer. (Protocol-wise any
+participant MAY self-announce its own configuration, but no data-plane
+component implements it — proxy, listener, and retry-endpoint are consumers
+only.) Consumers detect cross-peer divergence and, when opted in via
 [Automatic Shard Configuration](#automatic-shard-configuration), adopt
 `Authoritative=1` values after a quorum + hysteresis gate.
 
@@ -1275,13 +1314,15 @@ The fabric runs in either Source-Specific Multicast (SSM, **the default and
 first-class mode**) or Any-Source Multicast (ASM, a **lab/dev fallback** —
 `sourceMode: asm`). SSM is required for **inter-domain** operation (RFC 8815
 forbids inter-domain ASM) and gives RP-less, loop-free source trees; it is the
-default across the Helm charts and integrated-infra. ASM is retained only for
+default across the Helm charts and infra repos. ASM is retained only for
 smcroute collapsed-unicast labs (and the bare
 binary CLI default, since a bare invocation is a lab/dev scenario). SSM vs ASM is
 a deployment/transport mode only — frame format, NACK protocol, HashKey
 computation, and shard derivation are unchanged. Under SSM, receivers
-`(S,G)`-join the publisher roster (`ssm_publishers_static`) instead of `(*,G)`,
-each emitter binds a routable per-node source (`bind_source`), and the fabric
+`(S,G)`-join the publisher roster (`-ssm-publishers-static` — the
+lab/bootstrap path; above 16 publishers production must use manifest
+discovery) instead of `(*,G)`, each emitter binds a routable per-node source
+(`-bind-source` / Helm `config.bindSource`), and the fabric
 uses the RFC 4607 SSM address range.
 
 ### Addressing
@@ -1296,7 +1337,8 @@ inter-domain ASM, so global scope is SSM-only.
 
 `FF3x::/32` is the RFC 4607 IPv6 SSM range. Group-ID (`0x000B`) and the
 shard-index field are preserved; only the high 32 bits change. A single
-`engine.Addr(groupIdx, port, mode, scope)` helper centralizes derivation.
+`engine.Addr(groupIdx, port)` helper centralizes derivation; mode and scope
+are resolved once at engine construction via `shard.Prefix(mode, scope)`.
 
 ### Key properties
 
@@ -1304,13 +1346,16 @@ shard-index field are preserved; only the high 32 bits change. A single
   Required by PIM-SSM RPF and preserves the per-publisher HashKey flow
   semantics. Anycast/shared-source deployments are not supported; for a single
   stable identity use VRRP active-standby (failover, not load distribution).
-- **Source discovery.** Data-plane sources flow exclusively through
-  shard-manifest (BRC-139 `Flags.SourcesValid`); receivers set
-  `sources.consume: [manifest]`. Control groups (beacon, manifest,
-  subtree-announce) are joined against per-group bootstrap source lists
-  (`sources.bootstrap.*`, IPv6 literals or DNS names re-resolved on refresh).
-- **Receiver joins** use `MCAST_JOIN_SOURCE_GROUP` (RFC 3678) via a shared
-  `netjoin` helper that diffs and rate-limits join/leave churn.
+- **Source discovery.** Data-plane sources flow through shard-manifest
+  (BRC-139 `Flags.SourcesValid`); receivers enable manifest consumption
+  (`-manifest-consumer-enabled` / Helm `config.autoShardConfig`). Control
+  groups (beacon, manifest, subtree-announce) are joined against per-group
+  bootstrap source lists (`-ssm-bootstrap-*` / Helm `config.ssmBootstrap.*`,
+  IPv6 literals or DNS names re-resolved on refresh).
+- **Receiver joins** use `MCAST_JOIN_SOURCE_GROUP` (RFC 3678) via the shared
+  `netjoin` helper (`(S,G)` syscall wrappers plus a `Limiter`); join-set
+  diffing lives in the listener's manifest applier, and the join-rate limiter
+  is not yet wired at the call sites.
 
 ### Deployment postures
 
@@ -1334,7 +1379,8 @@ fabric mfib sizing, and join-rate limiting in `netjoin`.
 ## Automatic Shard Configuration
 
 shard-proxy and shard-listener can opt in to consuming BRC-139 manifests
-(`multicast.autoConfig.enabled=true`) and adopting the announced `ShardBits` /
+(`-manifest-consumer-enabled` / Helm `config.autoShardConfig.enabled=true`)
+and adopting the announced `ShardBits` /
 `SourceModeSSM` after a quorum + hysteresis gate. Manual CLI/env pins always
 win. It works identically under ASM and SSM and across all four deployment
 postures (the beacon-socket join is ASM under A/B, SSM under C/D). When disabled
@@ -1346,23 +1392,28 @@ shard-manifest is the sole authority — data-plane components are consumers onl
 
 ### Adoption modes
 
-- **Restart (default, `liveResharding=false`).** A `ShardBits` / `SourceModeSSM`
-  change flips `/readyz`, drains, then exits non-zero; the orchestrator rolls
-  the pod, which restarts with the adopted value warm in the registry.
+- **Restart (default, `liveResharding=false`).** On the proxy, a `ShardBits` /
+  `SourceModeSSM` change flips `/readyz`, drains, and exits cleanly for the
+  orchestrator to roll the pod, which restarts with the adopted value warm in
+  the registry. Listener-side restart-on-adopt is not yet implemented
+  (log-only).
 - **Live re-sharding (opt-in, `liveResharding=true`).** A re-shard is a
   generation transition signalled by a BRC-139 `Successor` block carrying the
   incoming `ShardBits` (constrained to ±1) and a `TransitionEpoch`. During the
   bridging window the proxy dual-emits each frame to both the current and
-  successor layouts and listeners union-join both; downstream TxID dedup absorbs
-  the duplicates. At `TransitionEpoch` the consumer atomically swaps to the
-  successor and leaves the now-unused groups — no restart, `/readyz` stays
-  green. Requires egress dedup sized to ≥ 2× the bridging window.
+  successor layouts (`forwarder.BridgingEngine`); downstream TxID dedup
+  absorbs the duplicates. The cutover to the successor engine happens via
+  process restart at `TransitionEpoch`; listener-side successor union-join is
+  not yet implemented. Requires egress dedup sized to ≥ 2× the bridging
+  window.
 
 ### Listener auto-join
 
-With `autoJoinFromManifest=true`, a listener's effective subscription is
-`union(-shard-include, pilot_groups)`, where `pilot_groups` is the union of
-authoritative `Flags.GroupsValid` payloads. Static `-shard-include` entries are
+With `-shard-include-from-manifest` (Helm
+`config.autoShardConfig.shardIncludeFromManifest`), a listener's effective
+subscription is `union(-shard-include, pilot_groups)`, where `pilot_groups` is
+the union of `Flags.PilotOnly` announcers' `Flags.GroupsValid` payloads.
+Static `-shard-include` entries are
 never leaved; pilot-added groups are leaved only when no pilot still claims
 them.
 
@@ -1414,7 +1465,7 @@ make test-e2e
 **Purpose:** Full-stack integration testing across all components.
 
 The [multicast-test](https://github.com/lightwebinc/multicast-test) repository
-is the public integration suite: a **Go Docker harness** (`harness/`) of ~45
+is the public integration suite: a **Go Docker harness** (`harness/`) of ~57
 scenario tests driven by `go test`. Each scenario spawns ephemeral Docker
 containers on an isolated IPv6 multicast bridge (`fd10::/64`) and covers
 functional filters, NACK retransmission, fragmentation, BRC-127 group
@@ -1433,7 +1484,9 @@ this public suite.
 cd multicast-test
 make test          # all scenarios (~30 min, requires Docker + sudo)
 make test-quick    # tier-1 filter scenarios (~60s)
-make help          # show all targets
+make help          # show all targets (tiered: test-retransmit, test-frag,
+                   #   test-bgp, test-ssm, test-manifest, test-coalesce,
+                   #   test-beef, test-one T=ScenarioNN, …)
 ```
 
 ---
@@ -1455,13 +1508,11 @@ which composes the per-service Helm charts (`shard-proxy-helm`,
 `shard-listener-helm`, `retry-endpoint-helm`, `subtx-generator-helm`,
 `shard-manifest-helm`).
 
-For a single-host footprint,
-[integrated-infra](https://github.com/lightwebinc/integrated-infra) deploys a
-**collapsed node** — `shard-proxy`, `shard-listener`, and `retry-endpoint`
-co-located on one multi-homed host (uplink for sender ingress, multicast-fabric
-interface for IPv6 multicast in/out). It targets Ubuntu 24.04, FreeBSD 14, AWS
-EC2, and any SSH host via the same Ansible/Terraform automation as the
-per-service infra repos.
+For a single-host footprint, the three services deploy as a **collapsed
+node** — `shard-proxy`, `shard-listener`, and `retry-endpoint` co-located on
+one multi-homed host (uplink for sender ingress, multicast-fabric interface
+for IPv6 multicast in/out) — on Ubuntu 24.04, FreeBSD 14, AWS EC2, or any SSH
+host.
 
 ### Networking Requirements
 
@@ -1490,9 +1541,10 @@ per-service infra repos.
 
 - Allow UDP/TCP transaction ingress on the user listen port (default 8725)
   from all consumers
-- If a miner ingress is enabled (`-miner-listen-port`, e.g. 9000), allow it
-  **only** from the miner-tier source set (tunnels / firewall allowlist) — it
-  accepts privileged block/coinbase/subtree-data frames. See
+- If the push lanes are enabled (`-subtree-listen-port` 8726 /
+  `-block-listen-port` 8727), bind them tunnel-side and allow them **only**
+  from the miner-tier source set (tunnels / firewall allowlist) — they accept
+  privileged subtree/block push frames. See
   [§ Ingress Authorization](#ingress-authorization-miner-tier-gate).
 - Allow IPv6 multicast egress on egress interface
 
@@ -1616,6 +1668,14 @@ processing, flush OTLP exporter.
 - [BRC-142 Coalescing (Bundle) Frame Format](docs/brc-142-coalescing-frame.md)
   — bundle header layout, member format, MTU sizing, bundle-unit NACK,
   re-bucketing rules
+- [BRC-143 Subtree Data Frame Format](docs/brc-143-subtree-data.md) —
+  push-lane subtree object format (in-band root, node count, ordered hashes)
+- [BRC-144 Block Frame Format](docs/brc-144-block-frame.md) — push-lane block
+  object format (strict Teranode block-body parity, inline coinbase)
+- [BRC-148 Shard Domain Partitioning and BEEF Object Plane](docs/brc-148-shard-domain-beef-plane.md)
+  — object planes by index high nibble; BEEF plane as domain `0x1`
+- [BRC-149 Multicast BEEF Object Frame Format](docs/brc-149-beef-object-frame.md)
+  — FrameVer `0x09`, submission/delivery record grammars
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams, escalation state machine, flood prevention
 
@@ -1662,7 +1722,9 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 | --------------------------- | ------------ | -------- | -------------------------------------------- |
 | shard-proxy (UDP ingress)   | 8725         | UDP      | User/tx frame ingress                        |
 | shard-proxy (TCP ingress)   | configurable | TCP      | Reliable frame ingress (disabled by default) |
-| shard-proxy (miner ingress) | configurable | UDP/TCP  | Privileged miner-tier ingress (`-miner-listen-port`, e.g. 9000; disabled by default) |
+| shard-proxy (subtree push)  | 8726 (default: disabled) | TCP | Privileged BRC-143 subtree push lane (`-subtree-listen-port`; reframed to BRC-132) |
+| shard-proxy (block push)    | 8727 (default: disabled) | TCP | Privileged BRC-144 block push lane (`-block-listen-port`; reframed to BRC-131) |
+| shard-proxy (BEEF lane)     | 8728 (default: disabled) | TCP | Open-class BRC-149 BEEF record lane (`-beef-listen-port`; flow separation) |
 | shard-proxy (egress)        | 9001         | UDP      | Multicast egress                             |
 | shard-listener (multicast)  | 9001         | UDP      | Multicast receive                            |
 | shard-listener (NACK)       | 9300         | UDP      | NACK send                                    |
@@ -1700,3 +1762,4 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 | BRC-134 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane anchor)   |
 | BRC-135 | 92 bytes    | Yes (emitter-stamped HashKey/SeqNum) | No (ctrl-plane header egress) |
 | BRC-142 | 66 bytes (bundle) | Yes (per-bundle HashKey/SeqNum) | Yes (members share one group + subtree) |
+| BRC-149 | 92 bytes    | Yes (HashKey/SeqNum) | TopicID in SubtreeID slot (BEEF plane)  |

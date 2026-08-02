@@ -31,7 +31,10 @@ Offset  Size  Field
      7     1  Flags            bit0 GroupsValid, bit1 Authoritative,
                                bit2 Shutdown, bit3 SourceModeSSM,
                                bit4 SourcesValid, bit5 PilotOnly,
-                               bit6 SuccessorValid, bit7 reserved (=0)
+                               bit6 SuccessorValid, bit7 DomainsValid
+                               (BRC-148 per-plane descriptor section
+                               follows, 24 B/domain + optional
+                               per-domain Successor)
      8    16  SrcIPv6          announcer's primary IPv6 (informational)
     24     4  InstanceID       CRC32c of hostname (stable across restarts)
     28     4  Epoch            Unix seconds when announcement was generated
@@ -72,7 +75,8 @@ Offset  Size  Field
 ```
 
 Total datagram size = `64 + max(N×2, M) + K × 16 + (24 if SuccessorValid
-else 0)`. Implementations SHOULD keep total size ≤ 1232 B to avoid IPv6
+else 0) + (1 + 24×DomainCount + SuccessorBlockSize per domain with
+DomainFlagSuccessorValid) when DomainsValid`. Implementations SHOULD keep total size ≤ 1232 B to avoid IPv6
 fragmentation on typical paths. With `ShardBits=12` (4096 groups) the
 bitmap form is exactly 512 B; the list form is 2 B per joined group; each
 source entry adds 16 B; the successor block adds 24 B. Operators with
@@ -134,7 +138,9 @@ immediately after the sources payload:
 Offset (within block)  Size  Field
 ---------------------  ----  -----
                     0    16  SuccessorGenerationID  the incoming generation's 128-bit ID
-                   16     1  SuccessorShardBits     1..12; MUST satisfy |Successor - ShardBits| ≤ 1
+                   16     1  SuccessorShardBits     0..12 (0 legal on encode/decode; only >12 and
+                                                    ±1-violation are rejected); MUST satisfy
+                                                    |Successor - ShardBits| ≤ 1
                    17     1  SuccessorFlags         bit0 SuccessorSourceModeSSM,
                                                     bits1..7 reserved (=0)
                    18     2  Reserved               MUST be 0
@@ -187,8 +193,7 @@ Pilot guidance:
 | 4   | SourcesValid   | The trailing payload includes `SourceCount × 16` bytes of publisher source IPv6 addresses after the groups payload. Consumers union the source set across all currently-valid manifests they hold. MUST be 0 when `SourceCount=0`.                                                                                                                                                                                |
 | 5   | PilotOnly      | This manifest is exclusively a pilot/assignment broadcast: the announcer is not itself joined to the announced groups and the groups payload describes desired fleet state, not its own joins. Implies `Authoritative=1`; consumers MUST reject `PilotOnly=1 && Authoritative=0` as malformed.                                                                                                                     |
 | 6   | SuccessorValid | The trailing payload includes a 24-byte Successor block (see "Successor block") describing an in-flight generation transition. Requires `Authoritative=1`; consumers MUST reject `SuccessorValid=1 && Authoritative=0` as malformed. The Successor block's `ShardBits` MUST be within ±1 of the announcer's current `ShardBits` per the existing safety guidance.                                                 |
-
-Bit 7 is reserved and MUST be 0.
+| 7   | DomainsValid   | BRC-148 per-plane descriptor section follows (24 B/domain + optional per-domain Successor).                                                                                                                                                                                                                                                                                                                        |
 
 ### RoleHint
 
@@ -202,8 +207,10 @@ Bit 7 is reserved and MUST be 0.
 | `3`   | retry-endpoint   |
 | `4`   | producer         |
 | `5`   | manifest-only    |
+| `6`   | ProducerBEEF     |
+| `7`   | ListenerBEEF     |
 
-Values ≥ `6` are reserved.
+Values ≥ `8` are reserved.
 
 ### ManifestCRC
 
@@ -217,6 +224,7 @@ Manifests are sent **directly** to the beacon group used by BRC-126 ADVERT:
 
 | Index    | Scope    | Compressed Address |
 | -------- | -------- | ------------------ |
+| `0xFFFD` | `FF02`   | `FF02::B:FFFD`    |
 | `0xFFFD` | `FF05`   | `FF05::B:FFFD`    |
 | `0xFFFD` | `FF08`   | `FF08::B:FFFD`    |
 | `0xFFFD` | `FF0E`   | `FF0E::B:FFFD`    |
@@ -255,23 +263,29 @@ A new standalone daemon emits ShardManifest datagrams. It does not subscribe to 
 
 | Flag / Env                                 | Default        | Description                                                        |
 | ------------------------------------------ | -------------- | ------------------------------------------------------------------ |
-| `-shard-bits` / `SHARD_BITS`               | required       | 0..12                                                              |
+| `-shard-bits` / `SHARD_BITS`               | `2`            | 0..12                                                              |
 | `-joined-groups` / `JOINED_GROUPS`         | `""`           | comma list of hex group indices, or `all`, or empty (no claim)     |
 | `-bitmap` / `BITMAP`                       | `auto`         | `auto` selects list ≤32 entries else bitmap; `list`/`bitmap` force |
 | `-role-hint` / `ROLE_HINT`                 | `generic`      | one of generic/proxy/listener/retry-endpoint/producer/manifest-only|
 | `-generation-id` / `GENERATION_ID`         | zero UUID      | 16-byte hex (with or without dashes)                               |
 | `-authoritative` / `AUTHORITATIVE`         | `false`        | sets Flags.Authoritative                                           |
-| `-manifest-scope` / `MANIFEST_SCOPE`       | `site`         | comma list of `site,org,global`                                    |
+| `-manifest-scope` / `MANIFEST_SCOPE`       | `site`         | comma list of `link,site,org,global`                               |
 | `-announce-interval` / `ANNOUNCE_INTERVAL` | `300s`         | re-announce period                                                 |
 | `-ttl` / `TTL`                             | `0`            | seconds; 0 = consumer default                                      |
 | `-iface` / `IFACE`                         | first non-lo   | egress interface for multicast send                                |
 | `-port` / `PORT`                           | `9001`         | UDP destination port (matches beacon listen)                       |
-| `-mc-prefix` / `MC_PREFIX`                 | `0xff05`       | per BRC-129; default site-local                                    |
+| `-source-mode` / `SOURCE_MODE`             | `asm`          | data-plane addressing model `asm`\|`ssm`; the beacon prefix derives from `-manifest-scope` + `-source-mode` |
 | `-mc-group-id` / `MC_GROUP_ID`             | `0x000B`       | per BRC-129                                                        |
 | `-metrics-addr` / `METRICS_ADDR`           | `[::]:9091`    | Prometheus/health HTTP listener                                    |
 | `-otlp-endpoint` / `OTLP_ENDPOINT`         | `""`           | optional OTLP gRPC endpoint                                        |
 | `-otlp-interval` / `OTLP_INTERVAL`         | `15s`          | OTLP push interval                                                 |
 | `-debug` / `DEBUG`                         | `false`        | verbose logging                                                    |
+| `-publishers` / `PUBLISHERS`               | `""`           | comma list of data-plane publisher IPv6 addresses or DNS names (SSM Sources payload) |
+| `-pilot-only` / `PILOT_ONLY`               | `false`        | set Flags.PilotOnly; manifest describes desired fleet state, not own joins (implies `-authoritative=true`) |
+| `-successor-generation-id` / `SUCCESSOR_GENERATION_ID` | `""` | incoming generation 16-byte hex; empty = no Successor block        |
+| `-successor-shard-bits` / `SUCCESSOR_SHARD_BITS` | `0`      | incoming generation ShardBits (must differ from `-shard-bits` by ±1) |
+| `-successor-source-mode` / `SUCCESSOR_SOURCE_MODE` | `""`   | incoming generation addressing model `asm`\|`ssm` (empty = inherit `-source-mode`) |
+| `-successor-transition-epoch` / `SUCCESSOR_TRANSITION_EPOCH` | `0` | Unix seconds at which the successor becomes the sole active generation |
 
 The daemon exposes:
 
@@ -323,7 +337,9 @@ rules in this section. Components that do not opt in are unaffected.
    value that differs from the currently adopted value by more than ±1
    within any rolling `AnnounceInterval` window. This caps the rate at
    which the addressable space can be doubled or halved during an
-   automated shift.
+   automated shift. (Implementation status: currently enforced for
+   Successor-block adoption only; the plain `ShardBits` quorum path
+   applies quorum + hysteresis without the ±1 guard.)
 5. **Manual pin precedence.** When the local operator has pinned a value
    via CLI/env, that value is the local authority and MUST NOT be
    overridden by adoption. The consumer MUST still evaluate quorum and
@@ -351,12 +367,13 @@ information base.
 The consumer MUST emit, at minimum:
 
 - `multicast_manifest_divergence_total{field=...,kind=peer-disagree|pin-disagree|crc-fail}` —
-  counter.
+  counter. (Implementation status: only `kind="peer-disagree"` is emitted
+  today; the proxy consumer emits none.)
 - `multicast_manifest_last_divergence_epoch{field=...}` — gauge of the
-  most recent Unix-seconds disagreement timestamp.
+  most recent Unix-seconds disagreement timestamp. (Not implemented.)
 - `multicast_manifest_pilots_known` — gauge of distinct authoritative
   announcers currently within TTL.
-- `multicast_manifest_quorum_met{field=...}` — gauge `1`/`0`.
+- `multicast_manifest_quorum_met_bits` — bitmask gauge (no `field` label).
 
 Implementations MUST NOT label any metric with raw source IPv6 addresses;
 cardinality MUST be bounded by role, group-role, or fleet bucket.
@@ -369,7 +386,10 @@ flipping their readiness probe and draining in-flight datagrams within the
 configured drain window before reloading, so the orchestrator can roll the
 pod predictably. Incremental changes — adding or removing entries from
 `Flags.GroupsValid` payloads (when consumed as join hints) or from the
-source set — MAY be applied in place without restart.
+source set — MAY be applied in place without restart. (Implementation
+status: `shard-proxy` implements this — drain + exit for the
+orchestrator; `shard-listener` currently logs the transition only,
+restart hooks pending.)
 
 ---
 

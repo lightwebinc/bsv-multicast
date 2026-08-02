@@ -2,14 +2,17 @@
 
 Jeff Harris (jeff@lightweb.net)
 
-> **Status:** Draft — official submission prepared as BRC-149. Companion to
+> **Canonical BRC:** [BRC-149](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0149.md)
+> — merged 2026-07-30 ([PR #183](https://github.com/bsv-blockchain/BRCs/pull/183);
+> draft number restored by [PR #190](https://github.com/bsv-blockchain/BRCs/pull/190)).
+> Companion to
 > [BRC-148](brc-148-shard-domain-beef-plane.md), which allocates the BEEF
 > object plane and constrains the fields this format carries.
 
 ## Abstract
 
 This BRC specifies the three wire forms of the
-[BRC-148](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0148.md)
+[BRC-148](brc-148-shard-domain-beef-plane.md)
 BEEF object plane: the **multicast object frame** (FrameVer `0x09`, assigned
 here), which carries one BEEF-family transaction object on the plane's
 domain-tagged shard groups; the **submission record**, the unicast envelope a
@@ -21,7 +24,7 @@ streams to a subscriber. The frame reuses the
 retransmission, and fragmentation infrastructure require no changes. The
 records exist because BEEF bytes are not self-delimiting without a full
 structural parse — which the fabric never performs — so unlike the
-[BRC-143](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0143.md)/[BRC-144](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0144.md)
+[BRC-143](brc-143-subtree-data.md)/[BRC-144](brc-144-block-frame.md)
 push lanes, BEEF lanes carry an explicit length-carrying envelope.
 
 ## Copyright
@@ -30,7 +33,7 @@ This BRC is licensed under the Open BSV License.
 
 ## Motivation
 
-[BRC-148](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0148.md)
+[BRC-148](brc-148-shard-domain-beef-plane.md)
 allocates the BEEF object plane (domain `0x1`), defines its topical sharding,
 filtering, and coordination, and constrains the header fields that
 addressing, retransmission, and filtering depend on — but, following the
@@ -54,7 +57,7 @@ BRC-142's `0x08`).
 | 6 | 1 | `byte` | Frame Version | `0x09` — BEEF object frame. Any other value is handled by a different decoder. |
 | 7 | 1 | `byte` | Reserved | `0x00` on send; ignored on receive (reserved for future plane-level message types). The BEEF encoding version is **not** duplicated here — it is the payload's first four bytes. |
 | 8 | 32 | `[32]byte` | ContentID | `SHA-256d(payload bytes)` — the object's identity and the BRC-130 reassembly verification hash. With TopicID it keys both fragment reassembly and duplicate suppression (see below). Never the subject TxID. |
-| 40 | 8 | `uint64` BE | HashKey | Per-(sender, group) flow identifier; stamped at ingress; `0` = unset. Derivation and flow semantics per [BRC-148](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0148.md) §Frame carriage (TopicID excluded). |
+| 40 | 8 | `uint64` BE | HashKey | Per-(sender, group) flow identifier; stamped at ingress; `0` = unset. Derivation and flow semantics per [BRC-148](brc-148-shard-domain-beef-plane.md) §Frame carriage (TopicID excluded). |
 | 48 | 8 | `uint64` BE | SeqNum | Per-sender monotonic counter within the (sender, group) flow; stamped at ingress; `0` = unstamped. Drives gap detection, NACK recovery, and retransmit dedup. |
 | 56 | 32 | `[32]byte` | TopicID | `SHA-256(UTF-8 topic name)`. The delivery-selectivity key: group derivation takes its top bits, and fan-out filters subscribers on it. Occupies the field that carries the SubtreeID in transaction frames. |
 | 88 | 4 | `uint32` BE | Payload Length | Byte length of the payload. |
@@ -199,9 +202,9 @@ already carries both identifiers.
   — retransmission machinery operating on HashKey/SeqNum
 - [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md)
   — fragmentation for large objects
-- [BRC-143: Multicast Subtree Data Push Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0143.md)
+- [BRC-143: Multicast Subtree Data Push Frame Format](brc-143-subtree-data.md)
   — push-lane format precedent
-- [BRC-144: Multicast Block Push Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0144.md)
+- [BRC-144: Multicast Block Push Frame Format](brc-144-block-frame.md)
   — push-lane format precedent
-- [BRC-148: Multicast Shard Domain Partitioning and the BEEF Object Plane](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0148.md)
+- [BRC-148: Multicast Shard Domain Partitioning and the BEEF Object Plane](brc-148-shard-domain-beef-plane.md)
   — the plane, sharding, filtering, and coordination this format serves

@@ -30,7 +30,7 @@ The header is identical to BRC-124. Only the payload format differs.
 The payload is a BSV transaction in BRC-30 Extended Format:
 
 ```text
-Version (4B LE) | EF marker (6B: 0x000000000000EF) | inputs | outputs | locktime (4B LE)
+Version (4B LE) | EF marker (6B: 0x0000000000EF) | inputs | outputs | locktime (4B LE)
 ```
 
 Each EF input appends the spent output's satoshi value (8B LE) and locking script (VarInt + script bytes) after the standard input fields.

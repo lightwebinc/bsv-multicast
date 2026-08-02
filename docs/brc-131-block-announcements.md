@@ -25,7 +25,7 @@ Block frames are sent to the **GroupBlockBroadcast** group:
 | ------ | ------ | ------------------ | ------------------- |
 | 0xFFFE | global | `FF0E::B:FFFE`     | `GroupBlockBroadcast`  |
 
-The global scope (`FF0E`) ensures block announcements cross site boundaries and reach all geographically distributed subscribers. The group index `0xFFFE` is in the reserved control-plane range (above the maximum shard group index `0x0FFF` for `shard_bits` ≤ 12).
+The global scope (`FF0E`) ensures block announcements cross site boundaries and reach all geographically distributed subscribers. The group index `0xFFFE` is in the reserved control-plane range (above the maximum shard group index `0x0FFF` for `shard_bits` ≤ 12). `FF0E::B:FFFE` is the normative posture; the implementation derives the address prefix from the configured `-scope`.
 
 ---
 
@@ -109,11 +109,14 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 
 ## Proxy Forwarding Rules
 
-1. **Receive** — BRC-131 frames are accepted over TCP ingress (same 92-byte header read sequence as BRC-124: read 44 bytes, detect `FrameVer=0x04`, read 48 more, read `PayLen` bytes).
-2. **Decode** — `DecodeBlock` validates Magic, FrameVer, MsgType, and PayLen. Invalid frames are dropped.
-3. **Stamp** — If `SeqNum == 0`, the proxy stamps `HashKey` and `SeqNum` in-place per `(senderIPv6, 0xFFFE, zeros)` flow.
-4. **Fragment** — If `len(Payload) > fragDataSize`, fragment via BRC-130 with `OrigFrameVer=0x04`.
-5. **Forward** — Write the frame to all egress interfaces with destination `FF0E::B:FFFE:<egressPort>`.
+1. **Receive** — BRC-131 frames are accepted over UDP or TCP ingress (privileged ingress class only; TCP uses the same 92-byte header read sequence as BRC-124: read 44 bytes, detect `FrameVer=0x04`, read 48 more, read `PayLen` bytes).
+2. **Privileged-class admission** — V4 frames are rejected unless the ingress class is privileged (`rejectPrivileged` counter).
+3. **Decode** — `DecodeBlock` validates Magic, FrameVer, MsgType, and PayLen. Invalid frames are dropped.
+4. **PoW gate** — `BlockMsgAnnounce` payloads must pass the block-PoW check (`-require-block-pow`, default on).
+5. **Dedup** — the ingress ContentID dedup claim drops duplicate ContentIDs.
+6. **Stamp** — the proxy stamps `SeqNum` only when 0; `HashKey` is (re)stamped whenever it is zero or the proxy runs `-stamp-source`, per the `(senderIPv6, 0xFFFE, zeros)` flow.
+7. **Fragment** — If `len(Payload) > fragDataSize`, fragment via BRC-130 with `OrigFrameVer=0x04`.
+8. **Forward** — Write the frame to all egress interfaces with destination `FF0E::B:FFFE:<egressPort>` (normative posture; the implementation derives the prefix from the configured `-scope`).
 
 ---
 
@@ -121,9 +124,10 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 
 1. **Detection** — `IsBlockFrame(raw)` checks Magic and `raw[6] == 0x04` before `frame.Decode` is called (which rejects V4 with `ErrBadVer`).
 2. **Decode** — `DecodeBlock` validates the frame and returns a `BlockFrame` with `MsgType`, `ContentID`, `HashKey`, `SeqNum`, and `Payload`.
-3. **Egress** — The frame (or payload, in strip-header mode) is forwarded to the configured downstream via `Sender.SendBlock`.
-4. **Gap tracking** — `Tracker.Observe(ctrlGroupIdx=0xFFFE, zeroSubtreeID, HashKey, SeqNum, ContentID)` is called when `SeqNum != 0`.
-5. **Filtering** — Block frames bypass shard/subtree filtering; every subscriber receives every block announcement.
+3. **Block-control gate** — `blockGateAllows` must admit the frame before delivery; gated-out frames are dropped.
+4. **Egress** — The frame (or payload, in strip-header mode) is forwarded to the configured downstream via `Sender.SendBlock`.
+5. **Gap tracking** — `Tracker.Observe(ctrlGroupIdx=0xFFFE, zeroSubtreeID, HashKey, SeqNum, ContentID, source net.IP)` is called when `SeqNum != 0`.
+6. **Filtering** — Block frames bypass shard/subtree filtering; every subscriber receives every block announcement.
 
 ---
 
@@ -156,7 +160,7 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 | Unknown MsgType                | Drop; `ErrBadBlockMsg`                         |
 | PayloadLen exceeds buffer      | Drop; `io.ErrUnexpectedEOF`                    |
 | Datagram shorter than 92 bytes | Drop; `ErrTooShort`                            |
-| SeqNum == 0                    | Frame not yet proxy-stamped; listener discards |
+| SeqNum == 0                    | Frame not yet proxy-stamped; excluded from gap tracking but still forwarded |
 
 ---
 

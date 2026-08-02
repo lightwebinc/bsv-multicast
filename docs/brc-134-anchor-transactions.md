@@ -45,7 +45,9 @@ Anchor frames are delivered on the **GroupBlockBroadcast** group:
 The global scope (`FF0E`) ensures anchor transactions cross site boundaries and
 reach all geographically distributed subscribers. The group index `0xFFFE` is in
 the reserved control-plane range and never overlaps with data-plane shard groups
-(maximum shard group index is `0x0FFF` for `shard_bits=12`).
+(maximum shard group index is `0x0FFF` for `shard_bits=12`). `FF0E::B:FFFE` is
+the normative posture; the implementation derives the address prefix from the
+configured `-scope`.
 
 ---
 
@@ -107,15 +109,19 @@ BRC-124 shard frames:
 
 1. **Receive** — BRC-134 frames are accepted over UDP or TCP ingress. The proxy
    detects version byte `0x06` before dispatching to `Forwarder.ProcessAnchor`.
+   V6 anchor ingress is deliberately **not** privileged-gated (permissionless
+   baseline).
 2. **Decode** — `frame.DecodeAnchor` validates Magic, FrameVer, and PayLen.
    Invalid frames are dropped.
-3. **Stamp** — If `SeqNum == 0`, stamp HashKey and SeqNum in-place using
-   the `(senderIPv6, 0xFFF9, zeros)` flow key. The virtual index `0xFFF9`
+3. **Stamp** — `HashKey` is stamped even when `SeqNum` is pre-set (so chain
+   rate-limit and cache keys are deterministic); `SeqNum` is stamped only when
+   0 — on the `(senderIPv6, 0xFFF9, zeros)` flow key. The virtual index `0xFFF9`
    (`GroupAnchorFlow`) keeps anchor frames in a flow distinct from
    BRC-131 block announces and BRC-133 coinbase frames on the shared
    `GroupBlockBroadcast` egress.
 4. **Forward** — Write frame verbatim to `FF0E::B:FFFE:<egressPort>` on all
-   egress interfaces.
+   egress interfaces (normative posture; the implementation derives the prefix
+   from the configured `-scope`).
 
 BRC-130 fragmentation is not defined for BRC-134. Anchor transactions are
 expected to be small (a typical BSV transaction). If fragmentation support
@@ -132,7 +138,7 @@ becomes necessary it will be defined in a future revision.
 3. **Egress** — `egress.Sender.Send(raw, f)` forwards the frame (or payload only
    in strip-header mode) downstream.
 4. **Gap tracking** —
-   `Tracker.Observe(anchorGroupIdx=0xFFF9, zeroSubtreeID, HashKey, SeqNum, TxID)` when
+   `Tracker.Observe(anchorGroupIdx=0xFFF9, zeroSubtreeID, HashKey, SeqNum, TxID, source net.IP)` when
    `SeqNum != 0`.
 5. **Filtering** — Anchor frames bypass all shard/subtree filters; every
    subscriber receives every anchor frame.

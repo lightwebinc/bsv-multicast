@@ -31,7 +31,7 @@ Offset  Size  Field
      7     1  Scope  (0x05=site, 0x08=org, 0x0E=global)
      8    16  NACKAddr      — IPv6 unicast address for NACK requests
     24     2  NACKPort      — UDP NACK listen port (default 9300)
-    26     1  Tier          — operator-assigned; 0 = same AS as proxy (max 254; 0xFF reserved for static seeds)
+    26     1  Tier          — operator-assigned; 0 = same AS as proxy (max 254; 0xFF reserved for static seeds; the implementation accepts 0–255 with no clamp — operators MUST NOT use 255)
     27     1  Preference    — weighting within a tier; higher = more preferred (default 128)
     28     2  BeaconInterval — seconds; listeners compute TTL = 3 × this value
     30     2  Flags         — see below
@@ -112,7 +112,7 @@ Offset  Size  Field
 
 ## ACK Response (`MsgType 0x12`) — 16 bytes
 
-Sent unicast to the NACK source when the frame is found and retransmit dispatched. Whether the listener may stop there depends on the Flags: a **unicast-flagged** ACK (`0x02`) is only a PROMISE — the listener keeps the gap pending, drains for the data frame, and escalates to the next cache on timeout. A bare or multicast-only ACK closes the gap on TRUST, so a repair lost on the same degraded link is never retried and the loss is never reported.
+Sent unicast to the NACK source when the frame is found and retransmit dispatched. Whether the listener may stop there depends on the Flags: a **unicast-flagged** ACK (`0x02`) is only a PROMISE — the listener keeps the gap pending, drains for the data frame, and escalates to the next cache on timeout. This applies when the listener has unicast recovery wired (`SetRecoverFunc`); without it, a unicast-flagged ACK closes on trust. The post-ACK drain window is 80 ms. A bare or multicast-only ACK closes the gap on TRUST, so a repair lost on the same degraded link is never retried and the loss is never reported.
 
 ```text
 Offset  Size  Field
@@ -155,22 +155,24 @@ Offset  Size  Field
 | N    | N hops from source                                 |
 | 0xFF | Static seed (no beacon received; lowest priority)  |
 
-Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER`) and `-beacon-preference` (0–255, default 128; env `BEACON_PREFERENCE`) on each `retry-endpoint`. Endpoints are sorted by `(Tier ASC, Preference DESC)` — higher-preference endpoints are tried first within a tier. Assign these deliberately: the implementation defaults Tier to `0`, so an unconfigured fleet has every endpoint claiming source-adjacency, and because the registry sort is not stable the resulting order is arbitrary and unrepeatable between runs. Tier must NOT be derived from a topology fact such as "this fabric imports remote sources" — interconnects are bidirectional, so that stamps the same tier on the receiver and the true origin.
+Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER` — the implementation accepts 0–255 with no clamp; operators MUST NOT use 255, the static-seed sentinel) and `-beacon-preference` (0–255, default 128; env `BEACON_PREFERENCE`) on each `retry-endpoint`. Endpoints are sorted by `(Tier ASC, Preference DESC)` — higher-preference endpoints are tried first within a tier. Assign these deliberately: the implementation defaults Tier to `0`, so an unconfigured fleet has every endpoint claiming source-adjacency, and because the registry sort is not stable the resulting order is arbitrary and unrepeatable between runs. Tier must NOT be derived from a topology fact such as "this fabric imports remote sources" — interconnects are bidirectional, so that stamps the same tier on the receiver and the true origin.
 
 ### Escalation State Machine
 
 ```text
-                    ┌──────────────────────────────────────┐
-                    │                                      │
-  ┌─────────┐  dispatch ┌───────────────┐  ACK    ┌────────▼───────┐
-  │ PENDING ├──────────►│ NACKED(Tier-K)├────────►│  GAP CANCELLED │
-  └─────────┘           └──────┬────────┘         └────────────────┘
-                               │                           ▲
-                    MISS       │  Timeout                  │
-                    ┌──────────┘  ┌──────┘                 │
-                    ▼             ▼                        │
-              ┌───────────┐  ┌──────────┐   multicast fill │
-              │ advance   │  │ backoff  │──────────────────┘
+                    ┌───────────────────────────────────────────────┐
+                    │                                               │
+  ┌─────────┐  dispatch ┌───────────────┐ ACK (bare/mcast) ┌────────▼───────┐
+  │ PENDING ├──────────►│ NACKED(Tier-K)├─────────────────►│  GAP CANCELLED │
+  └─────────┘           └──────┬───▲──┬─┘                  └────────────────┘
+                               │   │  │ unicast-ACK: keep pending   ▲
+                               │   └──┘ (80 ms drain), escalate     │
+                               │        on timeout                  │
+                    MISS       │  Timeout                           │
+                    ┌──────────┘  ┌──────┘                          │
+                    ▼             ▼                                 │
+              ┌───────────┐  ┌──────────┐   multicast fill          │
+              │ advance   │  │ backoff  │───────────────────────────┘
               │ endpoint  │  │ & retry  │
               └─────┬─────┘  └──────────┘
                     │
@@ -181,7 +183,7 @@ Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER`) and `-beacon-prefer
 
 - **Bare / multicast-flagged ACK received** → cancel gap entry immediately (on trust).
 - **Unicast-flagged ACK (`0x02`) received** → do NOT cancel; keep draining for the data frame, and escalate to the next endpoint on timeout.
-- **MISS received** → advance to next endpoint at same tier (by Preference); if tier exhausted, escalate to next tier; retry immediately (no backoff).
+- **MISS received** → advance to next endpoint at same tier (by Preference); if tier exhausted, escalate to next tier; retry immediately (no backoff); a MISS at the deepest endpoint books a failed round and backs off.
 - **THROTTLED received** → hold the same endpoint for the hinted backoff; do not escalate and do not consume the retry budget (no failed round).
 - **Timeout** → apply exponential backoff; next sweep retries.
 - **Multicast fill** (independent receive goroutine) → cancel gap regardless of NACK state.
@@ -208,7 +210,7 @@ Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER`) and `-beacon-prefer
 ## Flood Prevention
 
 - **Multicast fill suppression:** retransmits go to multicast; all listeners receive them; `Tracker.Fill()` cancels pending NACKs.
-- **Cache TTL (60 s):** retransmitted frames remain in cache for the TTL window; natural expiry bounds the retransmit window without coordination overhead.
+- **Cache TTL (60 s tx/BEEF; block 10 m, subtree 5 m, anchor 2 m):** retransmitted frames remain in cache for the TTL window; natural expiry bounds the retransmit window without coordination overhead.
 - **Rate-limit tiers:** per-source-IP (flood, silent drop), per-flow (HashKey), per-gap (SeqNum), and per-group (groupIdx). The honest-congestion tiers (per-flow, per-gap, per-group) MAY emit THROTTLED so the listener holds rather than escalates; the flood tier stays silent to avoid reflection.
 - **Inter-AS:** MP-BGP propagates retransmits; remote listeners fill before backoff fires.
 
@@ -218,7 +220,7 @@ Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER`) and `-beacon-prefer
 
 - **Listener:** `shard-listener/nack/wire.go` (NACK encode/decode), `shard-listener/discovery/` (ADVERT decode, registry, beacon listener)
 - **Endpoint:** `retry-endpoint/server/server.go` (NACK receive, ACK/MISS send), `retry-endpoint/beacon/` (ADVERT encode/send), `retry-endpoint/proxy/` (cross-domain relay: upstream fetch, re-cache, local retransmit — the fetch socket source-binds the advertised NACK address so the upstream's reply is addressed inside the fabric allow-list)
-- **Common:** `shard-common/frame/` (MsgType constants)
+- **Common:** `shard-common/frame/` (MsgType constants; THROTTLED `0x13` is declared locally in `shard-listener/nack/wire.go` and `retry-endpoint/server`, not yet in the shared block)
 
 ---
 

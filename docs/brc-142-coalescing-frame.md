@@ -8,15 +8,17 @@ across many datagrams; BRC-142 merges many small transactions into one. The goal
 is to cut **packets-per-second** — the dominant data-plane forwarding cost — on
 the replicated fabric and per-tunnel egress hops.
 
-> **Status: PROPOSED — [bsv-blockchain/BRCs PR #164](https://github.com/bsv-blockchain/BRCs/pull/164)**
-> (opened 2026-06-29, awaiting review). The brief normative text is the PR
-> (`transactions/0142.md`); this document is the detailed design and rationale and
-> is kept congruent with it.
+> **Canonical BRC:** [BRC-142](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0142.md)
+> — merged 2026-07-30 ([PR #164](https://github.com/bsv-blockchain/BRCs/pull/164);
+> draft number restored by [PR #190](https://github.com/bsv-blockchain/BRCs/pull/190)).
+> This document is the detailed design and rationale, kept congruent with the
+> upstream text.
 >
 > **Reference implementation: SHIPPED** across the data plane — `shard-common`
 > bundle codec (`v0.14.0`), `shard-proxy` coalescing + verbatim relay,
-> `shard-listener` edge-/consumer-decoalesce (`v1.6.5`), and `retry-endpoint`
-> bundle cache. Commercial implementations exist and interoperate.
+> `shard-listener` edge-/consumer-decoalesce (`v1.6.5`) and re-bucketing + relay
+> guard (`v1.10.1`), and `retry-endpoint`
+> bundle cache.
 > **§20 records the deliberate deployment decisions** (within-batch flush, spine
 > relays / origin-only coalescing, listener-side re-bucketing, per-proxy opt-in).
 > Design rationale, alternatives, and the deliberate deployment decisions that
@@ -62,9 +64,9 @@ is no single TxID for N transactions. All multi-byte integers are big-endian.
 | 7      | 1    | Flags         | bit0 = `TxIDsPresent` (per-member 32-byte TxID present, all-or-none); bits 1–7 reserved (0) |
 | 8      | 32   | Subtree ID    | The single 32-byte subtree shared by all members; zeros = unset (mempool flow) |
 | 40     | 8    | HashKey       | `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)`; the bundle flow identity; stamped by the coalescing node |
-| 48     | 8    | SeqNum        | uint64 BE, monotonic per `(sender, group, subtree)` **bundle** flow, starts at 1; 0 = unset |
+| 48     | 8    | SeqNum        | uint64 BE, monotonic per `(sender, group, subtree)` flow; the reference proxy draws it from the same per-flow counter that stamps individual frames, so bundles and individual frames share one contiguous sequence space; 0 = unset |
 | 56     | 2    | GroupIdx      | Shard group index the bundle was built for (uint16 BE)              |
-| 58     | 1    | ShardBits     | The shard-bit width `GroupIdx` was computed at (1–12); pins the generation |
+| 58     | 1    | ShardBits     | The shard-bit width `GroupIdx` was computed at (1–12); pins the generation; `0` = unset (a decoder MUST NOT re-bucket on an unset value) |
 | 59     | 1    | Reserved      | 0x00                                                                |
 | 60     | 2    | TxCount       | Number of members (uint16 BE)                                       |
 | 62     | 4    | PayloadLen    | Total byte length of the member section that follows (uint32 BE)    |
@@ -118,7 +120,8 @@ Each member is a length-prefixed transaction:
   and packs within each bucket.
 - **Flow identity.** The bundle's `(HashKey, SeqNum)` is the per-`(sender, group,
   subtree)` flow exactly as BRC-124. Subtree-filtering subscribers track gaps on
-  the one bundle stream per `(group, subtree)` they subscribe to.
+  the shared per-`(sender, group, subtree)` flow (bundles and individual frames
+  interleave in one sequence space).
 - **Density requirement.** Coalescing gain depends on `(group, subtree)` density
   within the coalescing window. Uniformly-random traffic across many shards
   coalesces poorly; shard-/subtree-dense (bulk, replay, large-subtree) traffic
@@ -312,12 +315,14 @@ is also the trust gate for which peer domains' manifests a node accepts.
 
 ## 13. Dedup & Own-traffic Exclusion
 
-Dedup (`bsp:tx:` ingress, `bsl:egr:` egress) and own-traffic exclusion are
-**per-transaction**, so they operate on bundle **members**, not the bundle. The
-edge-decoalesce path makes this natural (decoalesce, then dedup/exclude each
-member). A coalescing node SHOULD claim/check each member's TxID before packing,
-and MUST drop individual already-claimed members rather than the whole bundle.
-Consumer-decoalesce moves member-level dedup to the consumer.
+Only the proxy **ingress** claim is per-member: the coalescing node claims each
+member's TxID (`bsp:tx:` — `claimIngress`) before packing, and MUST drop
+individual already-claimed members rather than the whole bundle. Everything
+downstream operates at **bundle** granularity, before decoalescing (consistent
+with §18): the listener-side egress filter, cross-listener dedup
+(`txDedup.Claim(HashKey ∥ SeqNum)`), local dedup, and own-traffic exclusion all
+key on the bundle's flow identity, not on member TxIDs. Member-level dedup
+moves to the consumer only under consumer-decoalesce.
 
 ---
 
@@ -411,8 +416,7 @@ them).
   bucket eligible BRC-124/128 frames by `(sender, group, subtree)` within a receive
   batch, pack to the MTU/count cap, stamp, emit FrameVer 0x08. Plus a verbatim
   **relay** path (`ProcessBundle`): a node that *receives* a bundle re-emits it
-  unchanged to the group in its header. Default-off (`-coalesce`). Commercial
-  variants coalesce at the origin only and relay verbatim mid-fabric.
+  unchanged to the group in its header. Default-off (`-coalesce`).
 - **Listener (`shard-listener`, OSS)** — `processBundle` runs ahead of the existing
   filter/own-exclusion/fan-out path: filter + gap-track + dedup at **bundle**
   granularity, then **edge-decoalesce** (split into BRC-124/128 frames, re-stamp
@@ -460,11 +464,12 @@ independent implementation that follows §2–§17 interoperates.
 | Drop visibility (§16) | Drops are **counted, not silent** (`bundle_short`/`bundle_malformed`/`bundle_decode_error`/`ErrCountMismatch`) | Silence hides upstream corruption. The one un-enforced row (member group ≠ GroupIdx) is an **encoder invariant**, not a decode-time check (a hash + routing engine per member) |
 | Metric names (§15) | Actual emitted names differ from the original draft | See the §15 table (the real names) |
 
-**Congruence with [PR #164](https://github.com/bsv-blockchain/BRCs/pull/164)
-(`transactions/0142.md`):** congruent on wire format and behavior. The member-length
+**Congruence with the published upstream text
+([transactions/0142.md](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0142.md)):**
+congruent on wire format and behavior. The member-length
 ceiling is named **`MaxMemberTxLen`** consistently in the PR, this doc, and the code
 (`shard-common/bundle`). The member field sizes (`2`, `32`) stay unexported in the
 codec and appear in both documents' member-format tables, so the brief PR correctly
 omits them from its constants list. The PR's error-handling table is a deliberate
-subset of §16. The two documents are kept congruent; editorial deltas are pushed
-to the PR as found.
+subset of §16. The two documents are kept congruent; editorial deltas go via a
+new upstream PR.

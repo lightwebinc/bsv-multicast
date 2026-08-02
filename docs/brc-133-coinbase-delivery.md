@@ -37,7 +37,8 @@ Coinbase frames are delivered on the **GroupBlockBroadcast** group:
 The global scope (`FF0E`) ensures coinbase transactions cross site boundaries.
 The group index `0xFFFE` is in the reserved control-plane range and never
 overlaps with data-plane shard groups (maximum shard group index is `0x0FFF` for
-`shard_bits=12`).
+`shard_bits=12`). `FF0E::B:FFFE` is the normative posture; the implementation
+derives the address prefix from the configured `-scope`.
 
 ---
 
@@ -78,9 +79,10 @@ BRC-124 shard frames:
   coinbase frames an independent flow identity from BRC-131 block announces,
   which share the same egress multicast group. If the frame arrives
   pre-stamped (`SeqNum != 0`), it is forwarded verbatim.
-- Listeners observe
-  `(coinbaseFlowIdx=0xFFF8, zeroSubtreeID, HashKey, SeqNum, ContentID)` for gap
-  detection and dispatch BRC-126 NACKs to retry endpoints on gap.
+- Listeners observe the flow with `ctrlGroupIdx=0xFFFE` (the group the frame
+  lives on — the `0xFFF8` ingredient exists only inside the proxy-stamped
+  HashKey) for gap detection and dispatch BRC-126 NACKs to retry endpoints on
+  gap.
 - Retry endpoints join `FF0E::B:FFFE` and cache BRC-131 `BlockMsgCoinbase`
   frames by `HashKey ∥ SeqNum`. On NACK, the frame is retransmitted to
   `FF0E::B:FFFE` (not to any shard group).
@@ -109,17 +111,21 @@ independently by listeners — even though both egress to the same
 1. **Receive** — BRC-131 frames (FrameVer `0x04`) are accepted over UDP or TCP
    ingress. The proxy detects version byte `0x04` before dispatching to
    `ProcessBlock`.
-2. **Decode** — `frame.DecodeBlock` validates Magic, FrameVer, MsgType, and
+2. **Privileged-class admission** — V4 frames are rejected unless the ingress
+   class is privileged (`rejectPrivileged` counter).
+3. **Decode** — `frame.DecodeBlock` validates Magic, FrameVer, MsgType, and
    PayLen. Invalid MsgType values (`!= 0x01` and `!= 0x02`) are dropped.
-3. **Stamp** — If `SeqNum == 0`, stamp HashKey and SeqNum in-place using the
+4. **Dedup** — the ingress ContentID dedup claim drops duplicate ContentIDs.
+5. **Stamp** — the proxy stamps `SeqNum` only when 0; `HashKey` is (re)stamped
+   whenever it is zero or the proxy runs `-stamp-source` — using the
    `(senderIPv6, 0xFFF8, zeros)` flow key for `BlockMsgCoinbase`, or the
    `(senderIPv6, 0xFFFE, zeros)` flow key for `BlockMsgAnnounce`. The virtual
    index `0xFFF8` is the `GroupCoinbaseFlow` used solely to keep
    coinbase frames in a flow distinct from block announces on the shared
    `GroupBlockBroadcast` egress.
-4. **Fragment** — If `len(Payload) > fragDataSize`, fragment via BRC-130 with
+6. **Fragment** — If `len(Payload) > fragDataSize`, fragment via BRC-130 with
    `OrigFrameVer = 0x04`.
-5. **Forward** — Write frame to `FF0E::B:FFFE:<egressPort>` on all egress
+7. **Forward** — Write frame to `FF0E::B:FFFE:<egressPort>` on all egress
    interfaces.
 
 ---
@@ -132,8 +138,12 @@ independently by listeners — even though both egress to the same
 3. **Egress** — `egress.Sender.SendBlock(raw, bf)` forwards the frame (or
    payload only in strip-header mode) downstream.
 4. **Gap tracking** —
-   `Tracker.Observe(coinbaseFlowIdx=0xFFF8, zeroSubtreeID, HashKey, SeqNum, ContentID)`
-   when `SeqNum != 0`.
+   `Tracker.Observe(ctrlGroupIdx=0xFFFE, zeroSubtreeID, HashKey, SeqNum, ContentID, source net.IP)`
+   when `SeqNum != 0`. The listener passes `0xFFFE` (`GroupBlockBroadcast`) for
+   **all** V4 frames including coinbase — a NACK must target the group the
+   frame actually lives on; `0xFFF8` is only the proxy-side HashKey ingredient
+   that keeps the coinbase flow distinct. Gap-flow labels currently read
+   `brc131` for coinbase.
 5. **Filtering** — Coinbase frames bypass all shard/subtree filters; every
    subscriber receives every coinbase frame.
 

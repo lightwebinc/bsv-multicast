@@ -23,12 +23,12 @@ The fabric runs in one of two source modes. **Any-Source Multicast (ASM)** is th
 - **ASM** uses the well-known permanent prefix (`flags = 0`) → `FF0x`.
 - **SSM** uses the RFC 4607 SSM range `FF3x::/32` (`flags = 3`) → `FF3x`.
 
-The scope nibble (`5` site, `8` org, `E` global) is unchanged between modes. Because RFC 8815 deprecates inter-domain ASM, global scope is SSM-only.
+The scope nibble (`5` site, `8` org, `E` global) keeps its meaning across modes, but SSM is implemented at site and global scope only — there is no SSM org-scope prefix. RFC 8815 deprecates inter-domain ASM, so global scope SHOULD be SSM (the ASM configuration path does not reject `-scope global`; running ASM at global scope is out of spec, not out of reach).
 
-| Mode | Site scope (intra-domain) | Global scope (inter-domain) |
-| ---- | ------------------------- | --------------------------- |
-| ASM  | `FF05::B:idx`             | not supported (RFC 8815)    |
-| SSM  | `FF35::B:idx`             | `FF3E::B:idx`               |
+| Mode | Site scope (intra-domain) | Global scope (inter-domain)              |
+| ---- | ------------------------- | ---------------------------------------- |
+| ASM  | `FF05::B:idx`             | discouraged (RFC 8815; not rejected)     |
+| SSM  | `FF35::B:idx`             | `FF3E::B:idx`                            |
 
 The group-id (`0x000B`) and the shard-index field are preserved across modes — only the high 32 bits change. Addresses elsewhere in this doc are written in ASM (`FF0x`) form; under SSM, substitute the corresponding `FF3x` prefix.
 
@@ -38,7 +38,7 @@ The group-id (`0x000B`) and the shard-index field are preserved across modes —
 
 All IPv6 multicast group addresses are derived from three components:
 
-1. **Multicast prefix** (`MCPrefix`, 2 bytes) — the first two bytes of the IPv6 address, encoding `flags(4) | scope(4)`. ASM: `FF05` (site), `FF08` (org), `FF0E` (global); SSM: `FF35`, `FF38`, `FF3E` for the same scopes (see [Source Mode and Address Range](#source-mode-and-address-range)).
+1. **Multicast prefix** (`MCPrefix`, 2 bytes) — the first two bytes of the IPv6 address, encoding `flags(4) | scope(4)`. ASM: `FF02` (link, lab use), `FF05` (site), `FF08` (org), `FF0E` (global); SSM: `FF35` (site), `FF3E` (global) — SSM has no link- or org-scope prefix (see [Source Mode and Address Range](#source-mode-and-address-range)).
 2. **IANA group-id** (`MCGroupID`, 2 bytes) — occupies bytes `[12:14]`, default `0x000B` (IANA Bitcoin).
 3. **Shard group index** (2 bytes) — occupies bytes `[14:16]` (16-bit index space).
 
@@ -64,9 +64,9 @@ groupIndex = binary.BigEndian.Uint32(txid[0:4]) >> (32 - shardBits)
 
 ---
 
-## Free Space and Specialty Transmission Domains
+## Object Planes and Specialty Transmission Domains
 
-Indices `0x1000`–`0xF7FF` (56,832 indices) are unassigned and reserved for future use. This range accommodates future shard group expansion and specialty transmission domains for purpose-specific multicast services.
+Indices `0x1000`–`0xF7FF` are partitioned into **object planes** by the index high nibble ([BRC-148](brc-148-shard-domain-beef-plane.md): `PlaneBase(domain) = domain << 12`). Domain `0x1` (`0x1000`–`0x1FFF`) is the allocated BEEF object plane; domains `0x2`–`0xE` are reserved for future object planes and specialty transmission domains.
 
 ---
 
@@ -86,8 +86,10 @@ Network service groups occupy `0xF800`–`0xFFFF` (2,048 indices). Current proto
 | `0xFFFD` | Beacon (site)                        | `FF05` | `FF05:0000:0000:0000:0000:0000:000B:FFFD` | `FF05::B:FFFD` |
 | `0xFFFD` | Beacon (org)                         | `FF08` | `FF08:0000:0000:0000:0000:0000:000B:FFFD` | `FF08::B:FFFD` |
 | `0xFFFD` | Beacon (global)                      | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFD` | `FF0E::B:FFFD` |
-| `0xFFFE` | Block Broadcast channel              | `FF0E` | `FF0E:0000:0000:0000:0000:0000:000B:FFFE` | `FF0E::B:FFFE` |
+| `0xFFFE` | Block Broadcast channel              | `FF0E`* | `FF0E:0000:0000:0000:0000:0000:000B:FFFE` | `FF0E::B:FFFE` |
 | `0xFFFF` | _(reserved)_                         | —      | reserved                                  | do not use     |
+
+\* Scope values are the normative deployment posture. The implementation derives every control-plane address from the deployment's configured scope (`-scope`), so a site-scoped deployment emits `FF05::B:FFFE`; global (`FF0E`/`FF3E`) is the posture for inter-domain reach.
 
 ---
 
@@ -111,8 +113,8 @@ SSM is a transport mode only: the frame format (BRC-124), the NACK protocol (BRC
 - **Joins.** Under ASM, receivers perform an any-source `(*,G)` join. Under SSM, receivers perform a source-specific `(S,G)` join per RFC 3678 (`MCAST_JOIN_SOURCE_GROUP`), one join per `(source, group)` pair.
 - **Distinct source per publisher.** Each publisher emits from a distinct, stable unicast source address (`bindSource`). Required by PIM-SSM reverse-path forwarding; preserves the per-publisher `HashKey` flow identity. Anycast/shared-source emission is not supported under SSM — a single stable identity uses VRRP active-standby (failover, not load distribution).
 - **Source discovery.** Receivers learn publisher sources before issuing `(S,G)` joins:
-  - **Data-plane sources** flow through the shard manifest (BRC-139 `Flags.SourcesValid`); receivers set `sources.consume: [manifest]` and union the source set across currently-valid manifests.
-  - **Control-plane groups** (beacon, manifest, subtree-announce) are joined against per-group bootstrap source lists (`sources.bootstrap.*`, IPv6 literals or DNS names re-resolved on refresh), since their sources cannot be discovered from within the group.
+  - **Data-plane sources** flow through the shard manifest (BRC-139 `Flags.SourcesValid`); receivers enable manifest consumption (`-manifest-consumer-enabled` / Helm `config.autoConfig.*`) and union the source set across currently-valid manifests.
+  - **Control-plane groups** (beacon, manifest, subtree-announce) are joined against per-group bootstrap source lists (`-ssm-bootstrap-*` flags / Helm `config.ssmBootstrap.*`, IPv6 literals or DNS names re-resolved on refresh), since their sources cannot be discovered from within the group.
 
 Deployment postures combining ASM/SSM data and control planes (and their PIM/fabric prerequisites) are out of scope here — see [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm) in DESIGN.md.
 
@@ -137,13 +139,13 @@ BRC-131 block announces continue to use `0xFFFE` itself as the HashKey ingredien
 
 ## Block Header Egress Channel
 
-`FF05::<egress-gid>:FFFA` (index `0xFFFA`) is used by listener nodes to re-emit standalone 80-byte block header frames (BRC-135) to downstream consumers such as SPV wallets and header-chain validators. The scope and group-id are configured via the listener's `-mc-egress-prefix` and `-mc-egress-group-id` flags, which default to the same values as the ingress fabric but can be set independently to isolate the egress domain. BRC-135 frames on this channel are NOT re-injected onto the primary `FF0E::B:FFFE` fabric to avoid feedback loops.
+`FF05::<egress-gid>:FFFA` (index `0xFFFA`) is used by listener nodes to re-emit standalone 80-byte block header frames (BRC-135) to downstream consumers such as SPV wallets and header-chain validators. The channel is opt-in (`-header-mc-egress-enabled`, default off); its scope and group-id are configured via the listener's `-header-mc-egress-scope` and `-header-mc-egress-group-id` flags, which default to the same values as the ingress fabric but can be set independently to isolate the egress domain (the separate `-mc-egress-*` flags configure the general data-frame multicast egress, a different sender). BRC-135 frames on this channel are NOT re-injected onto the primary `FF0E::B:FFFE` fabric to avoid feedback loops.
 
 ---
 
 ## Beacon Groups
 
-Beacon groups support infrastructure service discovery across multiple scopes (site-local, organization-local, and global). Each beacon-enabled service instance advertises to exactly one group (set via `-beacon-scope`). Deployments requiring coverage across multiple scopes run separate instances at each scope. See the control-plane table above for complete scope and address details.
+Beacon groups support infrastructure service discovery across multiple scopes (site-local, organization-local, and global). Each beacon-enabled service instance advertises to one or more groups via `-beacon-scope` (`site|org|global|both|all` — `both`/`all` emit to site, org, and global from a single instance). See the control-plane table above for complete scope and address details.
 
 ---
 

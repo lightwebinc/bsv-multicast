@@ -53,9 +53,13 @@ Listener receives:  SeqNum 1, 2, 3, [gap], 6, 7, ...
       ▼        ▼         ▼         ▼
     ACK      MISS    THROTTLED  Timeout
       │        │         │         │
- cancel gap advance   hold same  backoff
-            endpoint  endpoint   & retry
-                      (no escalate)
+ bare/mcast: advance  hold same   backoff
+ cancel gap  endpoint  endpoint   & retry
+ unicast:              (no escalate)
+ keep pending
+ (80 ms drain);
+ escalate on
+ timeout
 ```
 
 The NACK carries the `HashKey` (stable per-flow identifier) and `StartSeq`/`EndSeq` (missing sequence range). The retry endpoint looks up the frame using the 16-byte cache key `HashKey ∥ StartSeq`. The listener opens a per-request ephemeral UDP socket (`[::]:0`), sends the NACK, and waits up to 300 ms for a single response (`ACK`, `MISS`, or — when the endpoint runs with `-rl-throttle-response` — `THROTTLED`).
@@ -69,7 +73,7 @@ observed rate could not have carried that many frames), signals an **emitter
 change** (restart / re-key), not loss. The tracker **re-baselines** the flow
 instead of registering thousands of phantom gaps: pending phantom entries are
 dropped, the rate estimate resets to re-learn the new cadence, and the
-`SeqRebaselined` metric increments. When the pre-jump rate estimate was settled
+`bsl_seq_rebaselines_total` metric increments. When the pre-jump rate estimate was settled
 (≥ 16 contiguous in-order frames), a rate-plausible **transition tail** — the
 ≈ `elapsed / ewmaIPG` frames a real outage of that duration would have lost,
 capped at the max forward jump — is still NACK-recovered, so a genuine outage
@@ -101,6 +105,9 @@ Tiers represent proximity to the transaction source. Lower tier = closer to sour
                               │
                               ▼
                         [Tier-2 Retry Endpoint]  (HasParent)
+
+  (each arrow is an independent one-hop relay — the Proxied flag
+   stops re-proxying; chains are not transitive)
 ```
 
 Listeners try Tier 0 first. On MISS, they advance to Tier 1, then Tier 2, etc.
@@ -160,8 +167,10 @@ Tier 1:
     │               if tier exhausted, advance to Tier K+1;
     │               retry IMMEDIATELY (no backoff)
     │
-    └─ ACK ──► gap entry cancelled; done
-               (ACK.Flags indicates multicast_sent / unicast_sent)
+    └─ ACK ──► bare/multicast ACK: gap entry cancelled; done
+               unicast-flagged ACK (0x02): keep the gap pending
+               (80 ms drain for the data frame); escalate to the
+               next endpoint on timeout
 
   Any state ──► FILLED  (multicast repair arrived independently)
                 gap entry cancelled; in-flight socket times out harmlessly
@@ -177,7 +186,7 @@ reflection); it stays silent and the listener falls back to timeout + backoff.
 
 A forward jump exceeding `-nack-max-forward-jump` or implausible against the
 flow's rate estimate never enters `PENDING`: the flow is **re-baselined**
-(emitter change — see §2), phantom gaps are dropped (`SeqRebaselined`), and
+(emitter change — see §2), phantom gaps are dropped (`bsl_seq_rebaselines_total`), and
 only a rate-plausible transition tail is NACK-recovered once the estimate has
 settled.
 
@@ -220,16 +229,25 @@ AS 100 (Source)                    AS 200 (Remote)
 │ Tier-0 Endpoint  │◄─multicast──►│ Tier-1 Endpoint   │
 │ beacons on       │  MVPN/MSDP   │ (HasParent)       │
 │ FF0E::B:FFFD     │              │                   │
-│                  │              │ Listeners         │
-└──────────────────┘              │ join both beacon  │
-                                  │ groups; discover  │
-                                  │ Tier-0 via global │
-                                  │ beacon            │
+│                  │              │ Listeners join the│
+└──────────────────┘              │ one beacon group  │
+                                  │ selected by       │
+                                  │ -beacon-scope     │
+                                  │ (endpoints can    │
+                                  │ emit to several   │
+                                  │ at once via       │
+                                  │ both|all); set    │
+                                  │ -beacon-scope     │
+                                  │ global in a       │
+                                  │ remote AS to see  │
+                                  │ Tier-0 beacons    │
                                   └───────────────────┘
 
-NACK escalation path:
+NACK proxy-relay path (the Tier-1 endpoint, running -proxy-enabled,
+forwards a cache-miss NACK to its Tier-0 upstream — this is not a
+listener escalation; a listener holding both tiers tries Tier-0 first):
   Listener (AS 200) ──NACK──► Tier-1 (AS 200)
-                                  │ cache miss
+                                  │ cache miss → proxied NACK
                                   ▼
                               Tier-0 (AS 100)  ──► retransmit to multicast
                                                    MP-BGP delivers to AS 200
@@ -243,9 +261,9 @@ No protocol changes required. Network team extends multicast fabric via MP-BGP.
 
 | Mechanism                | Layer          | Effect                                                                                            |
 | ------------------------ | -------------- | ------------------------------------------------------------------------------------------------- |
-| Cache TTL (60 s)         | Retry endpoint | Frames expire naturally; bounds retransmit window                                                 |
+| Cache TTL (60 s tx/BEEF; block 10 m, subtree 5 m, anchor 2 m) | Retry endpoint | Frames expire naturally; bounds retransmit window                                                 |
 | Multi-tier rate limiting | Retry endpoint | Per-IP (flood, always silent); per-HashKey, per-SeqNum (pre-lookup) and per-group (post-lookup) — silent by default, or emit `THROTTLED` under `-rl-throttle-response` |
 | `Tracker.Fill()`         | Listener       | Multicast repair cancels pending NACKs for all listeners                                          |
 | Jitter hold-off          | Listener       | Randomised delay before first NACK suppresses duplicates                                          |
 | Exponential backoff      | Listener       | Reduces NACK rate on persistent gaps                                                              |
-| `MaxRetries` + `GapTTL`  | Listener       | Gap entries evicted after retry exhaustion or absolute deadline                                   |
+| `MaxRetries` + `GapTTL`  | Listener       | Gap entries evicted after `MaxRetries` **failed rounds** or `GapTTL` (clean tier hops and THROTTLED holds don't consume the budget) |

@@ -53,7 +53,7 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 
 ## Reassembly (Listener)
 
-1. **Slot allocation** — On first fragment for a TxID, allocate an `OrigPayloadLen`-byte buffer, a `FragTotal`-bit received-fragment bitmask, and a TTL timer.
+1. **Slot allocation** — On first fragment, allocate a slot keyed by the offset-8 field (TxID / SubtreeID / ContentID); for `OrigFrameVer = 0x09` the slot key is the `(ContentID, TopicID)` pair — `SHA-256(ContentID ∥ TopicID)`. The slot holds an `OrigPayloadLen`-byte buffer, a `FragTotal`-bit received-fragment bitmask, and a TTL timer.
 2. **Fragment placement** — Copy data into buffer at `offset = FragIndex × fragDataSize`. Mark the bit.
 3. **Completion** — When all `FragTotal` bits are set, proceed to verification.
 4. **Completion callback** — The reassembly buffer invokes the callback registered for the given `OrigFrameVer`:
@@ -62,9 +62,9 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
    - `OrigFrameVer == 0x05` → Deliver as synthetic BRC-132 subtree data frame; SHA256d does **not** apply (SubtreeID is a Merkle root, not a payload hash); route through `processSubtreeDataFrame`.
    - `OrigFrameVer == 0x09` → SHA256d verification applies (the offset-8 field is the ContentID = `SHA256(SHA256(buffer))`); deliver as synthetic BRC-149 BEEF object frame; route through `processBeefFrame`.
 5. **Delivery** — Route the reassembled frame through the normal egress and gap-tracking path for its frame version.
-6. **TTL eviction** — Slots not completed within 10 s are discarded; increment `bsl_reassembly_abandoned_total`.
+6. **TTL eviction** — Slots not completed within 10 s are discarded; increment `bsl_reassembly_abandoned_total`. If any fragment arrived, the missing fragments' SeqNums are dispatched as BRC-126 NACKs (`SetIncompleteHook`); capacity eviction does not trigger recovery.
 7. **Slot cap** — Default maximum 4096 concurrent slots; oldest incomplete slot evicted on overflow.
-8. **Duplicates** — Same TxID + FragIndex silently ignored.
+8. **Duplicates** — Same slot key (offset-8 field; `(ContentID, TopicID)` pair for `0x09`) + FragIndex silently ignored.
 
 ---
 
@@ -88,7 +88,8 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 | FragIndex ≥ FragTotal          | Silent drop (malformed)                      |
 | FragTotal = 0                  | Silent drop (malformed)                      |
 | OrigPayloadLen = 0             | Silent drop                                  |
-| PayloadLen > fragDataSize      | Silent drop                                  |
+| `OrigPayloadLen` > max-object bound (64 MiB default; `-beef-max-object-bytes` for 0x09) | Silent drop |
+| `FragTotal` > `OrigPayloadLen`+1 | Silent drop                                |
 | Datagram shorter than header   | Silent drop                                  |
 | Hash mismatch after reassembly | Drop slot; increment hash_mismatch counter   |
 | TTL expiry                     | Drop slot; increment abandoned counter       |
@@ -104,7 +105,7 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 
 ---
 
-## Constants Reference
+## Protocol Values
 
 | Name                | Value | Hex    | Description                              |
 | ------------------- | ----- | ------ | ---------------------------------------- |
@@ -119,6 +120,10 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 | EthernetMTU         | 1500  | 0x5DC  | Standard Ethernet MTU                    |
 | JumboMTU            | 9000  | 0x2328 | Jumbo frame MTU                          |
 | DefaultFragDataSize | 1348  | 0x544  | fragDataSize at 1500-byte path MTU       |
+
+Only `FrameVerV3` and `HeaderSizeV3` exist as code constants; the remaining
+rows are protocol values. Fragmentation is off by default: `-frag-mtu`
+defaults to `0` (0 = fragmentation off).
 
 ---
 

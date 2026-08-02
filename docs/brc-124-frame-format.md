@@ -29,7 +29,7 @@ All multi-byte integers are big-endian. 8-byte alignment for all fields after of
 - **Protocol version (4:6):** Informational; 703 = BSV large-block policy baseline.
 - **Frame version (6):** `0x02` for BRC-124, `0x01` for legacy BRC-12.
 - **Transaction ID (8:40):** Raw 256-bit txid in internal byte order (NOT display-reversed).
-- **HashKey (40:48):** Stable per-flow identifier computed as `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)`, stamped in-place by the proxy. Constant for all frames of the same flow. A value of `0` means the proxy has not yet stamped the frame.
+- **HashKey (40:48):** Stable per-flow identifier computed as `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)` over a fixed 52-byte input — 16-byte IPv6 address ∥ 4-byte big-endian `uint32` group index ∥ 32-byte subtree ID — stamped in-place by the proxy. Constant for all frames of the same flow. A value of `0` means the proxy has not yet stamped the frame. Control-plane docs that write the group-index ingredient as a 2-byte constant (e.g. `0xFFFB`, `0xFFFE`) mean this same 4-byte encoding.
 - **SeqNum (48:56):** Monotonic per-flow counter starting at 1, stamped in-place by the proxy. A gap (`SeqNum` advances by >1) indicates a missing frame. The pair `(HashKey, SeqNum)` forms the 16-byte cache key for NACK-based retransmission. A value of `0` means the frame has not been stamped.
 - **Subtree ID (56:88):** Opaque 32-byte batch identifier for subtree-level filtering.
 - **Payload (92+):** BSV transaction bytes. BRC-124 frames carry BRC-12 raw transactions; BRC-128 frames carry BRC-30 Extended Format (EF) transactions. Inspect payload bytes 4–9 to distinguish: `0x00 0x00 0x00 0x00 0x00 0xEF` = BRC-30 EF (BRC-128), otherwise BRC-12 raw (BRC-124). See **[BRC-128 Extended Format](brc-128-ef-frame-format.md)**.
@@ -59,7 +59,7 @@ Accepted and forwarded verbatim for backward compatibility.
 ### Proxy (`shard-proxy`)
 
 - Decode header (BRC-12 or BRC-124); drop on bad magic or unknown version.
-- For BRC-124: stamp `HashKey` (bytes 40–47) as `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)` and `SeqNum` (bytes 48–55) as a monotonic per-flow counter, in-place.
+- For BRC-124: stamp `HashKey` (bytes 40–47) as `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)` (`groupIdx` as 4-byte big-endian; see Field Details) and `SeqNum` (bytes 48–55) as a monotonic per-flow counter, in-place.
 - Forward verbatim to all egress interfaces (no re-encoding).
 
 ### Listener (`shard-listener`)

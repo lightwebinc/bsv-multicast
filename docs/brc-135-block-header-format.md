@@ -49,10 +49,12 @@ different scope or group-id from the ingress fabric):
 | ------ | --------------- | ------------------------- | -------------------------------- |
 | 0xFFFA | egress (varies) | `FF05::<egress-gid>:FFFA` | Emitter multicast egress channel |
 
-The egress group-id is set independently of the fabric group-id via
-`-mc-egress-group-id` (default: same as `-mc-group-id`). This ensures BRC-135
-frames reach only downstream consumers, not peer fabric subscribers or retry
-endpoints on the ingress fabric.
+Header multicast egress is opt-in via `-header-mc-egress-enabled` (default
+false); `-header-mc-egress-scope` and `-header-mc-egress-group-id` set the
+egress scope and group-id independently of the fabric. (The `-mc-egress-*`
+flags configure the general data-frame multicast egress — a different
+sender.) This ensures BRC-135 frames reach only downstream consumers, not
+peer fabric subscribers or retry endpoints on the ingress fabric.
 
 ---
 
@@ -184,7 +186,7 @@ A consumer receiving BRC-135 frames:
 | Name                   | Value | Hex      | Description                                       |
 | ---------------------- | ----- | -------- | ------------------------------------------------- |
 | `FrameVerV7`           | 7     | `0x07`   | BRC-135 block header frame version                |
-| `BlockHeaderPayload`   | 80    | `0x50`   | Fixed payload size (standard BSV block header)    |
+| `BlockHeaderSize`      | 80    | `0x50`   | Fixed payload size (standard BSV block header)    |
 | `BlockHeaderFrameSize` | 172   | `0xAC`   | Total frame size (92 + 80)                        |
 | `GroupBlockHeader` | 65530 | `0xFFFA` | Block header egress channel (BRC-135 mc-egress)   |
 | `GroupBlockBroadcast`     | 65534 | `0xFFFE` | Control group index (shared with BRC-131/133/134) |

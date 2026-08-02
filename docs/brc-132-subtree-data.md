@@ -25,7 +25,7 @@ Subtree data frames are sent to the **GroupSubtreeDataAnnounce** group:
 | Index  | Scope      | Compressed Address | Constant                      |
 | ------ | ---------- | ------------------ | ----------------------------- |
 | 0xFFFB | site       | `FF05::B:FFFB`     | `GroupSubtreeDataAnnounce`    |
-| 0xFFFB | org        | `FF08::B:FFFB`     | `GroupSubtreeDataAnnounce`    |
+| 0xFFFB | org (ASM only; no SSM org prefix) | `FF08::B:FFFB`     | `GroupSubtreeDataAnnounce`    |
 | 0xFFFB | global     | `FF0E::B:FFFB`     | `GroupSubtreeDataAnnounce`    |
 
 Scope selection mirrors the `GroupBeacon` pattern; operators choose one or more scopes via `-announce-scope` on listening components.
@@ -110,7 +110,7 @@ Payloads of 32–48 MB far exceed any path MTU. The proxy fragments each BRC-132
 - `MsgType` is preserved in fragment header byte 7 (same pattern as BRC-131 block fragments, `fragmentBlock`).
 - Fragment reassembly is keyed by SubtreeID (bytes 8–39 of the fragment header, identical to the `TxID` slot in BRC-124 fragments).
 - SHA256d hash verification (`SHA256(SHA256(payload)) == TxID`) does **not apply** — SubtreeID is a Merkle root, not a payload double-hash. The `verifyHash` flag must be `false` for V5 reassembly slots.
-- Optional post-reassembly Merkle-root verification is available (see §Merkle Verification).
+- Post-reassembly Merkle-root verification is reserved, not implemented (see §Merkle Verification).
 
 **Fragment counts** at MTU 9000 (fragDataSize = 8848 bytes):
 
@@ -134,22 +134,22 @@ BRC-132 frames participate in the same NACK-based reliability mechanism as BRC-1
 
 ---
 
-## Merkle Verification (optional, default off)
+## Merkle Verification (reserved, not implemented)
 
-After reassembly, optional Merkle-root recomputation verifies the SubtreeID:
+Post-reassembly Merkle-root recomputation to verify the SubtreeID is a
+reserved design, **not implemented** — `-subtree-data-verify-merkle` /
+`SUBTREE_DATA_VERIFY_MERKLE=true` sets a flag that changes no behavior yet:
 
-- Enabled by `-subtree-data-verify-merkle` / `SUBTREE_DATA_VERIFY_MERKLE=true` on the listener.
-- Requires decoding the payload into nodes and computing `SHA256d` pairwise up the binary tree.
-- Computationally significant at 1M nodes (~1M double-SHA256 operations); disabled by default.
-- Mismatch: drop slot, increment `bsl_reassembly_merkle_mismatch_total`.
+- Would require decoding the payload into nodes and computing `SHA256d` pairwise up the binary tree.
+- Computationally significant at 1M nodes (~1M double-SHA256 operations).
 
 ---
 
 ## Proxy Forwarding Rules
 
-1. **Receive** — BRC-132 frames are accepted over TCP ingress. The switch in `handleConn` recognises `FrameVerV5` using the same 44+48 two-step header read as V2/V4.
+1. **Receive** — BRC-132 frames are accepted over UDP or TCP ingress, on the privileged ingress class only. The TCP switch in `handleConn` recognises `FrameVerV5` using the same 44+48 two-step header read as V2/V4.
 2. **Decode** — `DecodeSubtreeData` validates Magic, FrameVer, MsgType, and PayLen. Invalid frames are dropped.
-3. **Stamp** — If `SeqNum == 0`, the proxy stamps `HashKey` and `SeqNum` in-place per `(senderIPv6, 0xFFFB, subtreeID)` flow, reading SubtreeID from bytes 8–39.
+3. **Stamp** — the proxy stamps `SeqNum` only when 0; `HashKey` is (re)stamped whenever it is zero or the proxy runs `-stamp-source`, per the `(senderIPv6, 0xFFFB, subtreeID)` flow, reading SubtreeID from bytes 8–39.
 4. **Fragment** — If `len(Payload) > fragDataSize`, fragment via BRC-130 with `OrigFrameVer=0x05` and MsgType preserved in byte 7.
 5. **Forward** — Write the frame to all egress interfaces with destination `FF0X::B:FFFB:<egressPort>`.
 
@@ -160,7 +160,7 @@ After reassembly, optional Merkle-root recomputation verifies the SubtreeID:
 1. **Detection** — `IsSubtreeDataFrame(raw)` checks Magic and `raw[6] == 0x05` before `frame.Decode` is called.
 2. **Decode** — `DecodeSubtreeData` validates the frame and returns a `SubtreeDataFrame` with `MsgType`, `SubtreeID`, `HashKey`, `SeqNum`, and `Payload`.
 3. **Egress** — The frame is forwarded to the configured downstream.
-4. **Gap tracking** — `Tracker.Observe(0xFFFB, subtreeID, HashKey, SeqNum, subtreeID)` when `SeqNum != 0`.
+4. **Gap tracking** — `Tracker.Observe(0xFFFB, subtreeID, HashKey, SeqNum, subtreeID, source net.IP)` when `SeqNum != 0`.
 5. **Filtering** — Subtree data frames bypass shard filtering. Listeners may optionally filter by SubtreeID.
 6. **Reassembly** — BRC-130 fragments with `OrigFrameVer=0x05` are routed to `processSubtreeDataFrame` after reassembly (keyed by callback registered on construction).
 
@@ -168,8 +168,8 @@ After reassembly, optional Merkle-root recomputation verifies the SubtreeID:
 
 ## Retry Endpoint Behaviour
 
-- **Group join** — On startup, the retry endpoint joins `FF0X::B:FFFB` in addition to all shard groups and `FF0E::B:FFFE`.
-- **Cache** — BRC-132 frames and BRC-130 fragments (`OrigFrameVer=0x05`) are cached by `HashKey ∥ SeqNum` with a configurable TTL (default `120s`; longer than the `60s` default for transaction frames to accommodate large reassembly windows).
+- **Group join** — The retry endpoint joins `FF0X::B:FFFB` only when `-subtree-data-enabled` is set (default off), in addition to all shard groups and `FF0E::B:FFFE`.
+- **Cache** — BRC-132 frames and BRC-130 fragments (`OrigFrameVer=0x05`) are cached by `HashKey ∥ SeqNum` with a configurable TTL (default `5m`; longer than the `60s` default for transaction frames to accommodate large reassembly windows).
 - **Retransmission routing** — On NACK, `FrameVer` is inspected: if `raw[6] == 0x05`, the frame is retransmitted to `FF0X::B:FFFB` rather than to the shard group derived from SubtreeID.
 
 ---
@@ -195,8 +195,7 @@ After reassembly, optional Merkle-root recomputation verifies the SubtreeID:
 | Unknown MsgType                | Drop; `ErrBadSubtreeMsg`                       |
 | PayloadLen exceeds buffer      | Drop; `io.ErrUnexpectedEOF`                    |
 | Datagram shorter than 92 bytes | Drop; `ErrTooShort`                            |
-| SeqNum == 0                    | Frame not yet proxy-stamped; listener discards |
-| Merkle mismatch (optional)     | Drop; `bsl_reassembly_merkle_mismatch_total`   |
+| SeqNum == 0                    | Frame not yet proxy-stamped; excluded from gap tracking but still forwarded |
 
 ---
 
