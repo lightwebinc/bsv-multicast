@@ -368,9 +368,11 @@ The consumer MUST emit, at minimum:
 
 - `multicast_manifest_divergence_total{field=...,kind=peer-disagree|pin-disagree|crc-fail}` —
   counter. (Implementation status: only `kind="peer-disagree"` is emitted
-  today; the proxy consumer emits none.)
+  today; both the proxy and listener consumers emit it.)
 - `multicast_manifest_last_divergence_epoch{field=...}` — gauge of the
-  most recent Unix-seconds disagreement timestamp. (Not implemented.)
+  most recent Unix-seconds disagreement timestamp. A field appears only once
+  it has diverged at least once, and keeps its last value afterwards — a
+  stale timestamp, not a disappearing series, is the recovered signal.
 - `multicast_manifest_pilots_known` — gauge of distinct authoritative
   announcers currently within TTL.
 - `multicast_manifest_quorum_met_bits` — bitmask gauge (no `field` label).
