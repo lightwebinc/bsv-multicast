@@ -31,7 +31,7 @@ Offset  Size  Field
      7     1  Scope  (0x05=site, 0x08=org, 0x0E=global)
      8    16  NACKAddr      — IPv6 unicast address for NACK requests
     24     2  NACKPort      — UDP NACK listen port (default 9300)
-    26     1  Tier          — operator-assigned; 0 = same AS as proxy (max 254; 0xFF reserved for static seeds; the implementation accepts 0–255 with no clamp — operators MUST NOT use 255)
+    26     1  Tier          — operator-assigned; 0 = same AS as proxy (max 254; 0xFF reserved for static seeds and rejected at config load)
     27     1  Preference    — weighting within a tier; higher = more preferred (default 128)
     28     2  BeaconInterval — seconds; listeners compute TTL = 3 × this value
     30     2  Flags         — see below
@@ -155,7 +155,7 @@ Offset  Size  Field
 | N    | N hops from source                                 |
 | 0xFF | Static seed (no beacon received; lowest priority)  |
 
-Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER` — the implementation accepts 0–255 with no clamp; operators MUST NOT use 255, the static-seed sentinel) and `-beacon-preference` (0–255, default 128; env `BEACON_PREFERENCE`) on each `retry-endpoint`. Endpoints are sorted by `(Tier ASC, Preference DESC)` — higher-preference endpoints are tried first within a tier. Assign these deliberately: the implementation defaults Tier to `0`, so an unconfigured fleet has every endpoint claiming source-adjacency, and because the registry sort is not stable the resulting order is arbitrary and unrepeatable between runs. Tier must NOT be derived from a topology fact such as "this fabric imports remote sources" — interconnects are bidirectional, so that stamps the same tier on the receiver and the true origin.
+Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER` — 255 is the static-seed sentinel and is rejected at config load) and `-beacon-preference` (0–255, default 128; env `BEACON_PREFERENCE`) on each `retry-endpoint`. Endpoints are sorted by `(Tier ASC, Preference DESC)` — higher-preference endpoints are tried first within a tier. Assign these deliberately: the implementation defaults Tier to `0`, so an unconfigured fleet has every endpoint claiming source-adjacency, and because the registry sort is not stable the resulting order is arbitrary and unrepeatable between runs. Tier must NOT be derived from a topology fact such as "this fabric imports remote sources" — interconnects are bidirectional, so that stamps the same tier on the receiver and the true origin.
 
 ### Escalation State Machine
 
