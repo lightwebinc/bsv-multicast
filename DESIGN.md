@@ -470,12 +470,13 @@ retransmits to `FF0X::B:FFFB` rather than a shard group.
 
 **→ [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md)**
 
-**BRC-133 (Coinbase Transaction):** BRC-133 formalizes MsgType `0x02` within
-BRC-131 frames (FrameVer `0x04`) as the canonical wire format for distributing
-raw coinbase transactions. The ContentID in the frame header carries the SHA256d
-of the coinbase transaction. Frames are delivered on `GroupBlockBroadcast`
-(`FF0E::B:FFFE`); NACK-based retransmission and gap tracking work identically to
-BRC-131 block announcement frames.
+**BRC-133 (Coinbase Transaction) — DEPRECATED:** BRC-133 formalizes MsgType
+`0x02` within BRC-131 frames (FrameVer `0x04`) for distributing raw coinbase
+transactions on `GroupBlockBroadcast` (`FF0E::B:FFFE`). It is **legacy**: a
+standalone coinbase carries no proof of work of its own, so the listener's
+block-control gate (default on) drops it as `coinbase_legacy`, and Teranode
+rejects a loose coinbase. The coinbase now travels inline in the BRC-144 block
+body, inheriting the announce's PoW.
 
 **→
 [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)**
@@ -1208,7 +1209,12 @@ reference
 
 ---
 
-## Coinbase Transaction Frame Format (BRC-133)
+## Coinbase Transaction Frame Format (BRC-133) — deprecated
+
+> **Deprecated.** Standalone coinbase delivery is legacy and is dropped by
+> default (`bsl_frames_dropped_total{reason="coinbase_legacy"}`); the coinbase
+> rides inline in the BRC-144 block body instead. The format below applies
+> only where an operator has explicitly disabled `-require-block-pow`.
 
 BRC-133 formalizes the wire mechanism for distributing coinbase transactions as
 a dedicated message type (`BlockMsgCoinbase = 0x02`) within BRC-131 block
@@ -1758,7 +1764,7 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 | BRC-130 | 104 bytes   | Yes (per-fragment)   | Yes (fragmented)         |
 | BRC-131 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane)          |
 | BRC-132 | 92 bytes    | Yes (per-subtree)    | No (ctrl-plane)          |
-| BRC-133 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane coinbase) |
+| BRC-133 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane coinbase; **deprecated** — dropped by default, coinbase is inline in BRC-144) |
 | BRC-134 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane anchor)   |
 | BRC-135 | 92 bytes    | Yes (emitter-stamped HashKey/SeqNum) | No (ctrl-plane header egress) |
 | BRC-142 | 66 bytes (bundle) | Yes (per-bundle HashKey/SeqNum) | Yes (members share one group + subtree) |

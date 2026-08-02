@@ -1,5 +1,18 @@
 # BRC-133 — Coinbase Transaction Frame Format
 
+> **DEPRECATED — standalone coinbase delivery is legacy and is dropped by
+> default.** A coinbase frame carries no proof of work of its own, so nothing
+> about it can be validated in isolation. The listener's block-control gate
+> (`-require-block-pow`, **default on**) therefore drops every standalone
+> BRC-133 frame before egress and counts it as
+> `bsl_frames_dropped_total{reason="coinbase_legacy"}`. Teranode likewise
+> rejects a loose coinbase.
+>
+> The push model supersedes it: the coinbase travels **inline in the BRC-144
+> block body**, where it inherits the block announce's proof of work. This
+> document is retained to describe the wire format for deployments that have
+> explicitly disabled the gate, and for decoding archived traffic.
+
 BRC-133 defines the policy and wire mechanism for distributing coinbase
 transactions over the multicast fabric. Coinbase transactions are carried as a
 dedicated message type within BRC-131 block control frames, delivered to all
