@@ -140,6 +140,17 @@ responsibility:
 | [retry-endpoint](https://github.com/lightwebinc/retry-endpoint) | Caches frames, retransmits on NACK requests                                                 |
 | [shard-manifest](https://github.com/lightwebinc/shard-manifest) | BRC-139 manifest announcer; emits `shard_bits` + joined-groups beacons                      |
 
+### Integration
+
+Consumer-side components that terminate the fabric's delivery lanes and hand the
+objects to a node implementation. They are not part of the fabric itself: the
+fabric's contract ends at the push frame formats, and an integration component
+speaks whatever the receiving node already speaks.
+
+| Repository                                                        | Purpose                                                                                        |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [teranode-bridge](https://github.com/lightwebinc/teranode-bridge) | Landing-tier bridge for an **unmodified** Teranode cluster. Terminates the per-class push lanes (BRC-12/30 transactions, BRC-143 subtrees, BRC-144 blocks), submits transactions to propagation, and — because Teranode learns of subtrees and blocks by announcement plus pull — caches pushed objects, announces itself as their source, and serves the resulting pull. The reverse path subscribes to the cluster's blockchain notifications and publishes what that cluster produced back onto the object plane. |
+
 ### Shared Libraries
 
 | Repository                                                  | Purpose                                    | Packages                                           |

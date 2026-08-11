@@ -35,6 +35,7 @@ and anchor transactions over reserved control groups.
 | [retransmission-infra](https://github.com/lightwebinc/retransmission-infra)   | Retransmission (deploy) | Ansible/Terraform automation for `retry-endpoint` nodes                             |
 | [shard-manifest](https://github.com/lightwebinc/shard-manifest)   | Manifest                | BRC-139 announcer; periodic `shard_bits` + joined-groups beacon                             |
 | [manifest-infra](https://github.com/lightwebinc/manifest-infra)   | Manifest (deploy)       | Ansible/Terraform automation for `shard-manifest` nodes                                     |
+| [teranode-bridge](https://github.com/lightwebinc/teranode-bridge) | Integration             | Landing-tier bridge: terminates BRC-12/30, BRC-143 and BRC-144 push lanes in front of an unmodified Teranode cluster, and publishes what that cluster produces back |
 | [shard-common](https://github.com/lightwebinc/shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `bundle`, `seqhash`, `sequence`, `txidset`, `cache`, `pow`, `manifest`, `netjoin`, … |
 | [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 + BRC-143/144 push senders |
 | [beef-generator](https://github.com/lightwebinc/beef-generator) | Testing                 | BRC-148/149 BEEF object-plane traffic generator (`beef-gen`)                                |
@@ -92,6 +93,8 @@ and anchor transactions over reserved control groups.
   - [BRC-144 Block Frame Format](docs/brc-144-block-frame.md) — strict parity with
     Teranode's block body: header + counts + ordered subtree roots + full inline
     coinbase + height + BRC-74 coinbase BUMP ([PR #176](https://github.com/bsv-blockchain/BRCs/pull/176), merged)
+  - Reference consumer of both formats, in both directions:
+    [teranode-bridge](https://github.com/lightwebinc/teranode-bridge)
 - [BRC-148 Shard Domain Partitioning and BEEF Object Plane](docs/brc-148-shard-domain-beef-plane.md)
   — Partitions the 16-bit shard-index space into object planes by high nibble;
   allocates the BEEF plane (domain `0x1`, sharded by overlay topic) with
