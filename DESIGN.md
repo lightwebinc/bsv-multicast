@@ -179,6 +179,7 @@ Each service has a dedicated chart repository, consumed by
 | [retry-endpoint-helm](https://github.com/lightwebinc/retry-endpoint-helm)   | retry-endpoint  |
 | [subtx-generator-helm](https://github.com/lightwebinc/subtx-generator-helm) | subtx-generator |
 | [shard-manifest-helm](https://github.com/lightwebinc/shard-manifest-helm)   | shard-manifest  |
+| [teranode-bridge-helm](https://github.com/lightwebinc/teranode-bridge-helm) | teranode-bridge |
 
 ### Testing and Tools
 

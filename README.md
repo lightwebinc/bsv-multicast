@@ -46,6 +46,7 @@ and anchor transactions over reserved control groups.
 | [retry-endpoint-helm](https://github.com/lightwebinc/retry-endpoint-helm)       | Helm chart              | Chart for `retry-endpoint`                                                                  |
 | [subtx-generator-helm](https://github.com/lightwebinc/subtx-generator-helm)     | Helm chart              | Chart for `subtx-generator`                                                                 |
 | [shard-manifest-helm](https://github.com/lightwebinc/shard-manifest-helm)       | Helm chart              | Chart for `shard-manifest`                                                                  |
+| [teranode-bridge-helm](https://github.com/lightwebinc/teranode-bridge-helm)     | Helm chart              | Chart for `teranode-bridge`                                                                 |
 | [bsv-multicast](https://github.com/lightwebinc/bsv-multicast)             | Documentation           | This repository; project overview, design, and BRC specifications                           |
 
 ## Documentation
