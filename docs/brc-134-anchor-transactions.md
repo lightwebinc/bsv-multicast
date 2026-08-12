@@ -29,8 +29,8 @@ sharded this way:
 
 BRC-134 addresses this by routing anchor frames to the **GroupBlockBroadcast**
 group (`FF0E::B:FFFE`), the same global control channel used for block headers
-and coinbase transactions (BRC-131, BRC-133). All subscribers join this group
-unconditionally.
+and coinbase transactions (BRC-131, BRC-133 — the standalone coinbase lane is
+deprecated; see BRC-133). All subscribers join this group unconditionally.
 
 ---
 
@@ -188,11 +188,11 @@ becomes necessary it will be defined in a future revision.
 - [BRC-131: Block Announcement Protocol](./brc-131-block-announcements.md)
   — BRC-131 shares GroupBlockBroadcast
 - [BRC-133: Coinbase Transaction Delivery](brc-133-coinbase-delivery.md) —
-  another control-group transaction type using BRC-131
+  another control-group transaction type using BRC-131 (deprecated — see BRC-133)
 - [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame)
   — `DecodeAnchor`, `IsAnchorFrame`, `FrameVerV6`
 - [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder)
   — `ProcessAnchor`
 - [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener)
   — `processAnchorFrame`
-- [BRC-134: Multicast Anchor Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0134.md) — published BRC
+- [BRC-134: Multicast Anchor Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0134.md) — canonical spec

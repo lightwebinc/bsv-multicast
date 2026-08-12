@@ -122,8 +122,13 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 | DefaultFragDataSize | 1348  | 0x544  | fragDataSize at 1500-byte path MTU       |
 
 Only `FrameVerV3` and `HeaderSizeV3` exist as code constants; the remaining
-rows are protocol values. Fragmentation is off by default: `-frag-mtu`
-defaults to `0` (0 = fragmentation off).
+rows are protocol values. Fragmentation is on by default: `-frag-mtu` defaults
+to `1500` (the Ethernet baseline). An explicit `-frag-mtu 0` disables
+fragmentation, which strands every payload larger than MTU−140 as an
+undeliverable oversize datagram. Deployments size the value to the smallest
+MTU on the egress path — on a tunnelled fabric that is the tunnel inner MTU
+(commonly ~1448), never the local NIC — and values below the IPv6 minimum MTU
+of 1280 are not meaningful.
 
 ---
 
@@ -135,4 +140,4 @@ defaults to `0` (0 = fragmentation off).
 - [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder) — proxy-side fragmentation
 - [shard-listener/reassembly](https://github.com/lightwebinc/shard-listener/tree/main/reassembly) — listener-side reassembly
 - [BRC-132: Subtree Data Multicast Protocol](brc-132-subtree-data.md) — `OrigFrameVer=0x05` usage
-- [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md) — published BRC
+- [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md) — canonical spec

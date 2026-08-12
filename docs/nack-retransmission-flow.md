@@ -64,7 +64,7 @@ Listener receives:  SeqNum 1, 2, 3, [gap], 6, 7, ...
 
 The NACK carries the `HashKey` (stable per-flow identifier) and `StartSeq`/`EndSeq` (missing sequence range). The retry endpoint looks up the frame using the 16-byte cache key `HashKey ∥ StartSeq`. The listener opens a per-request ephemeral UDP socket (`[::]:0`), sends the NACK, and waits up to 300 ms for a single response (`ACK`, `MISS`, or — when the endpoint runs with `-rl-throttle-response` — `THROTTLED`).
 
-### Re-baseline on emitter change (v1.7.0/v1.7.1)
+### Re-baseline on emitter change
 
 Not every forward jump is a gap. A jump larger than `-nack-max-forward-jump`
 (default 4096), or one implausible against the flow's smoothed inter-arrival
@@ -112,7 +112,7 @@ Tiers represent proximity to the transaction source. Lower tier = closer to sour
 
 Listeners try Tier 0 first. On MISS, they advance to Tier 1, then Tier 2, etc.
 
-NACK proxying is shipped: an endpoint started with `-proxy-enabled` forwards a
+An endpoint started with `-proxy-enabled` forwards a
 cache-miss NACK to a configured upstream (`-upstream-retry-endpoints`), setting
 the NACK **Proxied** flag (bit 0) and advertising `HasParent` in its ADVERT.
 The upstream always serves a proxied NACK via unicast; the downstream endpoint

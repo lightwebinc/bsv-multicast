@@ -226,4 +226,4 @@ Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER` — 255 is the stati
 
 ## References
 
-- [BRC-126: Multicast Transaction NACK Retransmission Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md) — published BRC
+- [BRC-126: Multicast Transaction NACK Retransmission Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md) — canonical spec

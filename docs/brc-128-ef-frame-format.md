@@ -74,4 +74,4 @@ BRC-124 and BRC-128 frames coexist on the same multicast groups.
 - [BRC-30: Transaction Extended Format (EF)](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0030.md)
 - [BRC-124: Multicast Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md)
 - **Canonical source:** `shard-common/frame/frame.go`
-- [BRC-128: Multicast Extended Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0128.md) — published BRC
+- [BRC-128: Multicast Extended Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0128.md) — canonical spec

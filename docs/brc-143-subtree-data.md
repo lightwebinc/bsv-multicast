@@ -6,12 +6,10 @@ over a byte stream. It is the counterpart of [BRC-132](brc-132-subtree-data.md)
 (subtree data over the multicast fabric) for a consumer reached by **push**
 (e.g. round-robin SDA delivery over a tunnel) rather than announce/pull.
 
-> **Canonical BRC:** [BRC-143](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0143.md)
-> — merged 2026-07-30 ([PR #175](https://github.com/bsv-blockchain/BRCs/pull/175);
-> draft number restored by [PR #190](https://github.com/bsv-blockchain/BRCs/pull/190)).
-> Finalized against **go-subtree v1.4.2** (the version Teranode HEAD pins) and
-> Teranode's `subtreevalidation` consumer. Canonical bytes live in the upstream
-> BRC; this doc is the local design mirror.
+> **Canonical spec:** [BRC-143](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0143.md).
+> This document is the detailed design and rationale.
+> The byte layout is parity with **go-subtree** (the library Teranode pins) and
+> Teranode's `subtreevalidation` consumer.
 
 ---
 

@@ -94,4 +94,4 @@ Accepted and forwarded verbatim for backward compatibility.
 
 ## References
 
-- [BRC-124: Multicast Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md) — published BRC
+- [BRC-124: Multicast Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md) — canonical spec

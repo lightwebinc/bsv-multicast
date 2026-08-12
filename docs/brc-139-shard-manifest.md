@@ -440,6 +440,6 @@ guidance:
 - [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md)
 - [BRC-127: Subtree Group Announcement](brc-127-subtree-announce.md)
 - [BRC-129: Multicast Group Addressing](brc-129-multicast-addressing.md)
-- [BRC-139: Shard Manifest Announcement (canonical)](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
+- [BRC-139: Shard Manifest Announcement](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md) — canonical spec
 - [Automatic Shard Configuration](../DESIGN.md#automatic-shard-configuration)
 - [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm)

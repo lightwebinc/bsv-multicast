@@ -195,4 +195,4 @@ independently by listeners — even though both egress to the same
   — full BRC-131 header format and BlockAnnounce payload
 - [BRC-134: Chained Anchor Transaction Frames](brc-134-anchor-transactions.md) —
   another control-group transaction type
-- [BRC-133: Multicast Coinbase Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0133.md) — published BRC
+- [BRC-133: Multicast Coinbase Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0133.md) — canonical spec

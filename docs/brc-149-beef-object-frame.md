@@ -2,9 +2,8 @@
 
 Jeff Harris (jeff@lightweb.net)
 
-> **Canonical BRC:** [BRC-149](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0149.md)
-> — merged 2026-07-30 ([PR #183](https://github.com/bsv-blockchain/BRCs/pull/183);
-> draft number restored by [PR #190](https://github.com/bsv-blockchain/BRCs/pull/190)).
+> **Canonical spec:** [BRC-149](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0149.md).
+> This document is the detailed design and rationale.
 > Companion to
 > [BRC-148](brc-148-shard-domain-beef-plane.md), which allocates the BEEF
 > object plane and constrains the fields this format carries.

@@ -8,21 +8,13 @@ across many datagrams; BRC-142 merges many small transactions into one. The goal
 is to cut **packets-per-second** — the dominant data-plane forwarding cost — on
 the replicated fabric and per-tunnel egress hops.
 
-> **Canonical BRC:** [BRC-142](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0142.md)
-> — merged 2026-07-30 ([PR #164](https://github.com/bsv-blockchain/BRCs/pull/164);
-> draft number restored by [PR #190](https://github.com/bsv-blockchain/BRCs/pull/190)).
-> This document is the detailed design and rationale, kept congruent with the
-> upstream text.
+> **Canonical spec:** [BRC-142](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0142.md).
+> This document is the detailed design and rationale.
 >
-> **Reference implementation: SHIPPED** across the data plane — `shard-common`
-> bundle codec (`v0.14.0`), `shard-proxy` coalescing + verbatim relay,
-> `shard-listener` edge-/consumer-decoalesce (`v1.6.5`) and re-bucketing + relay
-> guard (`v1.10.1`), and `retry-endpoint`
-> bundle cache.
-> **§20 records the deliberate deployment decisions** (within-batch flush, spine
-> relays / origin-only coalescing, listener-side re-bucketing, per-proxy opt-in).
 > Design rationale, alternatives, and the deliberate deployment decisions that
-> fixed the parameters below are in [§20](#20-implementation-status--spec-delta).
+> fixed the parameters below (within-batch flush, origin-only coalescing with
+> spine verbatim relay, listener-side re-bucketing, per-proxy opt-in) are in
+> [§20](#20-implementation-status--spec-delta).
 
 ---
 
@@ -410,7 +402,7 @@ them).
 
 ---
 
-## 18. Infrastructure Impact (as shipped)
+## 18. Infrastructure Impact
 
 - **Proxy (`shard-proxy`, OSS)** — opt-in coalescing stage at an **origin** proxy:
   bucket eligible BRC-124/128 frames by `(sender, group, subtree)` within a receive
@@ -467,9 +459,9 @@ independent implementation that follows §2–§17 interoperates.
 **Congruence with the published upstream text
 ([transactions/0142.md](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0142.md)):**
 congruent on wire format and behavior. The member-length
-ceiling is named **`MaxMemberTxLen`** consistently in the PR, this doc, and the code
-(`shard-common/bundle`). The member field sizes (`2`, `32`) stay unexported in the
-codec and appear in both documents' member-format tables, so the brief PR correctly
-omits them from its constants list. The PR's error-handling table is a deliberate
-subset of §16. The two documents are kept congruent; editorial deltas go via a
-new upstream PR.
+ceiling is named **`MaxMemberTxLen`** consistently in the upstream text, this doc,
+and the code (`shard-common/bundle`). The member field sizes (`2`, `32`) stay
+unexported in the codec and appear in both documents' member-format tables, so the
+brief upstream text correctly omits them from its constants list. The upstream
+error-handling table is a deliberate subset of §16. The two documents are kept
+congruent; editorial deltas go upstream.

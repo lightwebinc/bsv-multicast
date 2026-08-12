@@ -76,7 +76,10 @@ Craig S. Wright in
 
 ## High-Level Architecture
 
-The multicast pipeline consists of three tiers:
+The multicast pipeline consists of three tiers. (Diagrams throughout this
+document show ASM site-local addressing, `FF05::B:<shard>`, for brevity;
+[SSM](#source-specific-multicast-ssm) — `FF35::`/`FF3E::` — is the deployment
+default.)
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -149,7 +152,7 @@ speaks whatever the receiving node already speaks.
 
 | Repository                                                        | Purpose                                                                                        |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [teranode-bridge](https://github.com/lightwebinc/teranode-bridge) | Landing-tier bridge for an **unmodified** Teranode cluster. Terminates the per-class push lanes (BRC-12/30 transactions, BRC-143 subtrees, BRC-144 blocks), submits transactions to propagation, and — because Teranode learns of subtrees and blocks by announcement plus pull — caches pushed objects, announces itself as their source, and serves the resulting pull. The reverse path subscribes to the cluster's blockchain notifications and publishes what that cluster produced back onto the object plane. |
+| [teranode-bridge](https://github.com/lightwebinc/teranode-bridge) | Landing-tier bridge for an **unmodified** Teranode cluster. Terminates the per-class push lanes (BRC-30 transactions, BRC-143 subtrees, BRC-144 blocks), submits transactions to propagation, and — because Teranode learns of subtrees and blocks by announcement plus pull — caches pushed objects, announces itself as their source, and serves the resulting pull. The reverse path subscribes to the cluster's blockchain notifications and publishes what that cluster produced back onto the object plane. |
 
 ### Shared Libraries
 
@@ -279,7 +282,7 @@ Each service has a dedicated chart repository, consumed by
                                            │ • Track sequence gaps per flow           │
                                            │   (HashKey/SeqNum monotonic counter)     │
                                            │ • Forward matching frames to egress_addr │
-                                           │   (UDP or TCP, optional strip-header)    │
+                                           │ (TCP; UDP legacy; optional strip-header) │
                                            └──────────────────────────────────────────┘
                                                             │
                                                             ▼
@@ -370,7 +373,7 @@ A worked walkthrough of the top-bits extraction arithmetic is in
 Bits [127:112]   FF0X  Multicast prefix + scope (e.g., FF05 for site-local)
 Bits [111: 32]   0x00  Zero (IANA 96-bit boundary, 80 bits)
 Bits [ 31: 16]   GID   IANA group-id (default 0x000B = IANA Bitcoin SV Node Groups)
-Bits [ 15:  0]   IDX   Shard index (up to 16 bits; top 4 reserved for control)
+Bits [ 15:  0]   IDX   Shard index (up to 16 bits; top 2,048 indices 0xF800–0xFFFF reserved for control)
 ```
 
 The IANA Bitcoin SV Node Groups allocation is `FF0X::B`. Operators MAY override
@@ -399,8 +402,14 @@ on-wire default is `0x000B` for IANA conformance.
 | 0xFFFD | Beacon (site)                   | FF05  | FF05::B:FFFD       |
 | 0xFFFD | Beacon (org)                    | FF08  | FF08::B:FFFD       |
 | 0xFFFD | Beacon (global)                 | FF0E  | FF0E::B:FFFD       |
+| 0xFFFA | Block header egress (BRC-135)   | FF0E  | FF0E::B:FFFA       |
 | 0xFFFE | Block Control channel           | FF0E  | FF0E::B:FFFE       |
 | 0xFFFF | _(reserved)_                    | —     | do not use         |
+
+Two further indices are **virtual**: `0xFFF8` (`GroupCoinbaseFlow`, legacy
+BRC-133) and `0xFFF9` (`GroupAnchorFlow`, BRC-134) are HashKey flow-identity
+ingredients only — frames stamped with them still egress on the Block Control
+channel (`0xFFFE`), and no multicast group is ever joined at those indices.
 
 See
 [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md)
@@ -432,7 +441,9 @@ wallet operation — and a raw tx shares its extended form's TxID, so a fabric
 re-transmit would collide with ingress dedup). Relayed (already-stamped)
 BRC-124/128 frames are exempt, so the relay hot path is untouched; legacy
 BRC-12 (V1) frames are rejected under `-require-ef` even when stamped (the
-flag is opt-in). See the proxy's `docs/architecture.md` § Transaction ingress.
+OSS binary flag defaults off; production and commercial deployment profiles
+enable it by default). See the proxy's `docs/architecture.md` § Transaction
+ingress.
 
 **Edge transport: TCP lanes.** The OSS proxy implements the TCP lanes: a
 framed lane on the tx port (8725, transactions + anchors + BEEF records over
@@ -449,7 +460,8 @@ Key fields: Network magic, Protocol version, Frame version, Transaction ID,
 HashKey (XXH64 per-flow identifier), SeqNum (monotonic per-flow counter),
 Subtree ID, Payload length, and BSV tx payload. Both BRC-12 (legacy) and
 BRC-124/BRC-128 frames are accepted by all components — except under
-`-require-ef` (opt-in), where legacy BRC-12 is rejected.
+`-require-ef` (default-on in deployment profiles), where legacy BRC-12 is
+rejected.
 
 **BRC-128 (Extended Format):** BRC-128 frames carry BRC-30 Extended Format (EF)
 transaction payloads inside the standard 92-byte BRC-124 header. Frame Version
@@ -611,7 +623,8 @@ and/or multicast consumers, performs NACK-based gap recovery.
 - Dual-level filtering: MLD group join + userspace shard/subtree filter
 - NORM-inspired gap tracking per flow via HashKey/SeqNum monotonic counter
 - NACK dispatch to configurable retry endpoints
-- Egress via UDP or TCP (optional strip-header mode)
+- Egress via TCP (optional strip-header mode); UDP egress is legacy — lossy
+  toward the consumer, retained for lab use
 - Multicast egress for domain bridging (re-emit filtered frames to a separate
   multicast address space)
 - BRC-130 fragment reassembly (`reassembly` package) with SHA256d verification
@@ -1059,6 +1072,15 @@ at bytes 0–91 (`FrameVer=0x03`).
 **Fragment data size** at standard Ethernet MTU (1500 B):
 `1500 − 40 − 8 − 104 = 1348 bytes/fragment`.
 
+**Sizing invariants.** Fragmentation is on by default at the 1500 baseline;
+`-frag-mtu 0` disables it, which makes any payload larger than the
+unfragmented ceiling (`MTU − 140`) undeliverable. The value MUST be sized to
+the **smallest MTU on the egress path** (tunnel underlays commonly yield
+~1448), never the local NIC — a frame that fits the NIC but not a downstream
+tunnel is silently dropped in the underlay with no NACK signal, because the
+frame never reaches a listener's gap tracker. Values below the IPv6 minimum
+MTU (1280) are not meaningful; 1280 is the floor.
+
 **Per-fragment gap tracking:** The proxy stamps an independent
 `HashKey`/`SeqNum` per fragment so each fragment is treated as a separate frame.
 Individual lost fragments are recovered via the standard BRC-126 NACK mechanism
@@ -1236,8 +1258,10 @@ of shard assignment.
 
 The 92-byte header is identical to the BRC-124 / BRC-131 layout. The ContentID
 field (bytes 8–39) carries the CoinbaseTxID (SHA256d of the coinbase
-transaction). The proxy stamps `HashKey` as `XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros)`
-and a monotonic `SeqNum` in-place. The raw BSV-serialised coinbase transaction
+transaction). The proxy stamps `HashKey` as `XXH64(senderIPv6 ∥ 0xFFF8 ∥ zeros)`
+— the virtual `GroupCoinbaseFlow` index, giving the coinbase lane a flow
+identity independent of other `0xFFFE` traffic while frames still egress on the
+Block Control channel — and a monotonic `SeqNum` in-place. The raw BSV-serialised coinbase transaction
 (no P2P envelope) is carried as the payload.
 
 Sequence tracking and NACK retransmission are identical to BRC-131: the retry
@@ -1261,12 +1285,14 @@ regardless of which shard its TxID would otherwise hash to.
 
 Anchor frames are delivered on the **GroupBlockBroadcast** group
 (`FF0E::B:FFFE`), the same global control channel used for BRC-131 block
-announcements and BRC-133 coinbase transactions.
+announcements and (legacy, deprecated) BRC-133 coinbase transactions.
 
 The 92-byte header is layout-identical to BRC-124 with Frame Version `0x06` at
 offset 6. The TxID field (bytes 8–39) carries the SHA256d of the anchor
-transaction. `HashKey` is stamped as `XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros)` by the
-proxy; `SeqNum` is a monotonic per-sender counter. The raw BSV-serialised anchor
+transaction. `HashKey` is stamped as `XXH64(senderIPv6 ∥ 0xFFF9 ∥ zeros)` by the
+proxy — the virtual `GroupAnchorFlow` index, giving anchors a flow identity
+independent of other `0xFFFE` traffic while frames still egress on the Block
+Control channel; `SeqNum` is a monotonic per-sender counter. The raw BSV-serialised anchor
 transaction is carried as the payload (no P2P envelope). BRC-130 fragmentation
 is not defined for BRC-134.
 
@@ -1483,7 +1509,7 @@ make test-e2e
 **Purpose:** Full-stack integration testing across all components.
 
 The [multicast-test](https://github.com/lightwebinc/multicast-test) repository
-is the public integration suite: a **Go Docker harness** (`harness/`) of ~57
+is the public integration suite: a **Go Docker harness** (`harness/`) of 60+
 scenario tests driven by `go test`. Each scenario spawns ephemeral Docker
 containers on an isolated IPv6 multicast bridge (`fd10::/64`) and covers
 functional filters, NACK retransmission, fragmentation, BRC-127 group
@@ -1516,6 +1542,7 @@ make help          # show all targets (tiered: test-retransmit, test-frag,
 | OS                   | Service Manager | Network Config     | Proxy | Listener | Retry | Manifest |
 | -------------------- | --------------- | ------------------ | ----- | -------- | ----- | -------- |
 | Ubuntu 24.04         | systemd         | Netplan / ip       | ✓     | ✓        | ✓     | ✓        |
+| Debian 13            | systemd         | ifupdown / ip      | ✓     | ✓        | ✓     | ✓        |
 | FreeBSD 14           | rc.d            | rc.conf / ifconfig | ✓     | ✓        | ✓     | ✓        |
 | AWS EC2              | systemd         | ENI + Terraform    | ✓     | ✓        | ✓     | ✓        |
 | Kubernetes (k0s ref) | kubelet         | Multus macvlan     | ✓     | ✓        | ✓     | ✓        |
@@ -1529,8 +1556,8 @@ which composes the per-service Helm charts (`shard-proxy-helm`,
 For a single-host footprint, the three services deploy as a **collapsed
 node** — `shard-proxy`, `shard-listener`, and `retry-endpoint` co-located on
 one multi-homed host (uplink for sender ingress, multicast-fabric interface
-for IPv6 multicast in/out) — on Ubuntu 24.04, FreeBSD 14, AWS EC2, or any SSH
-host.
+for IPv6 multicast in/out) — on Ubuntu 24.04, Debian 13, FreeBSD 14, AWS EC2,
+or any SSH host.
 
 ### Networking Requirements
 
@@ -1739,7 +1766,7 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 | Service                     | Port         | Protocol | Purpose                                      |
 | --------------------------- | ------------ | -------- | -------------------------------------------- |
 | shard-proxy (UDP ingress)   | 8725         | UDP      | User/tx frame ingress                        |
-| shard-proxy (TCP ingress)   | configurable | TCP      | Reliable frame ingress (disabled by default) |
+| shard-proxy (TCP ingress)   | configurable | TCP      | Reliable frame ingress (disabled by default in the OSS binary; TCP is the recommended submission transport) |
 | shard-proxy (subtree push)  | 8726 (default: disabled) | TCP | Privileged BRC-143 subtree push lane (`-subtree-listen-port`; reframed to BRC-132) |
 | shard-proxy (block push)    | 8727 (default: disabled) | TCP | Privileged BRC-144 block push lane (`-block-listen-port`; reframed to BRC-131) |
 | shard-proxy (BEEF lane)     | 8728 (default: disabled) | TCP | Open-class BRC-149 BEEF record lane (`-beef-listen-port`; flow separation) |

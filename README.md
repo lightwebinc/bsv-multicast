@@ -71,7 +71,9 @@ and anchor transactions over reserved control groups.
 - [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md) — Subtree
   data distribution with Merkle roots
 - [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)
-  — Coinbase transaction wire format on the control channel
+  — Coinbase transaction wire format on the control channel (**deprecated** —
+  the coinbase travels inline in the BRC-144 block body; standalone coinbase
+  frames are dropped by the default block-control gate)
 - [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)
   — Chained anchor transaction distribution
 - [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) —
@@ -80,34 +82,35 @@ and anchor transactions over reserved control groups.
   Periodic participant configuration announcement (shard_bits + joined groups)
 - [BRC-142 Coalescing (Bundle) Frame](docs/brc-142-coalescing-frame.md) —
   Packs many small txs of one (group, subtree) into one ≤MTU datagram; inverse
-  of BRC-130 (published — [PR #164](https://github.com/bsv-blockchain/BRCs/pull/164);
-  reference implementation shipped)
+  of BRC-130
 - **Push frame formats** — whole-object delivery/ingest to a consumer reached by
   push (round-robin SDA over a tunnel) rather than announce/pull. Only subtree
   and block need new formats; a coinbase off the fabric is a plain **BRC-12**
   transaction (delivered inline inside the block frame — Teranode rejects a loose
   coinbase) and an anchor is an ordinary **BRC-30 EF** transaction, so neither
-  gets its own format (published):
+  gets its own format:
   - [BRC-143 Subtree Data Frame Format](docs/brc-143-subtree-data.md) — in-band
     merkle root + `uint64` node count + ordered node hashes; coinbase placeholder
-    `0xFF×32` detected by value ([PR #175](https://github.com/bsv-blockchain/BRCs/pull/175), merged)
+    `0xFF×32` detected by value
   - [BRC-144 Block Frame Format](docs/brc-144-block-frame.md) — strict parity with
     Teranode's block body: header + counts + ordered subtree roots + full inline
-    coinbase + height + BRC-74 coinbase BUMP ([PR #176](https://github.com/bsv-blockchain/BRCs/pull/176), merged)
+    coinbase + height + BRC-74 coinbase BUMP
   - Reference consumer of both formats, in both directions:
     [teranode-bridge](https://github.com/lightwebinc/teranode-bridge)
 - [BRC-148 Shard Domain Partitioning and BEEF Object Plane](docs/brc-148-shard-domain-beef-plane.md)
   — Partitions the 16-bit shard-index space into object planes by high nibble;
   allocates the BEEF plane (domain `0x1`, sharded by overlay topic) with
-  per-domain BRC-139 manifest coordination (published —
-  [PR #181](https://github.com/bsv-blockchain/BRCs/pull/181))
+  per-domain BRC-139 manifest coordination
 - [BRC-149 Multicast BEEF Object Frame Format](docs/brc-149-beef-object-frame.md)
   — Companion to BRC-148: assigns FrameVer `0x09` and fixes the object frame
   plus the submission/delivery record grammars (open-port `0xBEEF` tag
-  detection) (published —
-  [PR #183](https://github.com/bsv-blockchain/BRCs/pull/183))
+  detection)
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
+- **Implemented opt-in features** —
+  [Source-Specific Multicast (SSM)](DESIGN.md#source-specific-multicast-ssm) and
+  [Automatic Shard Configuration](DESIGN.md#automatic-shard-configuration)
+- [Diagrams](diagrams/README.md) — component and flow diagrams (Mermaid)
 
 ## License
 

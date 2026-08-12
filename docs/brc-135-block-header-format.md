@@ -203,11 +203,11 @@ A consumer receiving BRC-135 frames:
 - [BRC-131: Block Announcement Protocol](./brc-131-block-announcements.md) —
   source of the 80-byte block header extracted by the emitter
 - [BRC-133: Coinbase Transaction Delivery](./brc-133-coinbase-delivery.md) —
-  companion control-plane frame type
+  companion control-plane frame type (deprecated — see BRC-133)
 - [BRC-134: Chained Anchor Transaction Frames](./brc-134-anchor-transactions.md)
   — companion control-plane frame type
 - [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame)
   — `EncodeBlockHeader`, `DecodeBlockHeader`, `IsBlockHeaderFrame`, `FrameVerV7`
 - [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener)
   — reference emitter implementation
-- [BRC-135: Multicast Block Header Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0135.md) — published BRC
+- [BRC-135: Multicast Block Header Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0135.md) — canonical spec

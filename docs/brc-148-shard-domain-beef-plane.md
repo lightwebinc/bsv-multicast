@@ -2,9 +2,8 @@
 
 Jeff Harris (jeff@lightweb.net)
 
-> **Canonical BRC:** [BRC-148](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0148.md)
-> — merged 2026-07-30 ([PR #181](https://github.com/bsv-blockchain/BRCs/pull/181);
-> draft number restored by [PR #190](https://github.com/bsv-blockchain/BRCs/pull/190)).
+> **Canonical spec:** [BRC-148](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0148.md).
+> This document is the detailed design and rationale.
 > Extends
 > [BRC-129](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md)
 > (addressing) and forward-extends

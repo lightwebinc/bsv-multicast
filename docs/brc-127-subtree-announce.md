@@ -170,4 +170,4 @@ When both `-announce-addr` and `-subtree-group` are set, `subtx-gen` maintains a
 
 ## References
 
-- [BRC-127: Multicast Subtree Group Announcement Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0127.md) — published BRC
+- [BRC-127: Multicast Subtree Group Announcement Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0127.md) — canonical spec

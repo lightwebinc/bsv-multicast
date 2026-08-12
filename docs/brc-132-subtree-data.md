@@ -227,4 +227,4 @@ reserved design, **not implemented** — `-subtree-data-verify-merkle` /
 - [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener) — `processSubtreeDataFrame`
 - [retry-endpoint/ingress](https://github.com/lightwebinc/retry-endpoint/tree/main/ingress) — `processSubtreeDataFrame`
 - [retry-endpoint/retransmit](https://github.com/lightwebinc/retry-endpoint/tree/main/retransmit) — V5-aware retransmit routing
-- [BRC-132: Multicast Subtree Data Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0132.md) — published BRC
+- [BRC-132: Multicast Subtree Data Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0132.md) — canonical spec

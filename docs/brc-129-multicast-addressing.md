@@ -66,7 +66,7 @@ groupIndex = binary.BigEndian.Uint32(txid[0:4]) >> (32 - shardBits)
 
 ## Object Planes and Specialty Transmission Domains
 
-Indices `0x1000`–`0xF7FF` are partitioned into **object planes** by the index high nibble ([BRC-148](brc-148-shard-domain-beef-plane.md): `PlaneBase(domain) = domain << 12`). Domain `0x1` (`0x1000`–`0x1FFF`) is the allocated BEEF object plane; domains `0x2`–`0xE` are reserved for future object planes and specialty transmission domains.
+Indices `0x1000`–`0xEFFF` are partitioned into **object planes** by the index high nibble ([BRC-148](brc-148-shard-domain-beef-plane.md): `PlaneBase(domain) = domain << 12`). Domain `0x1` (`0x1000`–`0x1FFF`) is the allocated BEEF object plane; domains `0x2`–`0xE` are reserved for future object planes and specialty transmission domains. Domain `0xF` MUST NOT be assigned as a plane base — its slot would overlap the network service range — so the residual band `0xF000`–`0xF7FF` remains reserved; implementations MUST NOT join or transmit to it.
 
 ---
 
@@ -130,7 +130,7 @@ Several frame types share `GroupBlockBroadcast` (`0xFFFE`) as their egress desti
 
 | Virtual index | Constant            | Used by             | Egress group |
 | ------------- | ------------------- | ------------------- | ------------ |
-| `0xFFF8`      | `GroupCoinbaseFlow` | BRC-133 coinbase tx | `0xFFFE`     |
+| `0xFFF8`      | `GroupCoinbaseFlow` | BRC-133 coinbase tx (deprecated — legacy frames only) | `0xFFFE`     |
 | `0xFFF9`      | `GroupAnchorFlow`   | BRC-134 anchor tx   | `0xFFFE`     |
 
 BRC-131 block announces continue to use `0xFFFE` itself as the HashKey ingredient.
@@ -175,14 +175,14 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 - **Network-service group helper:** `shard-common/shard/control.go` — `GroupAddr(scopePrefix uint16, groupID uint16, idx GroupIdx)` (standalone; not bound to Engine scope).
 - **Group index type:** `type GroupIdx uint16` — typed wrapper for the 16-bit IANA group index in bytes 14–15. Provides a `String()` method returning a stable snake_case label (`"block_broadcast"`, `"beacon"`, etc.) used in metrics and logs.
 - **Constants:** `GroupBlockHeader = 0xFFFA`, `GroupSubtreeDataAnnounce = 0xFFFB`, `GroupSubtreeGroupAnnounce = 0xFFFC`, `GroupBeacon = 0xFFFD`, `GroupBlockBroadcast = 0xFFFE`.
-- **Virtual HashKey ingredients (not multicast addresses):** `GroupCoinbaseFlow = 0xFFF8`, `GroupAnchorFlow = 0xFFF9`.
+- **Virtual HashKey ingredients (not multicast addresses):** `GroupCoinbaseFlow = 0xFFF8` (deprecated — legacy BRC-133 frames only), `GroupAnchorFlow = 0xFFF9`.
 - **Default group-id:** `shard.DefaultGroupID = 0x000B` (IANA Bitcoin).
 
 ---
 
 ## References
 
-- [BRC-129: IPv6 Multicast Group Address Assignments](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md) — published BRC
+- [BRC-129: IPv6 Multicast Group Address Assignments](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md) — canonical spec
 - [BRC-139: Shard Manifest Announcement](brc-139-shard-manifest.md) — distributes the publisher source set for SSM data-plane source discovery
 - [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm) — deployment postures and fabric prerequisites
 - [RFC 4607](https://www.rfc-editor.org/rfc/rfc4607) — Source-Specific Multicast (`FF3x::/32` range)
