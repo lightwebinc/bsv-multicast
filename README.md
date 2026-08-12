@@ -35,7 +35,7 @@ and anchor transactions over reserved control groups.
 | [retransmission-infra](https://github.com/lightwebinc/retransmission-infra)   | Retransmission (deploy) | Ansible/Terraform automation for `retry-endpoint` nodes                             |
 | [shard-manifest](https://github.com/lightwebinc/shard-manifest)   | Manifest                | BRC-139 announcer; periodic `shard_bits` + joined-groups beacon                             |
 | [manifest-infra](https://github.com/lightwebinc/manifest-infra)   | Manifest (deploy)       | Ansible/Terraform automation for `shard-manifest` nodes                                     |
-| [teranode-bridge](https://github.com/lightwebinc/teranode-bridge) | Integration             | Landing-tier bridge: terminates BRC-12/30, BRC-143 and BRC-144 push lanes in front of an unmodified Teranode cluster, and publishes what that cluster produces back |
+| [teranode-bridge](https://github.com/lightwebinc/teranode-bridge) | Integration             | Landing-tier bridge: terminates BRC-30, BRC-143 and BRC-144 push lanes in front of an unmodified Teranode cluster, and publishes what that cluster produces back |
 | [shard-common](https://github.com/lightwebinc/shard-common)       | Shared library          | Protocol primitives: `frame`, `shard`, `bundle`, `seqhash`, `sequence`, `txidset`, `cache`, `pow`, `manifest`, `netjoin`, … |
 | [subtx-generator](https://github.com/lightwebinc/subtx-generator) | Testing                 | Traffic generator for load/functional testing; BRC-127/131/132/134 + BRC-143/144 push senders |
 | [beef-generator](https://github.com/lightwebinc/beef-generator) | Testing                 | BRC-148/149 BEEF object-plane traffic generator (`beef-gen`)                                |
