@@ -172,8 +172,9 @@ speaks whatever the receiving node already speaks.
 
 ### Helm Charts
 
-Each service has a dedicated chart repository, consumed by
-`multicast-kube-infra`:
+Each service has a dedicated chart repository; `multicast-kube-infra` composes
+the proxy/listener/retry-endpoint/subtx-generator charts, while the
+shard-manifest and teranode-bridge charts install standalone:
 
 | Repository                                                                  | Chart           |
 | --------------------------------------------------------------------------- | --------------- |
@@ -809,11 +810,9 @@ and ordinary consumers interleaved (best fit per device + bandwidth):
   `-block-listen-port` (standard 8727) accepts BRC-144 block pushes; the
   proxy reframes each onto the fabric internally (BRC-132 subtree data;
   BRC-131 announce with the coinbase carried inline in the block body). Both
-  default `0` (disabled) ⇒ the proxy ingests transactions only. The former
-  miner multicast ingress (`-miner-listen-port` / `-miner-tcp-listen-port` /
-  `-tx-accept-privileged`) was removed 2026-07-07 — privileged classes are
-  never submitted as multicast frames; multicast is fabric-internal
-  transport.
+  default `0` (disabled) ⇒ the proxy ingests transactions only. There is no
+  miner multicast ingress — privileged classes are never submitted as
+  multicast frames; multicast is fabric-internal transport.
 - **BEEF lane** (`-beef-listen-port`, standard 8728) is a single-class TCP
   lane for BRC-148/149 BEEF object submissions — an **open** class like
   transactions (flow separation, not privilege); BEEF records are also
@@ -1550,8 +1549,9 @@ make help          # show all targets (tiered: test-retransmit, test-frag,
 Kubernetes deployment is provided by
 [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra),
 which composes the per-service Helm charts (`shard-proxy-helm`,
-`shard-listener-helm`, `retry-endpoint-helm`, `subtx-generator-helm`,
-`shard-manifest-helm`).
+`shard-listener-helm`, `retry-endpoint-helm`, `subtx-generator-helm`); the
+`shard-manifest` and `teranode-bridge` charts ship standalone and are
+deployed separately.
 
 For a single-host footprint, the three services deploy as a **collapsed
 node** — `shard-proxy`, `shard-listener`, and `retry-endpoint` co-located on

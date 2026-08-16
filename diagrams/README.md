@@ -25,7 +25,7 @@ flowchart LR
 
     subgraph proxy["shard-proxy"]
         PARSE["Parse + validate<br/>BRC-124 / BRC-128 / bare tx<br/>(require-ef: EF-native ingress)"]
-        GATE["Gates<br/>block-control PoW (require-block-pow)<br/>drops legacy standalone coinbase"]
+        GATE["Gates<br/>block-announce PoW (require-block-pow)<br/>privileged-class socket rejection"]
         SHARD["Shard derivation<br/>TxID bits → group index<br/>(shard_bits, BRC-129)"]
         STAMP["Stamp HashKey + SeqNum<br/>XXH64 per-flow identity,<br/>monotonic counter"]
         FRAG["BRC-130 fragmentation<br/>payload > MTU−140 → k fragments<br/>sized to smallest egress-path MTU"]
@@ -34,8 +34,8 @@ flowchart LR
 
     subgraph fabric["IPv6 multicast fabric (UDP 9001)"]
         SHARDS["FF3E::B:&lt;shard&gt;<br/>sharded tx groups"]
-        CTRL["FF0E::B:FFFE block control<br/>(announce, anchor)"]
-        HDR["FF0E::B:FFFA header lane<br/>(BRC-135, bare 80 B)"]
+        CTRL["FF3E::B:FFFE block control<br/>(announce, anchor)"]
+        HDR["FF3E::B:FFFA header lane<br/>(BRC-135, bare 80 B)"]
     end
 
     UDPTX --> PARSE
@@ -68,6 +68,7 @@ flowchart LR
     subgraph listener["shard-listener"]
         JOIN["MLD join (SSM source-filtered)<br/>SO_REUSEPORT workers"]
         FILT["Filters<br/>shard filter (defense-in-depth)<br/>subtree include/exclude"]
+        BGATE["Block-control gate (require-block-pow)<br/>re-validates announce PoW<br/>drops legacy standalone coinbase"]
         REASM["BRC-130 reassembly<br/>slot per TxID, SHA256d verify"]
         DECO["BRC-142 decoalesce<br/>bundle → member frames"]
         GAP["Gap tracking<br/>per HashKey/SeqNum flow"]
@@ -90,6 +91,8 @@ flowchart LR
     REASM --> GAP
     DECO --> GAP
     FILT --> GAP
+    JOIN -->|"V4 block frames (bypass filters)"| BGATE
+    BGATE --> GAP
     GAP -->|"gap detected: NACK"| RETRY
     RETRY -->|"re-multicast into group"| GRP
     GAP --> DEDUP
@@ -111,7 +114,7 @@ sequenceDiagram
     participant R as retry-endpoint tier 0
     participant U as upstream retry-endpoint
 
-    R--)F: ADVERT beacon (FF0E::B:FFFD)<br/>groups, tier, preference, HasParent
+    R--)F: ADVERT beacon (FF3E::B:FFFD)<br/>groups, tier, preference, HasParent
     P->>F: frame (HashKey, SeqNum=n)
     F->>L: deliver
     F->>R: deliver (cache, per-class TTL)

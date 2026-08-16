@@ -92,10 +92,11 @@ BRC-124 shard frames:
   coinbase frames an independent flow identity from BRC-131 block announces,
   which share the same egress multicast group. If the frame arrives
   pre-stamped (`SeqNum != 0`), it is forwarded verbatim.
-- Listeners observe the flow with `ctrlGroupIdx=0xFFFE` (the group the frame
-  lives on — the `0xFFF8` ingredient exists only inside the proxy-stamped
-  HashKey) for gap detection and dispatch BRC-126 NACKs to retry endpoints on
-  gap.
+- Listeners gap-track coinbase frames under the virtual `0xFFF8`
+  (`GroupCoinbaseFlow`) index, matching the proxy's HashKey ingredient. The
+  index is process-local and never appears on the NACK wire — it affects
+  metric labelling only; recovery routing is unchanged, and listeners
+  dispatch BRC-126 NACKs to retry endpoints on gap.
 - Retry endpoints join `FF0E::B:FFFE` and cache BRC-131 `BlockMsgCoinbase`
   frames by `HashKey ∥ SeqNum`. On NACK, the frame is retransmitted to
   `FF0E::B:FFFE` (not to any shard group).
@@ -151,12 +152,13 @@ independently by listeners — even though both egress to the same
 3. **Egress** — `egress.Sender.SendBlock(raw, bf)` forwards the frame (or
    payload only in strip-header mode) downstream.
 4. **Gap tracking** —
-   `Tracker.Observe(ctrlGroupIdx=0xFFFE, zeroSubtreeID, HashKey, SeqNum, ContentID, source net.IP)`
-   when `SeqNum != 0`. The listener passes `0xFFFE` (`GroupBlockBroadcast`) for
-   **all** V4 frames including coinbase — a NACK must target the group the
-   frame actually lives on; `0xFFF8` is only the proxy-side HashKey ingredient
-   that keeps the coinbase flow distinct. Gap-flow labels currently read
-   `brc131` for coinbase.
+   `Tracker.Observe(ctrlGroupIdx, zeroSubtreeID, HashKey, SeqNum, ContentID, source net.IP)`
+   when `SeqNum != 0`. The listener passes the virtual `0xFFF8`
+   (`GroupCoinbaseFlow`) index for coinbase frames and `0xFFFE`
+   (`GroupBlockBroadcast`) for other V4 frames — matching the proxy's HashKey
+   ingredient. The index is process-local and never appears on the NACK wire;
+   it affects metric labelling only, and recovery routing is unchanged (a
+   NACK still targets the group the frame actually lives on).
 5. **Filtering** — Coinbase frames bypass all shard/subtree filters; every
    subscriber receives every coinbase frame.
 

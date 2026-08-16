@@ -199,6 +199,19 @@ significant only for **wide planes** (see below); for any plane with
 `shard_bits ≤ 12` and a `0x1000`-aligned base, the low-12-bit shard index and the
 high-nibble base do not overlap and the result is identical to an OR.
 
+**`shardBits = 0` — the single-group plane.** A width of zero is valid and
+means the plane is not sharded: `shardIndex` is `0` for every object and the
+plane occupies exactly its base slot, `IDX = planeBase(domain)`. Implementers
+MUST special-case it rather than evaluate the expression above, whose
+`>> (32 - shardBits)` term becomes a 32-bit shift of a 32-bit value — zero in
+some languages, undefined behaviour in others. This is the expected
+configuration for a plane whose delivery selectivity comes from elsewhere: on
+the BEEF plane a subscriber's topics are filtered per-consumer at the delivery
+operator, so a single group carrying every topic is a deliberate operating
+point, not a degenerate one, and it removes generation transitions entirely.
+A deployment SHOULD widen `shard_bits` only when per-group delivery capacity,
+not topic count, becomes the binding constraint.
+
 The consistent-hashing split property of BRC-129 is preserved per plane:
 increasing a plane's `shard_bits` by one splits each of its groups into exactly
 two children, so no subscription is ever re-hashed to an unrelated group. A

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="BSV layered multicast">
+  <rect width="128" height="128" rx="24" fill="#0b2447"/>
+  <!-- source node -->
+  <circle cx="32" cy="64" r="10" fill="#ffffff"/>
+  <!-- fan-out edges -->
+  <path d="M42 60 L82 30" stroke="#5b8def" stroke-width="6" stroke-linecap="round"/>
+  <path d="M42 64 L82 64" stroke="#5b8def" stroke-width="6" stroke-linecap="round"/>
+  <path d="M42 68 L82 98" stroke="#5b8def" stroke-width="6" stroke-linecap="round"/>
+  <!-- receiver nodes -->
+  <circle cx="94" cy="28" r="8" fill="#ffffff"/>
+  <circle cx="94" cy="64" r="8" fill="#ffffff"/>
+  <circle cx="94" cy="100" r="8" fill="#ffffff"/>
+</svg>

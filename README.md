@@ -107,9 +107,11 @@ and anchor transactions over reserved control groups.
   detection)
 - [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
   pipeline diagrams
-- **Implemented opt-in features** —
-  [Source-Specific Multicast (SSM)](DESIGN.md#source-specific-multicast-ssm) and
+- **Operational modes** —
+  [Source-Specific Multicast (SSM)](DESIGN.md#source-specific-multicast-ssm)
+  (deployment default) and
   [Automatic Shard Configuration](DESIGN.md#automatic-shard-configuration)
+  (opt-in)
 - [Diagrams](diagrams/README.md) — component and flow diagrams (Mermaid)
 
 ## License

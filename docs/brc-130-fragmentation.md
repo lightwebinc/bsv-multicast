@@ -76,6 +76,7 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 | `bsl_reassembly_completed_total`     | Reassemblies completed and delivered downstream         |
 | `bsl_reassembly_abandoned_total`     | Slots evicted due to TTL expiry or slot-cap eviction    |
 | `bsl_reassembly_hash_mismatch_total` | Reassembled payloads that failed SHA256d verification   |
+| `bsl_reassembly_late_fragments_total` | Fragments dropped because their object already completed (late repair copies suppressed by completion memory) |
 
 ---
 
