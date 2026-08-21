@@ -105,8 +105,6 @@ and anchor transactions over reserved control groups.
   — Companion to BRC-148: assigns FrameVer `0x09` and fixes the object frame
   plus the submission/delivery record grammars (open-port `0xBEEF` tag
   detection)
-- [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
-  pipeline diagrams
 - **Operational modes** —
   [Source-Specific Multicast (SSM)](DESIGN.md#source-specific-multicast-ssm)
   (deployment default) and

@@ -103,7 +103,6 @@ flowchart LR
 ## NACK retransmission (BRC-126)
 
 Wire detail, tier escalation, and cross-domain proxying:
-[nack-retransmission-flow](../docs/nack-retransmission-flow.md) and
 [BRC-126](../docs/brc-126-retransmission-protocol.md).
 
 ```mermaid

@@ -365,9 +365,6 @@ Group 1 splits into:  1a (txid[0] bit 31 = 0), 1b (txid[0] bit 31 = 1)
 **Benefit:** When increasing shard_bits, subscribers only need to join
 additional groups. Existing subscriptions remain valid.
 
-A worked walkthrough of the top-bits extraction arithmetic is in
-[shard_bit_extraction.pdf](docs/explanations/shardbits/shard_bit_extraction.pdf).
-
 ### IPv6 Multicast Address Layout (IANA-aligned)
 
 ```text
@@ -960,11 +957,6 @@ Group address assignments for beacons and the control channel are defined in:
 
 Inter-AS extension via MP-BGP requires no protocol changes — network teams
 extend the multicast fabric; endpoints and listeners operate identically.
-
-The end-to-end NACK retransmission flow — from gap detection through escalation
-to repair delivery — is documented with ASCII diagrams in:
-
-**→ [NACK Retransmission Flow](docs/nack-retransmission-flow.md)**
 
 ### Retry Endpoint Processing
 
@@ -1721,8 +1713,6 @@ processing, flush OTLP exporter.
   — object planes by index high nibble; BEEF plane as domain `0x1`
 - [BRC-149 Multicast BEEF Object Frame Format](docs/brc-149-beef-object-frame.md)
   — FrameVer `0x09`, submission/delivery record grammars
-- [NACK Retransmission Flow](docs/nack-retransmission-flow.md) — End-to-end
-  pipeline diagrams, escalation state machine, flood prevention
 
 **Services:**
 
