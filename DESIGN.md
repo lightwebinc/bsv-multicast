@@ -551,7 +551,12 @@ port (8725) or the optional dedicated lane (8728); the proxy shards by TopicID
 into the BEEF object plane (domain `0x1`, indices `0x1000`–`0x1FFF`) and
 fragments oversized objects via BRC-130 (`OrigFrameVer=0x09`; listener
 reassembly keys on the `(ContentID, TopicID)` pair). Gap tracking and NACK
-retransmission ride the standard BRC-126 machinery.
+retransmission ride the standard BRC-126 machinery. Delivery is
+election-scoped: with the plane at width 0 every edge joins one band group,
+and the listener filters per consumer on the elected topic set and BEEF
+version before fan-out, reporting each filtered object to an optional
+`BEEFObserver` (beside the ingress observer) so an operator can meter what a
+consumer did *not* receive without touching the delivery path.
 
 **→ [BRC-149 Multicast BEEF Object Frame Format](docs/brc-149-beef-object-frame.md)**
 (plane allocation:
