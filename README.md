@@ -111,6 +111,9 @@ and anchor transactions over reserved control groups.
   [Automatic Shard Configuration](DESIGN.md#automatic-shard-configuration)
   (opt-in)
 - [Diagrams](diagrams/README.md) — component and flow diagrams (Mermaid)
+- [1BSV User Guide](https://1bsv.net/guide.html) — using the commercial
+  delivery network built on this stack (hosted service; sending is free,
+  receiving is a subscription)
 
 ## License
 
