@@ -48,6 +48,7 @@ and anchor transactions over reserved control groups.
 | [subtx-generator-helm](https://github.com/lightwebinc/subtx-generator-helm)     | Helm chart              | Chart for `subtx-generator`                                                                 |
 | [shard-manifest-helm](https://github.com/lightwebinc/shard-manifest-helm)       | Helm chart              | Chart for `shard-manifest`                                                                  |
 | [teranode-bridge-helm](https://github.com/lightwebinc/teranode-bridge-helm)     | Helm chart              | Chart for `teranode-bridge`                                                                 |
+| [arcade-bridge-helm](https://github.com/lightwebinc/arcade-bridge-helm)         | Helm chart              | Chart for `arcade-bridge`                                                                   |
 | [bsv-multicast](https://github.com/lightwebinc/bsv-multicast)             | Documentation           | This repository; project overview, design, and BRC specifications                           |
 
 ## Documentation
