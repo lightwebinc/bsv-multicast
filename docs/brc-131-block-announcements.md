@@ -2,7 +2,8 @@
 
 BRC-131 defines a new frame version (0x04) for distributing block-level metadata over the multicast fabric. Block announcements and coinbase transactions are delivered to all subscribers via a dedicated control-plane multicast group, independently of the shard groups used for transaction distribution. Standalone coinbase delivery (`MsgType=0x02`) is legacy-deprecated per BRC-133: the coinbase now travels inline in the BRC-144 block body.
 
-> **Canonical BRC:** [BRC-131](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0131.md)
+> **Canonical spec:** [BRC-131](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0131.md).
+> This document is the detailed design and rationale.
 
 ---
 
@@ -40,7 +41,7 @@ The BRC-131 header is **layout-identical** to a BRC-124 header. Infrastructure c
 | 6      | 1    | —     | Frame Version  | **`0x04`** — BRC-131 block control                        |
 | 7      | 1    | —     | MsgType        | `0x01` = BlockAnnounce, `0x02` = CoinbaseTx               |
 | 8      | 32   | 8B    | ContentID      | BlockHash (announce) or CoinbaseTxID (coinbase)           |
-| 40     | 8    | 8B    | HashKey        | XXH64(senderIPv6 ∥ 0xFFFE ∥ zeros); stamped by proxy     |
+| 40     | 8    | 8B    | HashKey        | XXH64(senderIPv6 ∥ flowIdx ∥ zeros); flowIdx = 0xFFFE (announce) or 0xFFF8 (coinbase); stamped by proxy |
 | 48     | 8    | 8B    | SeqNum         | Per-sender monotonic counter; stamped by proxy            |
 | 56     | 32   | 8B    | LayoutPad32    | All zeros. Keeps the header at 92 bytes so all infrastructure components share `HeaderSize`, one TCP read sequence, and one stamping path. |
 | 88     | 4    | 8B    | PayloadLen     | Size of payload in bytes (uint32 BE)                      |
@@ -94,8 +95,8 @@ The payload for a `CoinbaseTx` frame (`MsgType=0x02`) is the raw serialized coin
 
 BRC-131 frames participate in the same NACK-based reliability mechanism as BRC-124 frames:
 
-- The proxy stamps `HashKey` and `SeqNum` in-place before forwarding. `HashKey` is computed as `XXH64(senderIPv6 ∥ ctrlGroupIdx ∥ zeroSubtreeID)` where `ctrlGroupIdx = 0xFFFE`. The all-zero subtree input reflects that block frames have no subtree scope; the `LayoutPad32` field on the wire is the visual counterpart of that. `SeqNum` is a monotonic per-sender counter.
-- If `SeqNum` is already non-zero when the proxy receives the frame, it is forwarded verbatim (pre-stamped path).
+- The proxy stamps `HashKey` and `SeqNum` in-place before forwarding. `HashKey` is computed as `XXH64(senderIPv6 ∥ ctrlGroupIdx ∥ zeroSubtreeID)` where `ctrlGroupIdx = 0xFFFE` for `BlockAnnounce` and the virtual `GroupCoinbaseFlow` index `0xFFF8` for `CoinbaseTx` (BRC-133), so the two message types form independent flows. The all-zero subtree input reflects that block frames have no subtree scope; the `LayoutPad32` field on the wire is the visual counterpart of that. `SeqNum` is a monotonic per-sender counter.
+- If `SeqNum` is already non-zero when the proxy receives the frame it is preserved (pre-stamped path); `HashKey` is still re-stamped from the observed source when the proxy runs `-stamp-source` (default on).
 - Listeners detect gaps by comparing consecutive `SeqNum` values on the `(HashKey, ctrlGroupIdx, zeroSubtreeID)` flow and dispatch BRC-126 NACKs to retry endpoints.
 - Retry endpoints join the `FF0E::B:FFFE` group and cache all BRC-131 frames by `HashKey ∥ SeqNum`. On NACK, the retransmitted frame is sent back to `FF0E::B:FFFE` (the control group), not to a shard group.
 
@@ -116,7 +117,7 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 3. **Decode** — `DecodeBlock` validates Magic, FrameVer, MsgType, and PayLen. Invalid frames are dropped.
 4. **PoW gate** — `BlockMsgAnnounce` payloads must pass the block-PoW check (`-require-block-pow`, default on).
 5. **Dedup** — the ingress ContentID dedup claim drops duplicate ContentIDs.
-6. **Stamp** — the proxy stamps `SeqNum` only when 0; `HashKey` is (re)stamped whenever it is zero or the proxy runs `-stamp-source`, per the `(senderIPv6, 0xFFFE, zeros)` flow.
+6. **Stamp** — the proxy stamps `SeqNum` only when 0; `HashKey` is (re)stamped whenever it is zero or the proxy runs `-stamp-source`, per the `(senderIPv6, 0xFFFE, zeros)` flow for announces and `(senderIPv6, 0xFFF8, zeros)` for coinbase frames.
 7. **Fragment** — If `len(Payload) > fragDataSize`, fragment via BRC-130 with `OrigFrameVer=0x04`.
 8. **Forward** — Write the frame to all egress interfaces with destination `FF0E::B:FFFE:<egressPort>` (normative posture; the implementation derives the prefix from the configured `-scope`).
 
@@ -128,7 +129,7 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 2. **Decode** — `DecodeBlock` validates the frame and returns a `BlockFrame` with `MsgType`, `ContentID`, `HashKey`, `SeqNum`, and `Payload`.
 3. **Block-control gate** — `blockGateAllows` must admit the frame before delivery; gated-out frames are dropped.
 4. **Egress** — The frame (or payload, in strip-header mode) is forwarded to the configured downstream via `Sender.SendBlock`.
-5. **Gap tracking** — `Tracker.Observe(ctrlGroupIdx=0xFFFE, zeroSubtreeID, HashKey, SeqNum, ContentID, source net.IP)` is called when `SeqNum != 0`.
+5. **Gap tracking** — `Tracker.Observe(ctrlGroupIdx=0xFFFE (0xFFF8 for coinbase frames), zeroSubtreeID, HashKey, SeqNum, ContentID, source net.IP)` is called when `SeqNum != 0`.
 6. **Filtering** — Block frames bypass shard/subtree filtering; every subscriber receives every block announcement.
 
 ---

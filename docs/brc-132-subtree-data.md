@@ -2,7 +2,8 @@
 
 BRC-132 defines a new frame version (0x05) for distributing complete subtree data payloads (transaction hashes and metadata) over the multicast fabric. Subtree data is delivered to all subscribers via the dedicated `GroupSubtreeDataAnnounce` multicast group (`FF0X::B:FFFB`), independently of the shard groups used for individual transaction distribution.
 
-> **Canonical BRC:** [BRC-132](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0132.md)
+> **Canonical spec:** [BRC-132](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0132.md).
+> This document is the detailed design and rationale.
 
 ---
 
@@ -128,7 +129,7 @@ All fit within the uint16 `FragTotal` limit (65,535).
 BRC-132 frames participate in the same NACK-based reliability mechanism as BRC-124 and BRC-131 frames:
 
 - The proxy stamps `HashKey` and `SeqNum` in-place before forwarding. `HashKey = XXH64(senderIPv6 ∥ ctrlGroupIdx ∥ subtreeID)` where `ctrlGroupIdx = 0xFFFB`. Each (sender, subtreeID) pair owns an independent sequence stream.
-- If `SeqNum` is already non-zero when the proxy receives the frame, it is forwarded verbatim (pre-stamped path).
+- If `SeqNum` is already non-zero when the proxy receives the frame it is preserved (pre-stamped path); `HashKey` is still re-stamped from the observed source when the proxy runs `-stamp-source` (default on).
 - Listeners detect gaps on the `(HashKey, 0xFFFB, subtreeID)` flow and dispatch BRC-126 NACKs to retry endpoints.
 - Retry endpoints join `FF0X::B:FFFB` and cache BRC-132 frames (and BRC-130 fragments with `OrigFrameVer=0x05`) by `HashKey ∥ SeqNum`. On NACK, retransmit to `FF0X::B:FFFB`.
 
@@ -162,7 +163,7 @@ reserved design, **not implemented** — `-subtree-data-verify-merkle` /
 3. **Egress** — The frame is forwarded to the configured downstream.
 4. **Gap tracking** — `Tracker.Observe(0xFFFB, subtreeID, HashKey, SeqNum, subtreeID, source net.IP)` when `SeqNum != 0`.
 5. **Filtering** — Subtree data frames bypass shard filtering. Listeners may optionally filter by SubtreeID.
-6. **Reassembly** — BRC-130 fragments with `OrigFrameVer=0x05` are routed to `processSubtreeDataFrame` after reassembly (keyed by callback registered on construction).
+6. **Reassembly** — BRC-130 fragments with `OrigFrameVer=0x05` are routed to `DeliverReassembledSubtreeData` after reassembly (keyed by callback registered on construction).
 
 ---
 

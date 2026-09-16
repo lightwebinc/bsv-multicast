@@ -2,20 +2,21 @@
 
 BRC-130 is a fragmentation extension to BRC-124. When a BSV transaction payload exceeds the path MTU, the proxy decomposes it into a sequence of fixed-size fragment datagrams. Listeners reassemble the fragments and verify the reconstructed payload against the TxID before forwarding.
 
-> **Canonical BRC:** [BRC-130](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md)
+> **Canonical spec:** [BRC-130](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md).
+> This document is the detailed design and rationale.
 
 ---
 
 ## Fragment Header Format (104 bytes)
 
-Bytes 0–91 are **layout-identical** to a BRC-124 header. Existing infrastructure that inspects the TxID, HashKey, SeqNum, or Subtree ID fields reads correct values from a BRC-130 datagram at the same offsets.
+Bytes 0–91 are **layout-identical** to a BRC-124 header (FrameVer `0x03` and the carried-through byte-7 `MsgType` excepted). Existing infrastructure that inspects the TxID, HashKey, SeqNum, or Subtree ID fields reads correct values from a BRC-130 datagram at the same offsets.
 
 | Offset | Size | Align | Field           | Value / Notes                                                  |
 | ------ | ---- | ----- | --------------- | -------------------------------------------------------------- |
 | 0      | 4    | —     | Network Magic   | 0xE3E1F3E8 (BSV mainnet P2P magic)                             |
 | 4      | 2    | —     | Protocol Ver    | 0x02BF (703, BSV large-block baseline)                         |
 | 6      | 1    | —     | Frame Version   | **0x03** — BRC-130 fragment                                    |
-| 7      | 1    | —     | Reserved        | 0x00                                                           |
+| 7      | 1    | —     | MsgType         | Carried through from the original frame: `0x01`/`0x02` for fragmented BRC-131/BRC-132, `0x00` for BRC-124/128/149 |
 | 8      | 32   | 8B    | Transaction ID  | SHA256d(reassembled payload); same on every fragment           |
 | 40     | 8    | 8B    | HashKey         | XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID); stamped by proxy     |
 | 48     | 8    | 8B    | SeqNum          | Per-flow monotonic counter; independent per fragment           |
@@ -57,10 +58,10 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 2. **Fragment placement** — Copy data into buffer at `offset = FragIndex × fragDataSize`. Mark the bit.
 3. **Completion** — When all `FragTotal` bits are set, proceed to verification.
 4. **Completion callback** — The reassembly buffer invokes the callback registered for the given `OrigFrameVer`:
-   - `OrigFrameVer == 0x00 / 0x02` → SHA256d verification (`SHA256(SHA256(buffer)) == TxID`); deliver as synthetic BRC-124 frame.
-   - `OrigFrameVer == 0x04` → Deliver as synthetic BRC-131 block control frame; route through `processBlockFrame`.
-   - `OrigFrameVer == 0x05` → Deliver as synthetic BRC-132 subtree data frame; SHA256d does **not** apply (SubtreeID is a Merkle root, not a payload hash); route through `processSubtreeDataFrame`.
-   - `OrigFrameVer == 0x09` → SHA256d verification applies (the offset-8 field is the ContentID = `SHA256(SHA256(buffer))`); deliver as synthetic BRC-149 BEEF object frame; route through `processBeefFrame`.
+   - `OrigFrameVer == 0x00 / 0x02` → canonical-TxID verification when `-verify-payload-hash` is set (`SHA256(SHA256(buffer)) == TxID` for raw payloads; the TxID of the de-extended transaction for BRC-128 EF payloads); deliver as synthetic BRC-124 frame via `DeliverReassembled`.
+   - `OrigFrameVer == 0x04` → Deliver as synthetic BRC-131 block control frame; route through `DeliverReassembledBlock` (which applies the block-control gate).
+   - `OrigFrameVer == 0x05` → Deliver as synthetic BRC-132 subtree data frame; SHA256d does **not** apply (SubtreeID is a Merkle root, not a payload hash); route through `DeliverReassembledSubtreeData`.
+   - `OrigFrameVer == 0x09` → ContentID verification when `-verify-payload-hash` is set (the offset-8 field is the ContentID = `SHA256(SHA256(buffer))`); deliver as synthetic BRC-149 BEEF object frame; route through `DeliverReassembledBeef`.
 5. **Delivery** — Route the reassembled frame through the normal egress and gap-tracking path for its frame version.
 6. **TTL eviction** — Slots not completed within 10 s are discarded; increment `bsl_reassembly_abandoned_total`. If any fragment arrived, the missing fragments' SeqNums are dispatched as BRC-126 NACKs (`SetIncompleteHook`); capacity eviction does not trigger recovery.
 7. **Slot cap** — Default maximum 4096 concurrent slots; oldest incomplete slot evicted on overflow.

@@ -7,7 +7,8 @@ consumers that require only block headers (SPV wallets, header-chain validators,
 mining coordinators) to receive a minimal 172-byte datagram instead of the full
 announce payload.
 
-> **Canonical BRC:** [BRC-135](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0135.md)
+> **Canonical spec:** [BRC-135](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0135.md).
+> This document is the detailed design and rationale.
 
 ---
 

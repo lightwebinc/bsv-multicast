@@ -14,7 +14,7 @@ the replicated fabric and per-tunnel egress hops.
 > Design rationale, alternatives, and the deliberate deployment decisions that
 > fixed the parameters below (within-batch flush, origin-only coalescing with
 > spine verbatim relay, listener-side re-bucketing, per-proxy opt-in) are in
-> [§20](#20-implementation-status--spec-delta).
+> [§20](#20-deployment-decisions--spec-delta).
 
 ---
 
@@ -261,7 +261,7 @@ benefit for any `k`. Re-shard cutover follows the BRC-139 `Successor` block
 routes each bundle by its tagged `ShardBits`; past `TransitionEpoch` the old
 generation retires.
 
-> **Implementation status (§20) — ENFORCED at the delivery edge, guarded.** A node
+> **Deployment decision (§20) — enforced at the delivery edge, guarded.** A node
 > that re-buckets — a delivery-edge listener running a finer generation than the
 > fabric, or a cross-generation relay — declares itself with `-rebucket-relay`.
 > `shard-listener` `processBundle`, before filter/dedup/delivery, compares the
@@ -335,10 +335,9 @@ dwell (≈0) and bundles form only when a batch carries enough same-flow members
 
 ## 15. Metrics
 
-The metrics the **reference implementation actually emits** (the earlier
-aspirational `flush_size`/`flush_timer`/`ineligible`/`bsl_decoalesce_*` names are
-**not** emitted — there is no flush timer (§5), and decoalesced members are
-counted on the shared `bsl_frames_forwarded_total`):
+The metrics the reference implementation emits (there is no flush timer, §5, so
+no flush-timer metric exists; decoalesced members are counted on the shared
+`bsl_frames_forwarded_total`):
 
 | Metric (label)                                   | Where         | Description                                                                 |
 | ------------------------------------------------ | ------------- | -------------------------------------------------------------------------- |
@@ -347,7 +346,7 @@ counted on the shared `bsl_frames_forwarded_total`):
 | `bsp_coalesce_members_per_bundle`                | proxy         | Histogram of members/bundle (achieved R)                                   |
 | `bsp_coalesce_flush_total{reason}`               | proxy         | Flushes by reason: `batch` (origin within-batch), `relay` (spine verbatim), `encode_error` |
 | `bsp_packets_dropped_total{reason}`              | proxy         | Relay rejects: `bundle_short`, `bundle_malformed` (failed magic/length check) |
-| `bsl_frames_received_total{type="brc142"}`       | listener      | Bundles received at the edge                                               |
+| `bsl_frames_received_total{version="brc142"}`       | listener      | Bundles received at the edge                                               |
 | `bsl_frames_dropped_total{reason="bundle_decode_error"}` | listener | Bundles that failed to decode                                          |
 | `bsl_frames_forwarded_total`                     | listener      | Decoalesced member frames forwarded (shared with non-bundle frames)        |
 | `bsl_bundles_rebucketed_total`                   | listener      | Bundles re-bucketed to the local ShardBits generation before delivery (§11) |
@@ -435,11 +434,11 @@ them).
 - [BRC-129: Multicast Addressing](brc-129-multicast-addressing.md) — group/subtree addressing, SSM scope
 - [BRC-130: Fragmentation](brc-130-fragmentation.md) — the inverse; mutually exclusive per datagram
 - [BRC-139: Shard Manifest](brc-139-shard-manifest.md) — `ShardBits`/generation coordination, re-shard `Successor`
-- [§20 Implementation status & spec delta](#20-implementation-status--spec-delta) — design rationale + deliberate deployment decisions
+- [§20 Deployment decisions & spec delta](#20-deployment-decisions--spec-delta) — design rationale + deliberate deployment decisions
 
 ---
 
-## 20. Implementation status & spec delta
+## 20. Deployment decisions & spec delta
 
 The wire format (§2, §3), constants (§17), addressing/flow identity (§4),
 retransmission (§7), edge-/consumer-decoalesce (§8), re-bucketing (§11), and EF
@@ -454,14 +453,10 @@ independent implementation that follows §2–§17 interoperates.
 | Where coalescing runs (§1/§18) | **Origin only** (collapsed/ingress); the **spine relays, does not coalesce** | The coalescing divert keys the bundle HashKey on the per-source IP for own-traffic exclusion; a spine re-emit has `src=nil`, so coalescing there would mis-key the flow |
 | Re-bucketing (§11) | **Implemented, relay-declared** (`-rebucket-relay`), via `processBundle` generation-alignment; the mid-fabric spine relay stays verbatim. An undeclared mismatch raises `bsl_rebucket_unguarded_total` + a one-shot WARN. Upstream loss is recovered on the **parent** stream (survivorship-gated `Observe` of the parent HashKey/SeqNum → BRC-126 NACK) | Re-bucket once where subscribers attach, not per hop. Child SeqNums are local (phantom) → track the parent, not the child. Own-traffic exclusion does not survive a cross-generation re-stamp (documented §11 caveat) |
 | Drop visibility (§16) | Drops are **counted, not silent** (`bundle_short`/`bundle_malformed`/`bundle_decode_error`/`ErrCountMismatch`) | Silence hides upstream corruption. The one un-enforced row (member group ≠ GroupIdx) is an **encoder invariant**, not a decode-time check (a hash + routing engine per member) |
-| Metric names (§15) | Actual emitted names differ from the original draft | See the §15 table (the real names) |
 
-**Congruence with the published upstream text
-([transactions/0142.md](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0142.md)):**
-congruent on wire format and behavior. The member-length
-ceiling is named **`MaxMemberTxLen`** consistently in the upstream text, this doc,
-and the code (`shard-common/bundle`). The member field sizes (`2`, `32`) stay
-unexported in the codec and appear in both documents' member-format tables, so the
-brief upstream text correctly omits them from its constants list. The upstream
-error-handling table is a deliberate subset of §16. The two documents are kept
-congruent; editorial deltas go upstream.
+**Congruence with the canonical spec:** congruent on wire format and behavior.
+The member-length ceiling is named **`MaxMemberTxLen`** consistently in the
+canonical text, this doc, and the code (`shard-common/bundle`). The member field
+sizes (`2`, `32`) stay unexported in the codec and appear in both documents'
+member-format tables, so the brief canonical text omits them from its constants
+list. The canonical error-handling table is a deliberate subset of §16.

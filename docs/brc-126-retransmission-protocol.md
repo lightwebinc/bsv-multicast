@@ -2,7 +2,8 @@
 
 BRC-126 defines the NACK-based retransmission and endpoint discovery protocol for the BSV multicast pipeline. It specifies the ADVERT beacon message, the MISS/ACK/THROTTLED response messages, tier/preference-based endpoint selection, and configurable retransmit modes.
 
-> **Canonical BRC:** [BRC-126](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md)
+> **Canonical spec:** [BRC-126](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md).
+> This document is the detailed design and rationale.
 
 ---
 
@@ -112,7 +113,7 @@ Offset  Size  Field
 
 ## ACK Response (`MsgType 0x12`) — 16 bytes
 
-Sent unicast to the NACK source when the frame is found and retransmit dispatched. Whether the listener may stop there depends on the Flags: a **unicast-flagged** ACK (`0x02`) is only a PROMISE — the listener keeps the gap pending, drains for the data frame, and escalates to the next cache on timeout. This applies when the listener has unicast recovery wired (`SetRecoverFunc`); without it, a unicast-flagged ACK closes on trust. The post-ACK drain window is 80 ms. A bare or multicast-only ACK closes the gap on TRUST, so a repair lost on the same degraded link is never retried and the loss is never reported.
+Sent unicast to the NACK source when the frame is found and retransmit dispatched. Whether the listener may stop there depends on the Flags: a **unicast-flagged** ACK (`0x02`) is only a PROMISE — the listener keeps the gap pending, drains for the data frame, and escalates to the next cache on timeout. This applies when the listener has unicast recovery wired (`SetRecoverFunc`); without it, a unicast-only ACK is booked unrecovered (`no_recover`) because the returned frame reaches no consumer, while an ACK flagged both unicast and multicast still closes on trust of the multicast repair. The post-ACK drain window is 80 ms. A bare or multicast-only ACK closes the gap on TRUST, so a repair lost on the same degraded link is never retried and the loss is never reported.
 
 ```text
 Offset  Size  Field
@@ -128,7 +129,7 @@ Offset  Size  Field
 
 ## THROTTLED Response (`MsgType 0x13`) — 16 bytes
 
-Sent unicast to the NACK source when the request was rejected by a congestion-control tier that limits per-gap (per-SeqNum), per-flow (per-HashKey/chain), or per-group (groupIdx) request rate. It is a flow-control signal, **not** a failure: the endpoint is healthy, and for a per-gap throttle a retransmit for this exact gap was likely just served and is propagating over the multicast data plane. On receipt a listener MUST hold the gap for the hinted backoff and retry the **same** endpoint; it MUST NOT escalate to another endpoint and MUST NOT count the throttle as a recovery failure.
+Sent unicast to the NACK source when the request was rejected by a congestion-control tier that limits per-gap (per-`(HashKey, StartSeq)`), per-flow (per-HashKey/chain), or per-group (groupIdx) request rate. It is a flow-control signal, **not** a failure: the endpoint is healthy, and for a per-gap throttle a retransmit for this exact gap was likely just served and is propagating over the multicast data plane. On receipt a listener MUST hold the gap for the hinted backoff and retry the **same** endpoint; it MUST NOT escalate to another endpoint and MUST NOT count the throttle as a recovery failure.
 
 ```text
 Offset  Size  Field
@@ -196,6 +197,7 @@ Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER` — 255 is the stati
 | ------------------------- | ------- | ---------------------------------------------------- |
 | `-beacon-flags-multicast` | `true`  | Send cached frame to multicast group on NACK hit (also advertised in the ADVERT Flags) |
 | `-beacon-flags-unicast`   | `false` | Send cached frame unicast to NACK source on NACK hit (also advertised in the ADVERT Flags) |
+| `-beacon-flags-draining`  | `false` | advertise draining status (listeners will not add this endpoint) |
 | `-suppress-miss`          | `false` | Do not send MISS responses                           |
 | `-suppress-ack`           | `false` | Do not send ACK responses                            |
 
@@ -220,7 +222,7 @@ Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER` — 255 is the stati
 
 - **Listener:** `shard-listener/nack/wire.go` (NACK encode/decode), `shard-listener/discovery/` (ADVERT decode, registry, beacon listener)
 - **Endpoint:** `retry-endpoint/server/server.go` (NACK receive, ACK/MISS send), `retry-endpoint/beacon/` (ADVERT encode/send), `retry-endpoint/proxy/` (cross-domain relay: upstream fetch, re-cache, local retransmit — the fetch socket source-binds the advertised NACK address so the upstream's reply is addressed inside the fabric allow-list)
-- **Common:** `shard-common/frame/` (MsgType constants; THROTTLED `0x13` is declared locally in `shard-listener/nack/wire.go` and `retry-endpoint/server`, not yet in the shared block)
+- **Common:** `shard-common/frame/` (MsgType constants; THROTTLED `0x13` is declared in `shard-listener/nack/wire.go` and `retry-endpoint/server` rather than in the shared block)
 
 ---
 

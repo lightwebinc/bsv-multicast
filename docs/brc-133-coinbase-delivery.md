@@ -19,7 +19,8 @@ dedicated message type within BRC-131 block control frames, delivered to all
 subscribers via the control-plane multicast group independently of the shard
 groups used for ordinary transaction distribution.
 
-> **Canonical BRC:** [BRC-133](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0133.md)
+> **Canonical spec:** [BRC-133](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0133.md).
+> This document is the detailed design and rationale.
 
 ---
 
@@ -91,7 +92,8 @@ BRC-124 shard frames:
   multicast destination — it appears only in the HashKey computation to give
   coinbase frames an independent flow identity from BRC-131 block announces,
   which share the same egress multicast group. If the frame arrives
-  pre-stamped (`SeqNum != 0`), it is forwarded verbatim.
+  pre-stamped (`SeqNum != 0`) the `SeqNum` is preserved; `HashKey` is still
+  re-stamped under `-stamp-source` (default on).
 - Listeners gap-track coinbase frames under the virtual `0xFFF8`
   (`GroupCoinbaseFlow`) index, matching the proxy's HashKey ingredient. The
   index is process-local and never appears on the NACK wire — it affects

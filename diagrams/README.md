@@ -19,14 +19,15 @@ counters.
 flowchart LR
     subgraph senders["Senders"]
         UDPTX["UDP 8725<br/>one tx per datagram<br/>(framed or bare)"]
-        TCPTX["TCP 8725 framed lane<br/>grammar-detect: magic-led frame /<br/>0xBEEF record / bare tx"]
-        PUSH["Privileged push lanes (default off)<br/>TCP 8726 BRC-143 subtree<br/>TCP 8727 BRC-144 block<br/>TCP 8728 BRC-149 BEEF"]
+        TCPTX["TCP 8725 framed lane (opt-in)<br/>grammar-detect: magic-led frame /<br/>0xBEEF record / bare tx"]
+        BEEFL["BEEF lane (open class, default off)<br/>TCP 8728 BRC-149 records"]
+        PUSH["Privileged push lanes (default off)<br/>TCP 8726 BRC-143 subtree<br/>TCP 8727 BRC-144 block"]
     end
 
     subgraph proxy["shard-proxy"]
         PARSE["Parse + validate<br/>BRC-124 / BRC-128 / bare tx<br/>(require-ef: EF-native ingress)"]
-        GATE["Gates<br/>block-announce PoW (require-block-pow)<br/>privileged-class socket rejection"]
-        SHARD["Shard derivation<br/>TxID bits → group index<br/>(shard_bits, BRC-129)"]
+        GATE["Gates<br/>privileged-class socket rejection (all classes)<br/>block-announce PoW (require-block-pow; BRC-131 announces only)"]
+        SHARD["Shard derivation<br/>TxID bits → group index (shard_bits, BRC-129)<br/>BEEF: TopicID → 0x1000 + index (BRC-148)"]
         STAMP["Stamp HashKey + SeqNum<br/>XXH64 per-flow identity,<br/>monotonic counter"]
         FRAG["BRC-130 fragmentation<br/>payload > MTU−140 → k fragments<br/>sized to smallest egress-path MTU"]
         COAL["BRC-142 coalescing (opt-in, origin only)<br/>small txs of one group+subtree<br/>→ one bundle frame"]
@@ -35,11 +36,13 @@ flowchart LR
     subgraph fabric["IPv6 multicast fabric (UDP 9001)"]
         SHARDS["FF3E::B:&lt;shard&gt;<br/>sharded tx groups"]
         CTRL["FF3E::B:FFFE block control<br/>(announce, anchor)"]
-        HDR["FF3E::B:FFFA header lane<br/>(BRC-135, bare 80 B)"]
+        SUBD["FF3E::B:FFFB subtree data<br/>(BRC-132)"]
+        BEEFG["FF3E::B:1xxx BEEF plane<br/>(BRC-148/149)"]
     end
 
     UDPTX --> PARSE
     TCPTX --> PARSE
+    BEEFL --> PARSE
     PUSH -->|"reframed: 143→132, 144→131"| GATE
     PARSE --> GATE
     GATE --> SHARD
@@ -49,8 +52,9 @@ flowchart LR
     FRAG --> SHARDS
     COAL --> SHARDS
     STAMP --> SHARDS
+    STAMP --> BEEFG
     GATE --> CTRL
-    GATE --> HDR
+    GATE -->|"BRC-132 (class gate only, no PoW)"| SUBD
 ```
 
 ## shard-listener (egress)
@@ -69,7 +73,7 @@ flowchart LR
         JOIN["MLD join (SSM source-filtered)<br/>SO_REUSEPORT workers"]
         FILT["Filters<br/>shard filter (defense-in-depth)<br/>subtree include/exclude"]
         BGATE["Block-control gate (require-block-pow)<br/>re-validates announce PoW<br/>drops legacy standalone coinbase"]
-        REASM["BRC-130 reassembly<br/>slot per TxID, SHA256d verify"]
+        REASM["BRC-130 reassembly<br/>slot per TxID; TxID verify optional<br/>(-verify-payload-hash)"]
         DECO["BRC-142 decoalesce<br/>bundle → member frames"]
         GAP["Gap tracking<br/>per HashKey/SeqNum flow"]
         DEDUP["TxID dedup<br/>(optional, shared backend)"]
@@ -82,6 +86,7 @@ flowchart LR
     subgraph consumers["Consumers"]
         TCPOUT["TCP egress<br/>(optional strip-header;<br/>UDP legacy)"]
         MCOUT["Multicast egress<br/>(domain bridging)"]
+        HDROUT["Header egress (optional)<br/>BRC-135 emitter, 0xFFFA flow"]
     end
 
     GRP --> JOIN
@@ -93,6 +98,7 @@ flowchart LR
     FILT --> GAP
     JOIN -->|"V4 block frames (bypass filters)"| BGATE
     BGATE --> GAP
+    BGATE -->|"80 B header split"| HDROUT
     GAP -->|"gap detected: NACK"| RETRY
     RETRY -->|"re-multicast into group"| GRP
     GAP --> DEDUP
@@ -113,7 +119,7 @@ sequenceDiagram
     participant R as retry-endpoint tier 0
     participant U as upstream retry-endpoint
 
-    R--)F: ADVERT beacon (FF3E::B:FFFD)<br/>groups, tier, preference, HasParent
+    R--)F: ADVERT beacon (FF0E::B:FFFD, global scope)<br/>groups, tier, preference, HasParent
     P->>F: frame (HashKey, SeqNum=n)
     F->>L: deliver
     F->>R: deliver (cache, per-class TTL)

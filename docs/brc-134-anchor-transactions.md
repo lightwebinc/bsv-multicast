@@ -6,7 +6,8 @@ transactions over the multicast fabric. An anchor transaction is the root
 transactions in the chain reference the anchor as an input, every subscriber
 must receive it regardless of which shard its TxID would otherwise hash to.
 
-> **Canonical BRC:** [BRC-134](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0134.md)
+> **Canonical spec:** [BRC-134](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0134.md).
+> This document is the detailed design and rationale.
 
 ---
 
@@ -94,8 +95,9 @@ BRC-124 shard frames:
   independent flow identity from BRC-131 block announces and BRC-133
   coinbase frames, all of which travel on the same `GroupBlockBroadcast`
   multicast destination but each use a distinct virtual ingredient in their
-  HashKey computation. If the frame arrives pre-stamped (`SeqNum != 0`), it
-  is forwarded verbatim.
+  HashKey computation. If the frame arrives pre-stamped (`SeqNum != 0`) the
+  `SeqNum` is preserved; `HashKey` is still re-stamped under `-stamp-source`
+  (default on).
 - Listeners observe
   `(anchorGroupIdx=0xFFF9, zeroSubtreeID, HashKey, SeqNum, TxID)` for gap
   detection and dispatch BRC-126 NACKs to retry endpoints on gap.
@@ -113,8 +115,9 @@ BRC-124 shard frames:
    baseline).
 2. **Decode** — `frame.DecodeAnchor` validates Magic, FrameVer, and PayLen.
    Invalid frames are dropped.
-3. **Stamp** — `HashKey` is stamped even when `SeqNum` is pre-set (so chain
-   rate-limit and cache keys are deterministic); `SeqNum` is stamped only when
+3. **Stamp** — `HashKey` is (re)stamped whenever it is zero or the proxy runs
+   `-stamp-source` (default on, so chain rate-limit and cache keys are
+   deterministic); `SeqNum` is stamped only when
    0 — on the `(senderIPv6, 0xFFF9, zeros)` flow key. The virtual index `0xFFF9`
    (`GroupAnchorFlow`) keeps anchor frames in a flow distinct from
    BRC-131 block announces and BRC-133 coinbase frames on the shared

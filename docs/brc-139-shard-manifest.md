@@ -2,7 +2,8 @@
 
 BRC-139 defines the protocol by which multicast participants periodically advertise their `shard_bits` configuration and the set of shard groups they are joined to. Manifest datagrams are emitted directly to the beacon multicast group (`GroupBeacon`, index `0xFFFD`) at a configurable scope. This BRC supports operator visibility into network-wide sharding configuration, enables divergence detection, and defines the consumer profile for automated, rate-limited shard coordination (see the normative consumer rules below).
 
-> **Canonical BRC:** [BRC-139](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
+> **Canonical spec:** [BRC-139](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md).
+> This document is the detailed design and rationale.
 
 ---
 
@@ -273,17 +274,23 @@ A new standalone daemon emits ShardManifest datagrams. It does not subscribe to 
 | `-announce-interval` / `ANNOUNCE_INTERVAL` | `300s`         | re-announce period                                                 |
 | `-ttl` / `TTL`                             | `0`            | seconds; 0 = consumer default                                      |
 | `-iface` / `IFACE`                         | first non-lo   | egress interface for multicast send                                |
-| `-port` / `PORT`                           | `9001`         | UDP destination port (matches beacon listen)                       |
-| `-source-mode` / `SOURCE_MODE`             | `asm`          | data-plane addressing model `asm`\|`ssm`; the beacon prefix derives from `-manifest-scope` + `-source-mode` |
+| `-port` / `PORT`                           | `9001`         | UDP destination port; `shard-proxy` consumes manifests on `-manifest-beacon-port` (default `9001`), `shard-listener` on its beacon socket (`-beacon-port`, default `9300`) — align per deployment |
+| `-source-mode` / `SOURCE_MODE`             | `asm`          | data-plane addressing model `asm`\|`ssm`; sets `Flags.SourceModeSSM` only — the beacon prefix derives from `-manifest-scope` alone (ASM `FF0X` prefixes) |
 | `-mc-group-id` / `MC_GROUP_ID`             | `0x000B`       | per BRC-129                                                        |
 | `-metrics-addr` / `METRICS_ADDR`           | `[::]:9091`    | Prometheus/health HTTP listener                                    |
 | `-otlp-endpoint` / `OTLP_ENDPOINT`         | `""`           | optional OTLP gRPC endpoint                                        |
 | `-otlp-interval` / `OTLP_INTERVAL`         | `15s`          | OTLP push interval                                                 |
-| `-debug` / `DEBUG`                         | `false`        | verbose logging                                                    |
+| `-debug` / `DEBUG`                         | `false`        | verbose logging (alias for `-log-level=debug`)                     |
+| `-log-format` / `LOG_FORMAT`               | `json`         | `text`\|`json`                                                     |
+| `-log-level` / `LOG_LEVEL`                 | `info`         | `debug`\|`info`\|`warn`\|`error`                                   |
+| `-trace-sampling` / `TRACE_SAMPLING`       | `0`            | trace head-sampling ratio 0..1 (0 = off; exports via `-otlp-endpoint`) |
+| `-instance-id` / `INSTANCE_ID`             | hostname       | `service.instance.id`                                              |
+| `-publishers-refresh` / `PUBLISHERS_REFRESH` | `30s`        | DNS re-resolve interval for `-publishers` entries                  |
+| `-domain` (repeatable) / `DOMAINS`         | `""`           | BRC-148 plane descriptor `id:bits=N[:ssm][:active][:slotspan=S][:generation=HEX32]` |
 | `-publishers` / `PUBLISHERS`               | `""`           | comma list of data-plane publisher IPv6 addresses or DNS names (SSM Sources payload) |
 | `-pilot-only` / `PILOT_ONLY`               | `false`        | set Flags.PilotOnly; manifest describes desired fleet state, not own joins (implies `-authoritative=true`) |
 | `-successor-generation-id` / `SUCCESSOR_GENERATION_ID` | `""` | incoming generation 16-byte hex; empty = no Successor block        |
-| `-successor-shard-bits` / `SUCCESSOR_SHARD_BITS` | `0`      | incoming generation ShardBits (must differ from `-shard-bits` by ±1) |
+| `-successor-shard-bits` / `SUCCESSOR_SHARD_BITS` | `0`      | incoming generation ShardBits (`|successor − shard-bits| ≤ 1`) |
 | `-successor-source-mode` / `SUCCESSOR_SOURCE_MODE` | `""`   | incoming generation addressing model `asm`\|`ssm` (empty = inherit `-source-mode`) |
 | `-successor-transition-epoch` / `SUCCESSOR_TRANSITION_EPOCH` | `0` | Unix seconds at which the successor becomes the sole active generation |
 
@@ -327,8 +334,8 @@ rules in this section. Components that do not opt in are unaffected.
    when reported by at least `pilot-quorum` distinct authoritative
    announcers (keyed on `(SrcIPv6, InstanceID)`) within their TTL window.
    Implementations MUST expose `pilot-quorum` as configuration; default
-   `2`. `pilot-quorum=1` MAY be supported but the consumer MUST log a
-   warning at startup.
+   `2`. `pilot-quorum=1` MAY be supported; it disables cross-announcer
+   agreement.
 3. **Hysteresis.** A candidate value that satisfies quorum MUST hold
    quorum continuously for `≥ 2 × AnnounceInterval` (taken from any one
    contributing manifest) before adoption. A change in adopted value
@@ -337,9 +344,9 @@ rules in this section. Components that do not opt in are unaffected.
    value that differs from the currently adopted value by more than ±1
    within any rolling `AnnounceInterval` window. This caps the rate at
    which the addressable space can be doubled or halved during an
-   automated shift. (Implementation status: currently enforced for
-   Successor-block adoption only; the plain `ShardBits` quorum path
-   applies quorum + hysteresis without the ±1 guard.)
+   automated shift. (The ±1 guard is enforced on Successor-block adoption;
+   the plain `ShardBits` quorum path applies quorum + hysteresis without
+   it.)
 5. **Manual pin precedence.** When the local operator has pinned a value
    via CLI/env, that value is the local authority and MUST NOT be
    overridden by adoption. The consumer MUST still evaluate quorum and
@@ -367,8 +374,7 @@ information base.
 The consumer MUST emit, at minimum:
 
 - `multicast_manifest_divergence_total{field=...,kind=peer-disagree|pin-disagree|crc-fail}` —
-  counter. (Implementation status: only `kind="peer-disagree"` is emitted
-  today; both the proxy and listener consumers emit it.)
+  counter. (The proxy and listener consumers emit `kind="peer-disagree"`.)
 - `multicast_manifest_last_divergence_epoch{field=...}` — gauge of the
   most recent Unix-seconds disagreement timestamp. A field appears only once
   it has diverged at least once, and keeps its last value afterwards — a
@@ -388,10 +394,9 @@ flipping their readiness probe and draining in-flight datagrams within the
 configured drain window before reloading, so the orchestrator can roll the
 pod predictably. Incremental changes — adding or removing entries from
 `Flags.GroupsValid` payloads (when consumed as join hints) or from the
-source set — MAY be applied in place without restart. (Implementation
-status: `shard-proxy` implements this — drain + exit for the
-orchestrator; `shard-listener` currently logs the transition only,
-restart hooks pending.)
+source set — MAY be applied in place without restart. (`shard-proxy`
+drains and exits for the orchestrator; `shard-listener` logs the
+transition.)
 
 ---
 

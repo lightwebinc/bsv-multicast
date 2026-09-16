@@ -2,7 +2,8 @@
 
 BRC-129 defines the IPv6 multicast group address scheme for the BSV transaction sharding pipeline, including data-plane shard groups, control-plane beacon groups, and reserved indices. The scheme is aligned with IANA's IPv6 multicast address allocation practice and the IANA-assigned Bitcoin group `FF0X::B`.
 
-> **Canonical BRC:** [BRC-129](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md)
+> **Canonical spec:** [BRC-129](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md).
+> This document is the detailed design and rationale.
 
 ---
 
@@ -113,7 +114,7 @@ SSM is a transport mode only: the frame format (BRC-124), the NACK protocol (BRC
 - **Joins.** Under ASM, receivers perform an any-source `(*,G)` join. Under SSM, receivers perform a source-specific `(S,G)` join per RFC 3678 (`MCAST_JOIN_SOURCE_GROUP`), one join per `(source, group)` pair.
 - **Distinct source per publisher.** Each publisher emits from a distinct, stable unicast source address (`bindSource`). Required by PIM-SSM reverse-path forwarding; preserves the per-publisher `HashKey` flow identity. Anycast/shared-source emission is not supported under SSM — a single stable identity uses VRRP active-standby (failover, not load distribution).
 - **Source discovery.** Receivers learn publisher sources before issuing `(S,G)` joins:
-  - **Data-plane sources** flow through the shard manifest (BRC-139 `Flags.SourcesValid`); receivers enable manifest consumption (`-manifest-consumer-enabled` / Helm `config.autoConfig.*`) and union the source set across currently-valid manifests.
+  - **Data-plane sources** flow through the shard manifest (BRC-139 `Flags.SourcesValid`); receivers enable manifest consumption (`-manifest-consumer-enabled` / Helm `config.autoShardConfig.*`) and union the source set across currently-valid manifests.
   - **Control-plane groups** (beacon, manifest, subtree-announce) are joined against per-group bootstrap source lists (`-ssm-bootstrap-*` flags / Helm `config.ssmBootstrap.*`, IPv6 literals or DNS names re-resolved on refresh), since their sources cannot be discovered from within the group.
 
 Deployment postures combining ASM/SSM data and control planes (and their PIM/fabric prerequisites) are out of scope here — see [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm) in DESIGN.md.
@@ -171,7 +172,7 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 
 - **Group derivation:** `shard-common/shard/shard.go` — `New(mcPrefix, groupID, shardBits)` builds the Engine; `mcPrefix` is the full upper 16 bits carrying flags+scope (`0xFF05` ASM site, `0xFF35` SSM site, `0xFF3E` SSM global). `Engine.Addr(groupIndex uint32, port int)` assembles the address from that prefix (only the low 16 bits of `groupIndex` are used) — unchanged across modes.
 - **Source mode:** `shard-common/shard/mode.go` — `SourceMode` (`SourceModeASM`/`SourceModeSSM`, `ParseSourceMode`) selects which `mcPrefix` is built.
-- **Group joins:** `shard-common/netjoin/netjoin.go` — `Join(fd, ifaceIdx, group, sources)` issues `MCAST_JOIN_SOURCE_GROUP` `(S,G)` joins (RFC 3678) when `sources` is non-empty (SSM), or a plain `(*,G)` join otherwise (ASM); diffs and rate-limits join/leave churn.
+- **Group joins:** `shard-common/netjoin/netjoin.go` — `Join(fd, ifaceIdx, group, sources)` issues `MCAST_JOIN_SOURCE_GROUP` `(S,G)` joins (RFC 3678) when `sources` is non-empty (SSM), or a plain `(*,G)` join otherwise. Join-set diffing lives in the listener's manifest applier; the `netjoin.Limiter` exists but is not wired at the call sites, so join/leave churn is not yet rate-limited.
 - **Network-service group helper:** `shard-common/shard/control.go` — `GroupAddr(scopePrefix uint16, groupID uint16, idx GroupIdx)` (standalone; not bound to Engine scope).
 - **Group index type:** `type GroupIdx uint16` — typed wrapper for the 16-bit IANA group index in bytes 14–15. Provides a `String()` method returning a stable snake_case label (`"block_broadcast"`, `"beacon"`, etc.) used in metrics and logs.
 - **Constants:** `GroupBlockHeader = 0xFFFA`, `GroupSubtreeDataAnnounce = 0xFFFB`, `GroupSubtreeGroupAnnounce = 0xFFFC`, `GroupBeacon = 0xFFFD`, `GroupBlockBroadcast = 0xFFFE`.

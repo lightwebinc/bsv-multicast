@@ -38,7 +38,7 @@ Craig S. Wright in
 - [Subtree Group Announcement (BRC-127)](#subtree-group-announcement-brc-127)
 - [Block Announcement Frame Format (BRC-131)](#block-announcement-frame-format-brc-131)
 - [Subtree Data Frame Format (BRC-132)](#subtree-data-frame-format-brc-132)
-- [Coinbase Transaction Frame Format (BRC-133)](#coinbase-transaction-frame-format-brc-133)
+- [Coinbase Transaction Frame Format (BRC-133) — deprecated](#coinbase-transaction-frame-format-brc-133--deprecated)
 - [Anchor Transaction Frame Format (BRC-134)](#anchor-transaction-frame-format-brc-134)
 - [Block Header Format (BRC-135)](#block-header-format-brc-135)
 - [Shard Manifest Announcement (BRC-139)](#shard-manifest-announcement-brc-139)
@@ -153,6 +153,7 @@ speaks whatever the receiving node already speaks.
 | Repository                                                        | Purpose                                                                                        |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | [teranode-bridge](https://github.com/lightwebinc/teranode-bridge) | Landing-tier bridge for an **unmodified** Teranode cluster. Terminates the per-class push lanes (BRC-30 transactions, BRC-143 subtrees, BRC-144 blocks), submits transactions to propagation, and — because Teranode learns of subtrees and blocks by announcement plus pull — caches pushed objects, announces itself as their source, and serves the resulting pull. The reverse path subscribes to the cluster's blockchain notifications and publishes what that cluster produced back onto the object plane. |
+| [arcade-bridge](https://github.com/lightwebinc/arcade-bridge)     | Landing-tier bridge for the broadcaster (application) tier: runs an **unmodified** Arcade v2 + merkle-service stack with the fabric as its transport. Terminates the BRC-143 subtree and BRC-144 block delivery lanes into merkle-service and forwards Arcade's transaction broadcasts into the fabric on the open class; it carries no miner entitlements. The shared lane/cache/retrieval machinery is imported from teranode-bridge's public packages. |
 
 ### Shared Libraries
 
@@ -174,7 +175,7 @@ speaks whatever the receiving node already speaks.
 
 Each service has a dedicated chart repository; `multicast-kube-infra` composes
 the proxy/listener/retry-endpoint/subtx-generator charts, while the
-shard-manifest and teranode-bridge charts install standalone:
+shard-manifest, teranode-bridge, and arcade-bridge charts install standalone:
 
 | Repository                                                                  | Chart           |
 | --------------------------------------------------------------------------- | --------------- |
@@ -184,6 +185,7 @@ shard-manifest and teranode-bridge charts install standalone:
 | [subtx-generator-helm](https://github.com/lightwebinc/subtx-generator-helm) | subtx-generator |
 | [shard-manifest-helm](https://github.com/lightwebinc/shard-manifest-helm)   | shard-manifest  |
 | [teranode-bridge-helm](https://github.com/lightwebinc/teranode-bridge-helm) | teranode-bridge |
+| [arcade-bridge-helm](https://github.com/lightwebinc/arcade-bridge-helm)     | arcade-bridge   |
 
 ### Testing and Tools
 
@@ -457,9 +459,11 @@ over a reliable underlay, and UDP remains the fabric relay path.
 Key fields: Network magic, Protocol version, Frame version, Transaction ID,
 HashKey (XXH64 per-flow identifier), SeqNum (monotonic per-flow counter),
 Subtree ID, Payload length, and BSV tx payload. Both BRC-12 (legacy) and
-BRC-124/BRC-128 frames are accepted by all components — except under
-`-require-ef` (default-on in deployment profiles), where legacy BRC-12 is
-rejected.
+BRC-124/BRC-128 frames are accepted by all components. Under the opt-in
+`-require-ef` (off by default in the reference proxy; a downstream build may
+default it on) the ingress is EF-native: raw BRC-12/BRC-124
+transaction submissions are rejected and only BRC-30 Extended Format
+(BRC-128) is admitted.
 
 **BRC-128 (Extended Format):** BRC-128 frames carry BRC-30 Extended Format (EF)
 transaction payloads inside the standard 92-byte BRC-124 header. Frame Version
@@ -475,8 +479,9 @@ Bytes 0–91 are layout-identical to BRC-124, preserving firewall rule and
 classifier compatibility. The proxy stamps an independent `HashKey`/`SeqNum` per
 fragment so that individual lost fragments can be retransmitted via the standard
 BRC-126 NACK mechanism without changes to the retry endpoint. Listeners
-reassemble fragments keyed on `TxID`, verify `SHA256d`, and deliver a synthetic
-BRC-124 frame to the normal filter → egress → gap-tracking pipeline.
+reassemble fragments keyed on `TxID`, verify the canonical TxID when
+`-verify-payload-hash` is set (off by default; EF-aware), and deliver a
+synthetic BRC-124 frame to the normal filter → egress → gap-tracking pipeline.
 
 **→ [BRC-130 Fragmentation](docs/brc-130-fragmentation.md)**
 
@@ -953,7 +958,8 @@ Retry endpoints advertise via periodic ADVERT beacons (see
 scopes at once (`-beacon-scope both|all`). A listener joins the single beacon
 group selected by its `-beacon-scope` (`link|site|org|global`; global to
 discover Tier-0 endpoints across domains). Static `-retry-endpoints` seeds
-the registry at lowest priority (`Tier=0xFF, Preference=0`).
+the registry at lowest priority (`Tier=0xFF`; `Preference` descends with list
+position so the configured order is kept).
 
 Group address assignments for beacons and the control channel are defined in:
 
@@ -1088,7 +1094,7 @@ Individual lost fragments are recovered via the standard BRC-126 NACK mechanism
  Fragment arrives (FrameVer=0x03)
    → Allocate slot (TxID key, OrigPayloadLen buffer, FragTotal bitmask, TTL)
    → Copy fragment data at offset = FragIndex × fragDataSize
-   → All bits set → SHA256d verify → deliver synthetic BRC-124 frame
+   → All bits set → canonical-TxID verify (if -verify-payload-hash) → deliver synthetic BRC-124 frame
    → filter → egress → gap-tracking (unchanged)
 
  TTL expiry (10 s): drop slot; bsl_reassembly_abandoned_total++
@@ -1134,8 +1140,8 @@ individual frames before per-consumer egress, so the consumer contract is
 unchanged; whole-bundle (consumer-decoalesce) delivery is opt-in. A bundle
 built at a different `ShardBits` generation is re-bucketed to the local
 generation at the delivery edge before delivery. Malformed or truncated
-bundles are dropped and counted, not silently discarded
-(`bundle_short`/`bundle_malformed`/`bundle_decode_error`).
+bundles are dropped and counted, not silently discarded (relay
+`bundle_short`/`bundle_malformed`; listener `bundle_decode_error`).
 
 **→ [BRC-142 Coalescing (Bundle) Frame Format](docs/brc-142-coalescing-frame.md)**
 — bundle header layout, member format, MTU sizing, bundle-unit NACK,
@@ -1224,9 +1230,9 @@ an independent sequence stream. Because payloads range from ~32 MB (HashesOnly,
 1M nodes) to ~48 MB (FullNodes, 1M nodes), BRC-130 fragmentation is always
 required in practice; the proxy sets `OrigFrameVer=0x05` in each fragment
 header. Listener reassembly is keyed by SubtreeID; SHA256d hash verification is
-skipped (SubtreeID is a Merkle root, not a payload double-hash). Optional
-post-reassembly Merkle-root recomputation is available via
-`-subtree-data-verify-merkle`.
+skipped (SubtreeID is a Merkle root, not a payload double-hash). The
+`-subtree-data-verify-merkle` flag is reserved; post-reassembly Merkle-root
+recomputation is not performed.
 
 Sequence tracking and NACK retransmission are identical to BRC-124 and BRC-131:
 the retry endpoint joins `FF0X::B:FFFB`, caches BRC-132 frames and their BRC-130
@@ -1547,8 +1553,8 @@ Kubernetes deployment is provided by
 [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra),
 which composes the per-service Helm charts (`shard-proxy-helm`,
 `shard-listener-helm`, `retry-endpoint-helm`, `subtx-generator-helm`); the
-`shard-manifest` and `teranode-bridge` charts ship standalone and are
-deployed separately.
+`shard-manifest`, `teranode-bridge`, and `arcade-bridge` charts ship
+standalone and are deployed separately.
 
 For a single-host footprint, the three services deploy as a **collapsed
 node** — `shard-proxy`, `shard-listener`, and `retry-endpoint` co-located on
