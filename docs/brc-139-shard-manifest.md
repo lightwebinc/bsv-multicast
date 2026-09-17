@@ -98,7 +98,7 @@ A datagram with `Flags.GroupsValid=1` and both `BitmapBytes=0` and
 with `Flags.GroupsValid=1` and both `BitmapBytes>0` and `GroupCount>0` is
 also malformed.
 
-For bitmap form the bitmap MUST cover only valid shard indices (0..2^ShardBits − 1). Bits at positions ≥ 2^ShardBits MUST be zero and MUST be ignored by consumers.
+For bitmap form the bitmap MUST cover only valid shard indices (0..2^ShardBits − 1). Bits at positions ≥ 2^ShardBits MUST be zero and MUST be ignored by consumers. The same bound applies to the list form — entries ≥ 2^ShardBits MUST NOT be emitted and MUST be ignored by consumers. Both forms address the one index space the announced `ShardBits` defines, and an index outside it names a group no publisher sends to: a consumer that auto-joins it (`-shard-include-from-manifest`) buys membership and MFC state for a group that can never deliver.
 
 ### Sources payload (when `Flags.SourcesValid=1`)
 
@@ -234,6 +234,8 @@ The announcer chooses one or more scopes via `-manifest-scope` (default `site`).
 
 Because BRC-126 ADVERT (`MsgType 0x20`) shares this group, listeners on the beacon group MUST dispatch on `buf[6]` (MsgType byte) before parsing.
 
+The group is shared; the **UDP port is not**. The announcer sends to its own `-port` (default `9001`) while BRC-126 ADVERTs arrive on the endpoints' NACK/beacon port (default `9300`), so a consumer bound only to the ADVERT port receives no manifest however many announcers are running. A consumer MUST therefore bind the announcers' port — `shard-proxy` as `-manifest-beacon-port`, `shard-listener` likewise as `-manifest-beacon-port` (both default `9001`) — in addition to the ADVERT port. Binding one socket for both (equal ports) is valid: the MsgType demux above makes it safe.
+
 ---
 
 ## Cadence and Freshness
@@ -274,7 +276,7 @@ A new standalone daemon emits ShardManifest datagrams. It does not subscribe to 
 | `-announce-interval` / `ANNOUNCE_INTERVAL` | `300s`         | re-announce period                                                 |
 | `-ttl` / `TTL`                             | `0`            | seconds; 0 = consumer default                                      |
 | `-iface` / `IFACE`                         | first non-lo   | egress interface for multicast send                                |
-| `-port` / `PORT`                           | `9001`         | UDP destination port; `shard-proxy` consumes manifests on `-manifest-beacon-port` (default `9001`), `shard-listener` on its beacon socket (`-beacon-port`, default `9300`) — align per deployment |
+| `-port` / `PORT`                           | `9001`         | UDP destination port; both `shard-proxy` and `shard-listener` consume manifests on their own `-manifest-beacon-port` (default `9001`), a port distinct from the BRC-126 ADVERT port (`-beacon-port`, default `9300`) — align per deployment |
 | `-source-mode` / `SOURCE_MODE`             | `asm`          | data-plane addressing model `asm`\|`ssm`; sets `Flags.SourceModeSSM` only — the beacon prefix derives from `-manifest-scope` alone (ASM `FF0X` prefixes) |
 | `-mc-group-id` / `MC_GROUP_ID`             | `0x000B`       | per BRC-129                                                        |
 | `-metrics-addr` / `METRICS_ADDR`           | `[::]:9091`    | Prometheus/health HTTP listener                                    |
@@ -422,7 +424,7 @@ guidance:
 
 ## Interactions With Other BRCs
 
-- **BRC-126 (Retransmission / ADVERT)** — shares the beacon group `0xFFFD` and listen port. Distinguished by MsgType byte at offset 6 (`0x20` ADVERT vs `0x40` ShardManifest). BRC-139 does not retransmit and is not retransmitted.
+- **BRC-126 (Retransmission / ADVERT)** — shares the beacon group `0xFFFD`; the two conversations are on **different UDP ports by default** (`9001` manifests, `9300` ADVERTs), so a consumer binds both. Where an operator does put them on one port they are distinguished by the MsgType byte at offset 6 (`0x20` ADVERT vs `0x40` ShardManifest). BRC-139 does not retransmit and is not retransmitted.
 - **BRC-127 (Subtree group announcements)** — orthogonal: BRC-127 announces SubtreeID→GroupID bindings on `0xFFFC` and goes through the proxy. BRC-139 announces participant configuration directly on `0xFFFD`.
 - **BRC-129 (Multicast addressing)** — no new index allocated. Manifests reuse the existing beacon group.
 

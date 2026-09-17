@@ -118,8 +118,12 @@ Each member is a length-prefixed transaction:
   within the coalescing window. Uniformly-random traffic across many shards
   coalesces poorly; shard-/subtree-dense (bulk, replay, large-subtree) traffic
   coalesces well. This is a property of the traffic shape, not a defect.
-- **MTU bound.** `66 + Σ(member encoded size) ≤ path MTU`. A bundle never
-  fragments; BRC-142 and BRC-130 are **mutually exclusive per datagram** (§9).
+- **MTU bound.** `48 + 66 + Σ(member encoded size) ≤ path MTU`, where the 48 is
+  the IPv6 (40) + UDP (8) header the datagram carries outside the bundle: the
+  bound is on the **emitted datagram**, not on the bundle body. Equivalently,
+  the body budget is `MTU − 48` and the member budget `MTU − 48 − 66` (§10). A
+  bundle never fragments; BRC-142 and BRC-130 are **mutually exclusive per
+  datagram** (§9).
 
 ---
 
@@ -212,22 +216,28 @@ dictates where decoalescing happens:
 A bundle is `≤` MTU by construction, so a transaction that would itself need
 fragmentation is **never** a bundle member; the two extensions are mutually
 exclusive per datagram. A coalescing node MUST exclude any transaction whose
-encoded member size exceeds `MTU − 66 − memberOverhead` and route it through
-BRC-130 instead.
+encoded member size exceeds `MTU − 48 − 66 − memberOverhead` and route it
+through BRC-130 instead (the 48 is the IPv6+UDP header — the same subtraction
+BRC-130 makes before deriving its fragment data capacity).
 
 ---
 
 ## 10. MTU Sizing
 
-`capMembers = ⌊(MTU − 66) / (TxLen + memberOverhead)⌋`, where `memberOverhead` is
-2 (TxIDs omitted) or 34 (TxIDs carried).
+`capMembers = ⌊(MTU − 48 − 66) / (TxLen + memberOverhead)⌋`, where the 48 is the
+IPv6 (40) + UDP (8) header carried outside the bundle, 66 is the bundle header,
+and `memberOverhead` is 2 (TxIDs omitted) or 34 (TxIDs carried). The budget is
+the **path MTU of the emitted datagram**: an implementation that subtracts only
+the 66-byte bundle header emits a datagram 48 bytes over the path it was
+configured for, which at the 1500 default is a 1548-byte datagram that
+fragments or drops.
 
 | Path MTU            | cap (164 B tx, no TxID) | cap (avg ~270 B mixed) |
 | ------------------- | ----------------------- | ---------------------- |
 | 1500 (public)       | ~8                      | ~5                     |
-| 1440 (ip6gre/WG)    | ~8                      | ~5                     |
+| 1440 (ip6gre/WG)    | ~7                      | ~4                     |
 | 9000 (jumbo)        | ~53                     | ~32                    |
-| 64000 (super-jumbo) | ~385                    | ~235                   |
+| 64000 (super-jumbo) | ~384                    | ~234                   |
 
 **The design baseline is 1500.** On the public internet (and over ip6gre/WireGuard
 tunnels, ~1440) the cap is ~8 members, giving a ~5–8× packet reduction. Jumbo —

@@ -55,7 +55,7 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 ## Reassembly (Listener)
 
 1. **Slot allocation** — On first fragment, allocate a slot keyed by the offset-8 field (TxID / SubtreeID / ContentID); for `OrigFrameVer = 0x09` the slot key is the `(ContentID, TopicID)` pair — `SHA-256(ContentID ∥ TopicID)`. The slot holds an `OrigPayloadLen`-byte buffer, a `FragTotal`-bit received-fragment bitmask, and a TTL timer.
-2. **Fragment placement** — Copy data into buffer at `offset = FragIndex × fragDataSize`. Mark the bit.
+2. **Fragment placement** — Copy data into buffer at `offset = FragIndex × fragDataSize`. Mark the bit. The fragment's data length MUST be consistent with that grid: `FragTotal − 1` fragments of `fragDataSize` bytes and a final fragment holding the remainder (≥ 1 byte), so every fragment of one object implies the same `fragDataSize` and the fragments sum to `OrigPayloadLen`. A fragment that implies a different `fragDataSize` cannot be placed; the receiver MUST drop the whole object and count it (`bsl_reassembly_bad_fragment_total`) rather than concatenate a payload of the wrong length — with hash verification optional, nothing downstream would catch it.
 3. **Completion** — When all `FragTotal` bits are set, proceed to verification.
 4. **Completion callback** — The reassembly buffer invokes the callback registered for the given `OrigFrameVer`:
    - `OrigFrameVer == 0x00 / 0x02` → canonical-TxID verification when `-verify-payload-hash` is set (`SHA256(SHA256(buffer)) == TxID` for raw payloads; the TxID of the de-extended transaction for BRC-128 EF payloads); deliver as synthetic BRC-124 frame via `DeliverReassembled`.
@@ -78,6 +78,7 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 | `bsl_reassembly_abandoned_total`     | Slots evicted due to TTL expiry or slot-cap eviction    |
 | `bsl_reassembly_hash_mismatch_total` | Reassembled payloads that failed SHA256d verification   |
 | `bsl_reassembly_late_fragments_total` | Fragments dropped because their object already completed (late repair copies suppressed by completion memory) |
+| `bsl_reassembly_bad_fragment_total`  | Objects dropped because a fragment's data length is inconsistent with `OrigPayloadLen`/`FragTotal` (step 2) |
 
 ---
 
