@@ -72,7 +72,7 @@ flowchart LR
     subgraph listener["shard-listener"]
         JOIN["MLD join (SSM source-filtered)<br/>SO_REUSEPORT workers"]
         FILT["Filters<br/>shard filter (defense-in-depth)<br/>subtree include/exclude"]
-        BGATE["Block-control gate (require-block-pow)<br/>re-validates announce PoW<br/>drops legacy standalone coinbase"]
+        BGATE["Block-control gate (require-block-pow)<br/>re-validates announce PoW<br/>drops deprecated standalone coinbase"]
         REASM["BRC-130 reassembly<br/>slot per TxID; TxID verify optional<br/>(-verify-payload-hash)"]
         DECO["BRC-142 decoalesce<br/>bundle → member frames"]
         GAP["Gap tracking<br/>per HashKey/SeqNum flow"]

@@ -1,17 +1,24 @@
 # BRC-133 — Coinbase Transaction Frame Format
 
-> **DEPRECATED — standalone coinbase delivery is legacy and is dropped by
-> default.** A coinbase frame carries no proof of work of its own, so nothing
-> about it can be validated in isolation. The listener's block-control gate
-> (`-require-block-pow`, **default on**) therefore drops every standalone
-> BRC-133 frame before egress and counts it as
-> `bsl_frames_dropped_total{reason="coinbase_legacy"}`. Teranode likewise
-> rejects a loose coinbase.
+> **DEPRECATED, and retained deliberately.** Standalone coinbase carriage
+> (BRC-131 `MsgType 0x02`, `BlockMsgCoinbase`, as specified here) is
+> deprecated. Current implementations do not produce it: a coinbase is invalid
+> to a node unless it is connected to its block, so the coinbase travels
+> **inline in the BRC-144 block body**, where it inherits the block announce's
+> proof of work. A standalone coinbase frame carries no proof of work of its
+> own, so nothing about it can be validated in isolation; the listener's
+> block-control gate (`-require-block-pow`, **default on**) drops every one
+> before egress and counts it as
+> `bsl_frames_dropped_total{reason="coinbase_legacy"}`.
 >
-> The push model supersedes it: the coinbase travels **inline in the BRC-144
-> block body**, where it inherits the block announce's proof of work. This
-> document is retained to describe the wire format for deployments that have
-> explicitly disabled the gate, and for decoding archived traffic.
+> The format is **kept on purpose, not withdrawn.** A future design may need to
+> carry blocks and their coinbase separately across the fabric and recombine
+> them at the edges, and this message type keeps that option open. BRC-133,
+> BRC-131 `MsgType 0x02`, and the `GroupCoinbaseFlow` virtual index `0xFFF8`
+> therefore stay reserved for standalone coinbase carriage; nothing may reuse
+> them. The specification below remains the reference for such a design, for
+> deployments that explicitly disable the gate, and for decoding archived
+> traffic.
 
 BRC-133 defines the policy and wire mechanism for distributing coinbase
 transactions over the multicast fabric. Coinbase transactions are carried as a
@@ -151,9 +158,13 @@ independently by listeners — even though both egress to the same
 1. **Detection** — `frame.IsBlockFrame(raw)` checks Magic and `raw[6] == 0x04`.
 2. **Decode** — `frame.DecodeBlock` returns a `BlockFrame` with `MsgType`,
    `ContentID`, `HashKey`, `SeqNum`, and `Payload`.
-3. **Egress** — `egress.Sender.SendBlock(raw, bf)` forwards the frame (or
+3. **Block-control gate:** while `-require-block-pow` is on (the default),
+   a `BlockMsgCoinbase` frame is dropped here and counted as
+   `bsl_frames_dropped_total{reason="coinbase_legacy"}`. The remaining steps
+   apply only where an operator has disabled the gate.
+4. **Egress** — `egress.Sender.SendBlock(raw, bf)` forwards the frame (or
    payload only in strip-header mode) downstream.
-4. **Gap tracking** —
+5. **Gap tracking** —
    `Tracker.Observe(ctrlGroupIdx, zeroSubtreeID, HashKey, SeqNum, ContentID, source net.IP)`
    when `SeqNum != 0`. The listener passes the virtual `0xFFF8`
    (`GroupCoinbaseFlow`) index for coinbase frames and `0xFFFE`
@@ -161,7 +172,7 @@ independently by listeners — even though both egress to the same
    ingredient. The index is process-local and never appears on the NACK wire;
    it affects metric labelling only, and recovery routing is unchanged (a
    NACK still targets the group the frame actually lives on).
-5. **Filtering** — Coinbase frames bypass all shard/subtree filters; every
+6. **Filtering** — Coinbase frames bypass all shard/subtree filters; every
    subscriber receives every coinbase frame.
 
 ---
@@ -171,7 +182,7 @@ independently by listeners — even though both egress to the same
 | Component              | Change                                                                            |
 | ---------------------- | --------------------------------------------------------------------------------- |
 | shard-proxy    | `ProcessBlock` handles MsgType `0x02`; routes to `GroupBlockBroadcast`               |
-| shard-listener | `processBlockFrame` handles MsgType `0x02`; gap tracking on ctrl flow             |
+| shard-listener | `processBlockFrame` handles MsgType `0x02`; the default-on block-control gate drops it (`coinbase_legacy`); gap tracking on ctrl flow when the gate is off |
 | retry-endpoint | Joins `FF0E::B:FFFE`; caches and retransmits BRC-131 frames regardless of MsgType |
 | shard-common   | `BlockMsgCoinbase = 0x02` constant; `DecodeBlock` validates MsgType               |
 
@@ -182,7 +193,7 @@ independently by listeners — even though both egress to the same
 | Name               | Value    | Description                         |
 | ------------------ | -------- | ----------------------------------- |
 | `FrameVerV4`       | `0x04`   | BRC-131 block control frame version |
-| `BlockMsgCoinbase` | `0x02`   | MsgType: raw coinbase transaction   |
+| `BlockMsgCoinbase` | `0x02`   | MsgType: raw coinbase transaction (deprecated; reserved, never reused) |
 | `GroupBlockBroadcast` | `0xFFFE` | Block control multicast group index |
 
 ---

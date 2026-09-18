@@ -406,8 +406,9 @@ on-wire default is `0x000B` for IANA conformance.
 | 0xFFFE | Block Control channel           | FF0E  | FF0E::B:FFFE       |
 | 0xFFFF | _(reserved)_                    | —     | do not use         |
 
-Two further indices are **virtual**: `0xFFF8` (`GroupCoinbaseFlow`, legacy
-BRC-133) and `0xFFF9` (`GroupAnchorFlow`, BRC-134) are HashKey flow-identity
+Two further indices are **virtual**: `0xFFF8`
+(`GroupCoinbaseFlow`, BRC-133, deprecated and reserved) and `0xFFF9`
+(`GroupAnchorFlow`, BRC-134) are HashKey flow-identity
 ingredients only — frames stamped with them still egress on the Block Control
 channel (`0xFFFE`), and no multicast group is ever joined at those indices.
 
@@ -497,13 +498,18 @@ retransmits to `FF0X::B:FFFB` rather than a shard group.
 
 **→ [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md)**
 
-**BRC-133 (Coinbase Transaction) — DEPRECATED:** BRC-133 formalizes MsgType
-`0x02` within BRC-131 frames (FrameVer `0x04`) for distributing raw coinbase
-transactions on `GroupBlockBroadcast` (`FF0E::B:FFFE`). It is **legacy**: a
-standalone coinbase carries no proof of work of its own, so the listener's
-block-control gate (default on) drops it as `coinbase_legacy`, and Teranode
-rejects a loose coinbase. The coinbase now travels inline in the BRC-144 block
-body, inheriting the announce's PoW.
+**BRC-133 (Coinbase Transaction), deprecated and retained:** BRC-133
+formalizes MsgType `0x02` within BRC-131 frames (FrameVer `0x04`) for
+distributing raw coinbase transactions on `GroupBlockBroadcast`
+(`FF0E::B:FFFE`). It is **deprecated**: a coinbase is invalid to a node unless
+it is connected to its block, so current implementations do not produce a
+standalone coinbase frame and the coinbase travels inline in the BRC-144 block
+body, inheriting the announce's PoW. A standalone coinbase carries no proof of
+work of its own, so the listener's block-control gate (default on) drops it as
+`coinbase_legacy`. It is **retained deliberately**, not withdrawn: a future
+design may carry blocks and their coinbase separately on the fabric and
+recombine them at the edges, so the message type, the BRC-133 number, and the
+`GroupCoinbaseFlow` index stay reserved and are never reused.
 
 **→
 [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)**
@@ -772,7 +778,7 @@ miner-tier peers:
 | Class | Frame | Egress group |
 |-------|-------|--------------|
 | Block announce | BRC-131 (`FrameVerV4`, `BlockMsgAnnounce`) | `GroupBlockBroadcast` |
-| Coinbase | BRC-133 (`FrameVerV4`, `BlockMsgCoinbase`) | `GroupBlockBroadcast` |
+| Coinbase (deprecated; not produced, carried inline in the BRC-144 block) | BRC-133 (`FrameVerV4`, `BlockMsgCoinbase`) | `GroupBlockBroadcast` |
 | Subtree data | BRC-132 (`FrameVerV5`) | `GroupSubtreeDataAnnounce` |
 
 End-user / service consumers (which both submit ordinary transactions) must
@@ -865,10 +871,12 @@ independently re-validates before fan-out (default on;
 - **Block announce (BRC-131):** same stateless header-PoW check before
   forwarding downstream; a frame failing PoW is dropped (`bsl_frames_dropped_total{reason="block_pow"}`)
   and not gap-tracked, so a junk injection can't pollute recovery state.
-- **Coinbase (BRC-133):** legacy while the gate is on — a standalone coinbase
-  frame is dropped (`bsl_frames_dropped_total{reason="coinbase_legacy"}`). The
-  coinbase travels inline in the BRC-144 block body instead, where it
-  inherits the announce's PoW; there is no separate coinbase lane to spoof.
+- **Coinbase (BRC-133):** deprecated, and dropped while the gate is on: a
+  standalone coinbase frame is counted as
+  `bsl_frames_dropped_total{reason="coinbase_legacy"}`. The coinbase travels
+  inline in the BRC-144 block body instead, where it inherits the announce's
+  PoW; no current producer emits a separate coinbase lane to spoof. The
+  message type is retained for a possible future split carriage (see BRC-133).
 - **Subtree data (BRC-132):** no in-frame PoW and no block to correlate against
   pre-block; bounded only by admission control + the 5-minute subtree cache
   TTL (unanchored subtrees age out). This is the soft edge, called out
@@ -1180,6 +1188,9 @@ block-level metadata to all fabric subscribers. Two message types are defined:
   transactions against the new chain tip.
 - **CoinbaseTx (`MsgType 0x02`)** — carries the raw coinbase transaction bytes.
   The ContentID in the frame header is the SHA256d of the coinbase transaction.
+  Deprecated and retained (see BRC-133): current implementations do not
+  produce it, the listener's default-on block-control gate drops it, and the
+  coinbase travels inline in the BRC-144 block body.
 
 Both types share the 92-byte BRC-124 header layout and are delivered on the
 **GroupBlockBroadcast** group (`FF0E::B:FFFE`), ensuring global reach
@@ -1192,7 +1203,8 @@ for gaps, and retry endpoints cache and retransmit V4 frames back to the control
 group (not to a shard group — a critical routing distinction).
 
 For payloads exceeding the path MTU (uncommon for typical block announcements
-but relevant for large coinbase transactions), the proxy uses BRC-130
+but relevant for large coinbase transactions under the deprecated `CoinbaseTx`
+type), the proxy uses BRC-130
 fragmentation with `OrigFrameVer=0x04` in the fragment header.
 
 **→
@@ -1247,10 +1259,17 @@ reference
 
 ## Coinbase Transaction Frame Format (BRC-133) — deprecated
 
-> **Deprecated.** Standalone coinbase delivery is legacy and is dropped by
-> default (`bsl_frames_dropped_total{reason="coinbase_legacy"}`); the coinbase
-> rides inline in the BRC-144 block body instead. The format below applies
-> only where an operator has explicitly disabled `-require-block-pow`.
+> **Deprecated, and retained deliberately.** Current implementations do not
+> produce standalone coinbase frames: a coinbase is invalid to a node unless it
+> is connected to its block, so it rides inline in the BRC-144 block body. The
+> listener's block-control gate (`-require-block-pow`, default on) drops any
+> standalone coinbase frame
+> (`bsl_frames_dropped_total{reason="coinbase_legacy"}`). The format is kept,
+> not withdrawn, so that a future design can carry blocks and their coinbase
+> separately on the fabric and recombine them at the edges; `MsgType 0x02`,
+> BRC-133, and `GroupCoinbaseFlow` (`0xFFF8`) stay reserved and are never
+> reused. Until then the format below applies only where an operator has
+> explicitly disabled the gate.
 
 BRC-133 formalizes the wire mechanism for distributing coinbase transactions as
 a dedicated message type (`BlockMsgCoinbase = 0x02`) within BRC-131 block
@@ -1287,7 +1306,7 @@ regardless of which shard its TxID would otherwise hash to.
 
 Anchor frames are delivered on the **GroupBlockBroadcast** group
 (`FF0E::B:FFFE`), the same global control channel used for BRC-131 block
-announcements and (legacy, deprecated) BRC-133 coinbase transactions.
+announcements and (deprecated, retained) BRC-133 coinbase transactions.
 
 The 92-byte header is layout-identical to BRC-124 with Frame Version `0x06` at
 offset 6. The TxID field (bytes 8–39) carries the SHA256d of the anchor
@@ -1705,7 +1724,7 @@ processing, flush OTLP exporter.
   Merkle verification, proxy/listener/retry-endpoint changes
 - [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)
   — coinbase frame wire format, MsgType constants, proxy/listener/retry-endpoint
-  changes
+  changes (deprecated and retained; reserved for a possible split carriage)
 - [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)
   — anchor frame wire format, FrameVerV6, proxy/listener/retry-endpoint changes
 - [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) —
@@ -1804,7 +1823,7 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 | BRC-130 | 104 bytes   | Yes (per-fragment)   | Yes (fragmented)         |
 | BRC-131 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane)          |
 | BRC-132 | 92 bytes    | Yes (per-subtree)    | No (ctrl-plane)          |
-| BRC-133 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane coinbase; **deprecated** — dropped by default, coinbase is inline in BRC-144) |
+| BRC-133 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane coinbase; **deprecated**, retained: not produced, dropped by default, coinbase is inline in BRC-144) |
 | BRC-134 | 92 bytes    | Yes (HashKey/SeqNum) | No (ctrl-plane anchor)   |
 | BRC-135 | 92 bytes    | Yes (emitter-stamped HashKey/SeqNum) | No (ctrl-plane header egress) |
 | BRC-142 | 66 bytes (bundle) | Yes (per-bundle HashKey/SeqNum) | Yes (members share one group + subtree) |

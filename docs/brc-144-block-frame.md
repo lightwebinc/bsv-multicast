@@ -79,7 +79,11 @@ The coinbase is the full transaction, not just its `TxID`: a node rejects a loos
 coinbase on its transaction-ingest path, so it is delivered only here and block
 assembly consumes its bytes directly. This is why there is **no standalone
 coinbase frame** — a coinbase off the fabric is a plain BRC-12 transaction that
-only ever travels inside this block frame.
+only ever travels inside this block frame. The fabric's standalone coinbase
+message ([BRC-133](brc-133-coinbase-delivery.md), BRC-131 `MsgType 0x02`) is
+deprecated and not produced; it is retained only so that a future design could
+carry blocks and their coinbase separately on the fabric and recombine them at
+the edges.
 
 ---
 

@@ -131,7 +131,7 @@ Several frame types share `GroupBlockBroadcast` (`0xFFFE`) as their egress desti
 
 | Virtual index | Constant            | Used by             | Egress group |
 | ------------- | ------------------- | ------------------- | ------------ |
-| `0xFFF8`      | `GroupCoinbaseFlow` | BRC-133 coinbase tx (deprecated — legacy frames only) | `0xFFFE`     |
+| `0xFFF8`      | `GroupCoinbaseFlow` | BRC-133 coinbase tx (deprecated; reserved, never reused) | `0xFFFE`     |
 | `0xFFF9`      | `GroupAnchorFlow`   | BRC-134 anchor tx   | `0xFFFE`     |
 
 BRC-131 block announces continue to use `0xFFFE` itself as the HashKey ingredient.
@@ -176,7 +176,7 @@ Like beacon groups, subtree data announcements support multiple scopes (site-loc
 - **Network-service group helper:** `shard-common/shard/control.go` — `GroupAddr(scopePrefix uint16, groupID uint16, idx GroupIdx)` (standalone; not bound to Engine scope).
 - **Group index type:** `type GroupIdx uint16` — typed wrapper for the 16-bit IANA group index in bytes 14–15. Provides a `String()` method returning a stable snake_case label (`"block_broadcast"`, `"beacon"`, etc.) used in metrics and logs.
 - **Constants:** `GroupBlockHeader = 0xFFFA`, `GroupSubtreeDataAnnounce = 0xFFFB`, `GroupSubtreeGroupAnnounce = 0xFFFC`, `GroupBeacon = 0xFFFD`, `GroupBlockBroadcast = 0xFFFE`.
-- **Virtual HashKey ingredients (not multicast addresses):** `GroupCoinbaseFlow = 0xFFF8` (deprecated — legacy BRC-133 frames only), `GroupAnchorFlow = 0xFFF9`.
+- **Virtual HashKey ingredients (not multicast addresses):** `GroupCoinbaseFlow = 0xFFF8` (BRC-133, deprecated and reserved: current implementations do not produce standalone coinbase frames, but the index is kept for a possible future split block/coinbase carriage and is never reused), `GroupAnchorFlow = 0xFFF9`.
 - **Default group-id:** `shard.DefaultGroupID = 0x000B` (IANA Bitcoin).
 
 ---

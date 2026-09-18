@@ -70,12 +70,16 @@ and anchor transactions over reserved control groups.
   fragmentation; per-fragment NACK; listener reassembly
 - [BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md)
   — BlockAnnounce/CoinbaseTx frame types; control-group routing
+  (CoinbaseTx is deprecated and retained; see BRC-133)
 - [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md) — Subtree
   data distribution with Merkle roots
 - [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)
-  — Coinbase transaction wire format on the control channel (**deprecated** —
-  the coinbase travels inline in the BRC-144 block body; standalone coinbase
-  frames are dropped by the default block-control gate)
+  — Coinbase transaction wire format on the control channel (**deprecated**,
+  retained deliberately: not produced by current implementations, since the
+  coinbase travels inline in the BRC-144 block body; dropped by the listener's
+  default-on block-control gate; kept reserved so a future design could carry
+  blocks and their coinbase separately on the fabric and recombine them at the
+  edges)
 - [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)
   — Chained anchor transaction distribution
 - [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) —
