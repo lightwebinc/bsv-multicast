@@ -54,17 +54,20 @@ BRC-142's `0x08`).
 | 0 | 4 | `uint32` BE | Network Magic | `0xE3E1F3E8` (BSV mainnet P2P magic). Frames with incorrect magic are rejected. |
 | 4 | 2 | `uint16` BE | Protocol Version | `0x02BF` (703). Informational; receivers do not validate. |
 | 6 | 1 | `byte` | Frame Version | `0x09` — BEEF object frame. Any other value is handled by a different decoder. |
-| 7 | 1 | `byte` | Reserved | `0x00` on send; ignored on receive (reserved for future plane-level message types). The BEEF encoding version is **not** duplicated here — it is the payload's first four bytes. |
-| 8 | 32 | `[32]byte` | ContentID | `SHA-256d(payload bytes)` — the object's identity and the BRC-130 reassembly verification hash. With TopicID it keys both fragment reassembly and duplicate suppression (see below). Never the subject TxID. |
+| 7 | 1 | `byte` | DeliverCount | How many of the payload record's leading topics are **deliverable** (matched by delivery edges): `1` from open ingress, up to the operator's cap from authenticated ingress. `0` is the legacy encoding and is read as `1`. Every further name in the record is a **label**: carried to the subscriber, never matched. Set by the ingress, never taken from a publisher's pre-framed value. The BEEF encoding version is **not** here — it is the object's first four bytes. |
+| 8 | 32 | `[32]byte` | ContentID | `SHA-256d(payload bytes)` — the object's identity, over the payload as carried (the submission record when the ingress carried one, so the same object under a different label set is a distinct submission); and the BRC-130 reassembly verification hash. With TopicID it keys both fragment reassembly and duplicate suppression (see below). Never the subject TxID. |
 | 40 | 8 | `uint64` BE | HashKey | Per-(sender, group) flow identifier; stamped at ingress; `0` = unset. Derivation and flow semantics per [BRC-148](brc-148-shard-domain-beef-plane.md) §Frame carriage (TopicID excluded). |
 | 48 | 8 | `uint64` BE | SeqNum | Per-sender monotonic counter within the (sender, group) flow; stamped at ingress; `0` = unstamped. Drives gap detection, NACK recovery, and retransmit dedup. |
-| 56 | 32 | `[32]byte` | TopicID | `SHA-256(UTF-8 topic name)`. The delivery-selectivity key: group derivation takes its top bits, and fan-out filters subscribers on it. Occupies the field that carries the SubtreeID in transaction frames. |
+| 56 | 32 | `[32]byte` | TopicID | `SHA-256(UTF-8 topic name)` of the record's **first** topic. The shard key: group derivation takes its top bits, and it is always the first deliverable topic. Occupies the field that carries the SubtreeID in transaction frames. |
 | 88 | 4 | `uint32` BE | Payload Length | Byte length of the payload. |
-| 92 | \* | `[]byte` | Payload | The BEEF object **verbatim** — no envelope, no re-encoding, proof data intact. |
+| 92 | \* | `[]byte` | Payload | The **submission record verbatim** (leads with the `0xBEEF` tag; every topic name the publisher submitted, then the object, proof data intact), or a bare BEEF object (leads with `0x01`). The two cannot collide on their leading bytes. |
 
-#### Payload leading bytes — BEEF version word
+#### Object leading bytes — BEEF version word
 
-| Payload `[0:4]` | Type | Encoding | Reference |
+The object is the record's `Object` field, or the whole payload when the
+payload is a bare object.
+
+| Object `[0:4]` | Type | Encoding | Reference |
 | --------------- | ---- | -------- | --------- |
 | `0100BEEF` | `uint32` LE (4022206465) | BEEF | [BRC-62](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md) |
 | `0200BEEF` | `uint32` LE (4022206466) | BEEF V2 (TXID-only extension) | [BRC-96](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0096.md) |
@@ -81,13 +84,13 @@ self-identifying at a fixed offset).
 Objects exceeding the path MTU are carried as
 [BRC-130](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md)
 fragments (`FrameVer 0x03`, `OrigFrameVer = 0x09`) with bytes 0–91
-layout-identical to the table above, so ContentID and TopicID appear in
-every fragment; ContentID is the reassembly verification hash. Reassembly
-MUST key slots on the **(ContentID, TopicID) pair**, not on ContentID alone:
-sibling emissions of one object to different topics share a ContentID by
-construction, so a ContentID-only slot key collapses concurrent in-flight
-objects into one slot and silently delivers only the first topic. The
-interaction with filtering is specified in BRC-148 §Frame carriage.
+layout-identical to the table above, so ContentID, TopicID and DeliverCount
+appear in every fragment; ContentID is the reassembly verification hash.
+Reassembly MUST key slots on the (ContentID, TopicID) pair. The record's
+field order puts the topic list before the object, so fragment 0 carries
+the whole list and an edge may discard a non-matching object before
+reassembling it; that order is fixed for this reason. The interaction with
+filtering is specified in BRC-148 §Frame carriage.
 
 ### Submission record (ingress)
 
@@ -103,58 +106,55 @@ Offset  Size  Field
   …       …   Object      (the BEEF object; leading marker per the version-word table)
 ```
 
-For each named topic the ingress derives `TopicID = SHA-256(name)`, computes
-the object's ContentID once, and emits one `FrameVer 0x09` frame to that
-topic's group — sibling emissions share a ContentID, and ingress duplicate
-suppression keys on the (ContentID, TopicID) pair per BRC-148. A record
-whose object does not lead with a marker from the version-word table, whose
-lengths violate the bounds above, or whose object exceeds the operator's
-size bound MUST be rejected. A malformed record desynchronises its stream;
-the receiver MUST close the connection.
+The ingress emits the record as **one** `FrameVer 0x09` frame at any topic
+count: the payload is the record verbatim, `TopicID = SHA-256(topics[0])`,
+ContentID is over the record, and the frame goes to the first topic's
+group. Ingress duplicate suppression keys on the (ContentID, TopicID) pair
+per BRC-148. A record whose object does not lead with a marker from the
+version-word table, whose lengths violate the bounds above, or whose object
+exceeds the operator's size bound MUST be rejected. A malformed record
+desynchronises its stream; the receiver MUST close the connection.
 
-#### Fan-out admission (multi-topic is an authenticated capability)
+#### Deliverable topics and labels
 
-`TopicCount` in the wire grammar ranges 1..15, but *admission* of a
-multi-topic record is conditioned on the ingress identity path, because one
-record with `TopicCount` topics fans out to that many full-object frames — an
-up-to-15× amplification of a single submission, attacker-declarable and free
-on an anonymous path with no proof-of-work or membership lever available to
-bound it:
+A record names 1..15 topics on every path and is never rejected for its
+count. What the ingress path decides is how many of the leading names are
+**deliverable** — matched by delivery edges against subscribers' elections
+— and it writes that number into `DeliverCount`. Every further name is a
+**label**: it reaches every subscriber the object reaches, inside the
+payload, and is never matched on, so a subscriber electing only a label
+topic does not receive the object.
 
 - **Open / public / anonymous ingress** (a record admitted on a public port
-  with no consumer identity) MUST carry `TopicCount == 1`; a public record
-  with `TopicCount > 1` MUST be rejected. The open path therefore never fans
-  out — there is no amplification to bound and no per-submission gate is
-  needed. A public publisher wanting N topics submits N single-topic records,
-  so its ingress effort scales 1:1 with the fan-out it demands.
-- **Authenticated / consumer-tunnel ingress** MAY carry `TopicCount` 1..15.
-  Identity lets the operator bound the fan-out, by either or both of two
-  levers, neither fixed by this spec:
-  - **A hard admission cap `M` ≤ 15.** The operator MAY reject any
-    authenticated record with `TopicCount > M`. `M` = 1 collapses the
-    authenticated path to the open path's behaviour; `M` = 15 imposes no cap.
-  - **A metered allowance `N` ≤ `M`.** The first `N` topics are admitted
-    free and each additional topic is charged at the operator's standard
-    delivery rate on its delivered bytes (so ingress itself stays unbilled).
+  with no consumer identity) MUST set `DeliverCount = 1`. One deliverable
+  topic per anonymous record is what keeps the free door free of
+  amplification: a record costs one frame and reaches one topic's
+  subscribers however many names it carries, so there is no
+  attacker-declarable fan-out on a path with no proof-of-work or membership
+  lever to bound it.
+- **Authenticated / consumer-tunnel ingress** MAY set `DeliverCount` up to
+  the operator's cap, which is at most 15 and is operator policy. The
+  operator's fan-out exposure is bounded by that cap, not by `TopicCount`.
 
-  An operator that prefers a bounded capability to a priced one sets `M`
-  alone and omits `N` entirely; one that prefers to sell fan-out sets both.
-  Publishers MUST NOT assume any particular `M`, and a rejection for
-  exceeding it is an admission failure, not a malformed record.
+`DeliverCount` is the ingress's to set. An ingress accepting a pre-framed
+`FrameVer 0x09` MUST overwrite it from its own policy for that source, and
+MUST reject a pre-framed record whose header TopicID is not the hash of its
+first topic. There is no per-topic charge on either path: nothing beyond
+the deliverable prefix is delivered, so nothing beyond it is priced, and a
+subscriber's cost stays what its lane carried.
 
-  Where an operator delivers a single object to a subscriber that has elected
-  more than one of its topics, whether the subscriber receives one copy or
-  one copy per matched topic is a **delivery policy**, likewise not fixed
-  here; the delivery record identifies one topic per copy either way.
+A subscriber that elected more than one of a frame's deliverable topics
+receives the object **once**, under the first elected topic in record
+order; the delivery record below names that topic.
 
-This split is an admission policy over an unchanged wire grammar — the 92-byte
-frame and the record layout are byte-identical on both paths.
+This split is a policy over an unchanged wire grammar — the 92-byte frame
+and the record layout are byte-identical on both paths; only the value the
+ingress writes into `DeliverCount` differs.
 
 #### Detection on shared ports
 
-Single-topic BEEF submission records MAY ride the open transaction port
-alongside the existing grammars (multi-topic records require the
-authenticated path per §Fan-out admission), distinguished by leading
+BEEF submission records MAY ride the open transaction port alongside the
+existing grammars, distinguished by leading
 bytes — network magic `0xE3E1F3E8` selects a framed datagram, the `0xBEEF`
 tag selects a submission record, and anything else is a bare transaction
 ([BRC-12](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0012.md)
@@ -173,15 +173,21 @@ emits, per delivered object:
 
 ```text
 Offset  Size  Field
-  0      32   TopicID    (the matched topic's identifier)
- 32       4   ObjectLen  (uint32 BE, ≥ 1)
- 36       …   Object     (the BEEF object verbatim)
+  0      32   TopicID     (the identifier of the elected topic that matched)
+ 32       4   PayloadLen  (uint32 BE, ≥ 1)
+ 36       …   Payload     (the frame payload verbatim: the submission record, or a bare object)
 ```
 
-The record carries the TopicID, not the topic name — the subscriber elected
-its topics and maps identifiers back locally. Subscribers taking whole
-`FrameVer 0x09` frames instead of a stripped lane need no record; the frame
-already carries both identifiers.
+The TopicID is the one of the subscriber's elected topics that the edge
+matched, which need not be the frame's header TopicID. The payload is the
+frame payload verbatim, so when the publisher submitted a record the
+subscriber receives every topic name it wrote, deliverable and label alike,
+and can map the matched identifier back to one of them; a subscriber that
+receives a bare object maps the identifier back from its own election.
+The subscriber tells the two forms apart by the payload's leading bytes
+exactly as the frame does. Subscribers taking whole `FrameVer 0x09` frames
+instead of a stripped lane need no record; the frame already carries the
+identifiers and the payload.
 
 ## References
 
