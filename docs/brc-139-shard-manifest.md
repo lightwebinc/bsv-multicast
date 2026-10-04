@@ -438,7 +438,7 @@ guidance:
 | Wire format encode/decode                         | `shard-common/frame/shard_manifest.go`              |
 | Daemon                                            | `shard-manifest/{main.go, sender/, config/, metrics/}` |
 | Ansible deployment role                           | `manifest-infra/ansible/roles/shard-manifest/`    |
-| Helm chart                                        | `shard-manifest-helm/`                              |
+| Helm chart                                        | `charts/shard-manifest/`                              |
 
 ---
 

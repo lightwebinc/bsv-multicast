@@ -179,13 +179,13 @@ shard-manifest, teranode-bridge, and arcade-bridge charts install standalone:
 
 | Repository                                                                  | Chart           |
 | --------------------------------------------------------------------------- | --------------- |
-| [shard-proxy-helm](https://github.com/lightwebinc/shard-proxy-helm)         | shard-proxy     |
-| [shard-listener-helm](https://github.com/lightwebinc/shard-listener-helm)   | shard-listener  |
-| [retry-endpoint-helm](https://github.com/lightwebinc/retry-endpoint-helm)   | retry-endpoint  |
-| [subtx-generator-helm](https://github.com/lightwebinc/subtx-generator-helm) | subtx-generator |
-| [shard-manifest-helm](https://github.com/lightwebinc/shard-manifest-helm)   | shard-manifest  |
-| [teranode-bridge-helm](https://github.com/lightwebinc/teranode-bridge-helm) | teranode-bridge |
-| [arcade-bridge-helm](https://github.com/lightwebinc/arcade-bridge-helm)     | arcade-bridge   |
+| [charts/shard-proxy](https://github.com/lightwebinc/charts/tree/main/charts/shard-proxy)         | shard-proxy     |
+| [charts/shard-listener](https://github.com/lightwebinc/charts/tree/main/charts/shard-listener)   | shard-listener  |
+| [charts/retry-endpoint](https://github.com/lightwebinc/charts/tree/main/charts/retry-endpoint)   | retry-endpoint  |
+| [charts/subtx-generator](https://github.com/lightwebinc/charts/tree/main/charts/subtx-generator) | subtx-generator |
+| [charts/shard-manifest](https://github.com/lightwebinc/charts/tree/main/charts/shard-manifest)   | shard-manifest  |
+| [charts/teranode-bridge](https://github.com/lightwebinc/charts/tree/main/charts/teranode-bridge) | teranode-bridge |
+| [charts/arcade-bridge](https://github.com/lightwebinc/charts/tree/main/charts/arcade-bridge)     | arcade-bridge   |
 
 ### Testing and Tools
 
@@ -1570,8 +1570,8 @@ make help          # show all targets (tiered: test-retransmit, test-frag,
 
 Kubernetes deployment is provided by
 [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra),
-which composes the per-service Helm charts (`shard-proxy-helm`,
-`shard-listener-helm`, `retry-endpoint-helm`, `subtx-generator-helm`); the
+which composes the per-service Helm charts (`charts/shard-proxy`,
+`charts/shard-listener`, `charts/retry-endpoint`, `charts/subtx-generator`); the
 `shard-manifest`, `teranode-bridge`, and `arcade-bridge` charts ship
 standalone and are deployed separately.
 

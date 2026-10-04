@@ -42,13 +42,13 @@ and anchor transactions over reserved control groups.
 | [beef-generator](https://github.com/lightwebinc/beef-generator) | Testing                 | BRC-148/149 BEEF object-plane traffic generator (`beef-gen`)                                |
 | [multicast-test](https://github.com/lightwebinc/multicast-test)   | Testing                 | Integration test suite: Go + Docker scenarios (`harness/`) on an isolated IPv6 bridge       |
 | [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes (deploy)     | k0s-reference + Helm composition of the full stack; distribution-agnostic                   |
-| [shard-proxy-helm](https://github.com/lightwebinc/shard-proxy-helm)             | Helm chart              | Chart for `shard-proxy`                                                                     |
-| [shard-listener-helm](https://github.com/lightwebinc/shard-listener-helm)       | Helm chart              | Chart for `shard-listener`                                                                  |
-| [retry-endpoint-helm](https://github.com/lightwebinc/retry-endpoint-helm)       | Helm chart              | Chart for `retry-endpoint`                                                                  |
-| [subtx-generator-helm](https://github.com/lightwebinc/subtx-generator-helm)     | Helm chart              | Chart for `subtx-generator`                                                                 |
-| [shard-manifest-helm](https://github.com/lightwebinc/shard-manifest-helm)       | Helm chart              | Chart for `shard-manifest`                                                                  |
-| [teranode-bridge-helm](https://github.com/lightwebinc/teranode-bridge-helm)     | Helm chart              | Chart for `teranode-bridge`                                                                 |
-| [arcade-bridge-helm](https://github.com/lightwebinc/arcade-bridge-helm)         | Helm chart              | Chart for `arcade-bridge`                                                                   |
+| [charts/shard-proxy](https://github.com/lightwebinc/charts/tree/main/charts/shard-proxy)             | Helm chart              | Chart for `shard-proxy`                                                                     |
+| [charts/shard-listener](https://github.com/lightwebinc/charts/tree/main/charts/shard-listener)       | Helm chart              | Chart for `shard-listener`                                                                  |
+| [charts/retry-endpoint](https://github.com/lightwebinc/charts/tree/main/charts/retry-endpoint)       | Helm chart              | Chart for `retry-endpoint`                                                                  |
+| [charts/subtx-generator](https://github.com/lightwebinc/charts/tree/main/charts/subtx-generator)     | Helm chart              | Chart for `subtx-generator`                                                                 |
+| [charts/shard-manifest](https://github.com/lightwebinc/charts/tree/main/charts/shard-manifest)       | Helm chart              | Chart for `shard-manifest`                                                                  |
+| [charts/teranode-bridge](https://github.com/lightwebinc/charts/tree/main/charts/teranode-bridge)     | Helm chart              | Chart for `teranode-bridge`                                                                 |
+| [charts/arcade-bridge](https://github.com/lightwebinc/charts/tree/main/charts/arcade-bridge)         | Helm chart              | Chart for `arcade-bridge`                                                                   |
 | [bsv-multicast](https://github.com/lightwebinc/bsv-multicast)             | Documentation           | This repository; project overview, design, and BRC specifications                           |
 
 ## Documentation
