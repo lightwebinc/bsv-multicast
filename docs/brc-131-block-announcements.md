@@ -1,6 +1,6 @@
 # BRC-131 — Block Announcement Frame Format
 
-BRC-131 defines a new frame version (0x04) for distributing block-level metadata over the multicast fabric. Block announcements and coinbase transactions are delivered to all subscribers via a dedicated control-plane multicast group, independently of the shard groups used for transaction distribution. Standalone coinbase delivery (`MsgType=0x02`) is deprecated and deliberately retained (see BRC-133): current implementations do not produce it, the coinbase travels inline in the BRC-144 block body, and the listener's default-on block-control gate drops a standalone coinbase frame. The message type stays reserved so that a future design can carry blocks and their coinbase separately on the fabric and recombine them at the edges.
+BRC-131 defines a new frame version (0x04) for distributing blocks over the multicast fabric. Block announcements and coinbase transactions are delivered to all subscribers via a dedicated control-plane multicast group, independently of the shard groups used for transaction distribution. Standalone coinbase delivery (`MsgType=0x02`) is deprecated and deliberately retained (see BRC-133): current implementations do not produce it, the coinbase travels inline in the BRC-144 block body, and the listener's default-on block-control gate drops a standalone coinbase frame. The message type stays reserved so that a future design can carry blocks and their coinbase separately on the fabric and recombine them at the edges.
 
 > **Canonical spec:** [BRC-131](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0131.md).
 > This document is the detailed design and rationale.
@@ -11,10 +11,10 @@ BRC-131 defines a new frame version (0x04) for distributing block-level metadata
 
 The multicast fabric distributes transactions to sharded subscriber groups. Blocks involve two additional distribution needs:
 
-1. **Block announcement** — subscribers must learn that a new block has been found and which subtree-root hashes it references, so they can update their block templates and gap-tracking state.
+1. **Block announcement** — subscribers must learn that a new block has been found and receive the block itself. On this fabric the announcement and the block data are the same thing: the announcement payload is the complete BRC-144 block object (header, counts, subtree roots, full coinbase, height, coinbase BUMP).
 2. **Coinbase delivery** — the coinbase transaction is a singleton that every subscriber needs regardless of shard assignment. *(Deprecated and retained per BRC-133; the coinbase travels inline in the BRC-144 block body.)*
 
-Both payloads are small relative to a typical block and must reach every subscriber with the same reliability guarantees (sequence tracking, NACK-based retransmission) as BRC-124 transaction frames. BRC-131 reuses the BRC-124 header layout and control infrastructure for both, on a dedicated control-plane multicast group.
+Both must reach every subscriber with the same reliability guarantees (sequence tracking, NACK-based retransmission) as BRC-124 transaction frames. BRC-131 reuses the BRC-124 header layout and control infrastructure for both, on a dedicated control-plane multicast group.
 
 ---
 
@@ -55,7 +55,7 @@ The BRC-131 header is **layout-identical** to a BRC-124 header. Infrastructure c
 
 | MsgType | Constant           | Payload Format                       |
 | ------- | ------------------ | ------------------------------------ |
-| `0x01`  | `BlockMsgAnnounce` | BlockAnnounce payload (see §BlockAnnounce Payload) |
+| `0x01`  | `BlockMsgAnnounce` | A BRC-144 block object, carried verbatim (see §BlockAnnounce Payload) |
 | `0x02`  | `BlockMsgCoinbase` | Raw coinbase transaction bytes. Deprecated: not produced, dropped by default at the listener's block-control gate; reserved, never reused (see BRC-133) |
 
 Any other MsgType value causes the frame to be rejected with `ErrBadBlockMsg`.
@@ -64,20 +64,29 @@ Any other MsgType value causes the frame to be rejected with `ErrBadBlockMsg`.
 
 ## BlockAnnounce Payload
 
-The payload for a `BlockAnnounce` frame (`MsgType=0x01`) is structured as follows:
+The payload for a `BlockAnnounce` frame (`MsgType=0x01`) is a complete [BRC-144](brc-144-block-frame.md) block object, carried verbatim with no additional envelope:
 
-| Offset | Size        | Field          | Description                                             |
-| ------ | ----------- | -------------- | ------------------------------------------------------- |
-| 0      | 80          | BlockHeader    | Standard 80-byte BSV block header                       |
-| 80     | 32          | CoinbaseTxID   | SHA256d of the coinbase transaction (internal byte order)|
-| 112    | 4           | SubtreeCount   | Number of subtree root hashes (uint32 BE); may be 0     |
-| 116    | 32 × N      | SubtreeHashes  | Ordered subtree root hashes (each 32 bytes)             |
+| Size   | Field            | Description                                                      |
+| ------ | ---------------- | ---------------------------------------------------------------- |
+| 80     | BlockHeader      | Standard 80-byte BSV block header                                |
+| 8      | TransactionCount | uint64 BE. Transactions committed by the block                   |
+| 8      | SizeInBytes      | uint64 BE. Total serialized block size                           |
+| 8      | SubtreeCount (M) | uint64 BE. Number of subtree roots that follow                   |
+| 32 × M | SubtreeHashes    | Ordered subtree Merkle roots, each 32 bytes                      |
+| \*     | Coinbase         | Full coinbase transaction (BRC-12), self-delimiting by structure |
+| 8      | Height           | uint64 BE. Block height                                          |
+| 8      | CoinbaseBUMPLen  | uint64 BE. Byte length of the coinbase BUMP that follows         |
+| \*     | CoinbaseBUMP     | BRC-74 Merkle path of the coinbase; present only when `CoinbaseBUMPLen > 0` |
 
-**Minimum payload size:** 116 bytes (header + CoinbaseTxID + SubtreeCount field with N=0).
+The fixed prefix through `SubtreeCount` is 104 bytes. The `Coinbase` carries no length prefix; a reader parses it by transaction structure and resumes at `Height`. Field definitions are normative in BRC-144.
 
-**ContentID:** The `ContentID` field in the frame header carries the 32-byte block hash (internal byte order, identical to how TxIDs are stored in BRC-124).
+**Minimum payload size:** 120 bytes plus the coinbase (M = 0, no BUMP). **Total:** 120 + 32 × M + `len(Coinbase)` + `CoinbaseBUMPLen`.
 
-**SubtreeHashes:** The ordered list of Merkle roots of the sharded transaction subtrees included in this block. Subscribers use these to verify their received transactions against the block. The ordering matches the producer's subtree enumeration; the count may be zero for empty blocks.
+**ContentID:** the 32-byte block hash (internal byte order), verified as `SHA256d(payload[0:80])`. A block-header consumer (BRC-135) takes `payload[0:80]`.
+
+**No separate coinbase identifier.** The coinbase itself is present; its id is `SHA256d(Coinbase)`. A payload that ends after the subtree hashes is malformed and MUST be rejected.
+
+**Revision note.** Earlier revisions defined this payload as header + 32-byte CoinbaseTxID + `uint32` subtree count. No producer ever emitted that grammar; every producer emits the BRC-144 object (`shard-common/objfmt.MulticastBytes`, `ClassBlock`). Because the grammars share a prefix, a reader built to the old text misparses a zero-subtree block rather than failing cleanly, so a reader MUST treat the payload as a BRC-144 object. The legacy `frame.EncodeBlockAnnounce` / `DecodeBlockAnnounce` helpers remain only for the `send-test-frames` test tool.
 
 ---
 
@@ -106,7 +115,7 @@ BRC-131 frames participate in the same NACK-based reliability mechanism as BRC-1
 
 When the payload exceeds the path MTU, the proxy fragments the frame using BRC-130. The BRC-130 fragment header at bytes 0–91 is populated as for a normal BRC-131 frame (Magic, HashKey, SeqNum). The `OrigFrameVer` field at byte 100 of the BRC-130 header is set to `0x04` so the reassembler can reconstruct the correct frame version. The `MsgType` byte is preserved in the BRC-130 fragment's byte 7.
 
-Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hundred subtree hashes) fit well within a 9000-byte jumbo frame and do not require fragmentation in practice. Fragmentation is relevant primarily for `CoinbaseTx` frames carrying large coinbase transactions (deprecated and retained; see BRC-133).
+A block announcement carries the whole block object, so its size follows the block: the fixed prefix and subtree list are small (104 + 32 × 128 = 4200 bytes for 128 subtrees), and the coinbase and its optional BUMP carry the rest. Announcements routinely exceed a 9000-byte jumbo frame, so fragmentation is the normal case.
 
 ---
 
@@ -172,11 +181,10 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 | Name                  | Value  | Hex    | Description                                       |
 | --------------------- | ------ | ------ | ------------------------------------------------- |
 | `FrameVerV4`          | 4      | `0x04` | BRC-131 block control frame version               |
-| `BlockMsgAnnounce`    | 1      | `0x01` | MsgType: block header + subtree hashes            |
+| `BlockMsgAnnounce`    | 1      | `0x01` | MsgType: block announcement (payload = BRC-144 object) |
 | `BlockMsgCoinbase`    | 2      | `0x02` | MsgType: raw coinbase transaction (deprecated; reserved) |
 | `GroupBlockBroadcast`    | 65534  | `0xFFFE` | Block control multicast group index             |
 | `BlockHeaderSize`     | 80     | `0x50` | Standard BSV block header size in bytes           |
-| `BlockAnnounceMinPayload` | 116 | `0x74` | Minimum BlockAnnounce payload (N=0 subtrees)    |
 | `HeaderSize`          | 92     | `0x5C` | BRC-131 header size (identical to BRC-124)        |
 
 ---
@@ -187,7 +195,8 @@ Block announcements for typical blocks (80-byte header + CoinbaseTxID + a few hu
 - [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md) — NACK/ACK/MISS used for block frame retransmission
 - [BRC-129: Multicast Group Address Assignments](brc-129-multicast-addressing.md) — control-plane group index allocations
 - [BRC-130: Fragmentation](brc-130-fragmentation.md) — BRC-130 extension for large block payloads; `OrigFrameVer=0x04`
-- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame) — `EncodeBlock`, `DecodeBlock`, `IsBlockFrame`, `EncodeBlockAnnounce`, `DecodeBlockAnnounce`
+- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame) — `EncodeBlock`, `DecodeBlock`, `IsBlockFrame`, `EncodeBlockAnnounce`, `DecodeBlockAnnounce` (legacy test grammar)
+- [shard-common/objfmt](https://github.com/lightwebinc/shard-common/tree/main/objfmt) — `MulticastBytes` (`ClassBlock` wraps the BRC-144 object verbatim)
 - [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder) — `ProcessBlock`, `fragmentBlock`
 - [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener) — `processBlockFrame`, `egress.SendBlock`
 - [retry-endpoint/ingress](https://github.com/lightwebinc/retry-endpoint/tree/main/ingress) — `processBlockFrame`

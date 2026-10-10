@@ -29,7 +29,7 @@ Offset  Size  Field
      0     4  Magic (0xE3E1F3E8)
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x20 (ADVERT)
-     7     1  Scope  (0x05=site, 0x08=org, 0x0E=global)
+     7     1  Scope  (0x05=site, 0x08=org, 0x0E=global, 0xFF=all three)
      8    16  NACKAddr      — IPv6 unicast address for NACK requests
     24     2  NACKPort      — UDP NACK listen port (default 9300)
     26     1  Tier          — operator-assigned; 0 = same AS as proxy (max 254; 0xFF reserved for static seeds and rejected at config load)

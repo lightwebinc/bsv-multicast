@@ -16,7 +16,7 @@ Bytes 0–91 are **layout-identical** to a BRC-124 header (FrameVer `0x03` and t
 | 0      | 4    | —     | Network Magic   | 0xE3E1F3E8 (BSV mainnet P2P magic)                             |
 | 4      | 2    | —     | Protocol Ver    | 0x02BF (703, BSV large-block baseline)                         |
 | 6      | 1    | —     | Frame Version   | **0x03** — BRC-130 fragment                                    |
-| 7      | 1    | —     | MsgType         | Carried through from the original frame: `0x01`/`0x02` for fragmented BRC-131/BRC-132, `0x00` for BRC-124/128/149 |
+| 7      | 1    | —     | MsgType         | Carried through from the original frame: `0x01`/`0x02` for fragmented BRC-131/BRC-132, `0x00` for BRC-124/128; `DeliverCount` for BRC-149 |
 | 8      | 32   | 8B    | Transaction ID  | SHA256d(reassembled payload); same on every fragment           |
 | 40     | 8    | 8B    | HashKey         | XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID); stamped by proxy     |
 | 48     | 8    | 8B    | SeqNum          | Per-flow monotonic counter; independent per fragment           |

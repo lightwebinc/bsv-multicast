@@ -154,6 +154,8 @@ speaks whatever the receiving node already speaks.
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | [teranode-bridge](https://github.com/lightwebinc/teranode-bridge) | Landing-tier bridge for an **unmodified** Teranode cluster. Terminates the per-class push lanes (BRC-30 transactions, BRC-143 subtrees, BRC-144 blocks), submits transactions to propagation, and — because Teranode learns of subtrees and blocks by announcement plus pull — caches pushed objects, announces itself as their source, and serves the resulting pull. The reverse path subscribes to the cluster's blockchain notifications and publishes what that cluster produced back onto the object plane. |
 | [arcade-bridge](https://github.com/lightwebinc/arcade-bridge)     | Landing-tier bridge for the broadcaster (application) tier: runs an **unmodified** Arcade v2 + merkle-service stack with the fabric as its transport. Terminates the BRC-143 subtree and BRC-144 block delivery lanes into merkle-service and forwards Arcade's transaction broadcasts into the fabric on the open class; it carries no miner entitlements. The shared lane/cache/retrieval machinery is imported from teranode-bridge's public packages. |
+| [overlay-bridge](https://github.com/lightwebinc/overlay-bridge)   | Landing-tier bridge for an **unmodified** overlay services engine. Terminates the BRC-149 BEEF delivery-record lane (9171) and the BRC-135 stream-form header lane (9172), feeds objects to the engine's submit interface and headers to its chain tracker, and publishes accepted submissions back onto the BEEF plane through the open ingress (8725, `0xBEEF` tag-detected). |
+| [overlay-blueprints](https://github.com/lightwebinc/overlay-blueprints) | Reference overlay services host on the BEEF object plane, fed by overlay-bridge; applications load as host-side modules. Experimental. |
 
 ### Shared Libraries
 
@@ -208,43 +210,47 @@ shard-manifest, teranode-bridge, and arcade-bridge charts install standalone:
 ### Full Production Topology
 
 ```text
-                    ┌─────────────────────────────────────────────────────────┐
-                    │                    BSV Senders                          │
-                    │            (Miners, Transaction Services)               │
-                    └───────────────────────────┬─────────────────────────────┘
-                                                │  UDP/TCP (BRC-12/BRC-124 frames)
-                    ┌───────────────────────────┼─────────────────────────────┐
-                    │                           │                             │
-              ┌─────▼─────┐               ┌─────▼─────┐                 ┌─────▼─────┐
-              │ Ingress   │               │ Ingress   │                 │ Ingress   │
-              │ Node A    │               │ Node B    │                 │ Node C    │
-              │ (proxy)   │               │ (proxy)   │                 │ (proxy)   │
-              └─────┬─────┘               └─────┬─────┘                 └─────┬─────┘
-                    │  IPv6 UDP Multicast (FF05::B:<shard>, port 9001)        │
-                    └───────────────────────────┼─────────────────────────────┘
+                 ┌────────────────────────────────────────────────────────────┐
+                 │                         BSV Senders                        │
+                 │   Transaction services · Miners (privileged) · Overlays    │
+                 └──────┬─────────────────┬──────────────────┬────────────────┘
+       tx (BRC-12/30/   │  subtree push   │  block push      │ BEEF records
+       124/128) 8725    │  BRC-143 8726   │  BRC-144 8727    │ BRC-149 8728
+       TCP (UDP legacy) │  TCP, privileged│  TCP, privileged │ TCP, open class
+                 ┌──────▼─────────────────▼──────────────────▼────────────────┐
+                 │        Ingress proxies (shard-proxy, one source/replica)   │
+                 │   reframe to BRC-124/128 · BRC-132 · BRC-131 · BRC-149     │
+                 └──────────────────────────────┬─────────────────────────────┘
+                     IPv6 SSM multicast, port 9001
+                     FF3E::B:<shard> (tx/subtree planes; BEEF plane = domain 0x1)
+                     ...::B:FFFE control group (blocks, all subscribers)
                                                 │
                                 ┌───────────────┴───────────────┐
-                                │   Multicast Fabric Router     │
-                                │   (MLD/PIM, FF05::/16)        │
+                                │     Multicast fabric          │
+                                │     (MLDv2 / PIM-SSM)         │
                                 └───────────────┬───────────────┘
-                                                │
-        ┌───────────────────────┬───────────────┼───────────────┬─────────────────┐
-        │                       │               │               │                 │
-  ┌───────────┐         ┌───────────┐   ┌───────────┐   ┌───────────┐       ┌───────────┐
-  │  Miner 1  │         │  Miner 2  │   │ Listener  │   │ Listener  │       │  Retry    │
-  │  (direct) │         │  (direct) │   │  Node A   │   │  Node B   │       │ Endpoint  │
-  └───────────┘         └───────────┘   └─────┬─────┘   └─────┬─────┘       └─────┬─────┘
-                                              │               │                   │
-                                              │ Unicast       │ Multicast         │ NACK (UDP)
-                                              │ UDP/TCP       │ UDP               │ port 9300
-                                              ▼               ▼                   │
-                                    ┌──────────────┐ ┌──────────────┐             │
-                                    │ Consumer A   │ │ Consumer B   │             │
-                                    └──────────────┘ └──────────────┘             │
-                                                                                  │
-                                                   NACK Retransmission ◄──────────┘
-                                              (re-multicast to FF05::B:<shard>)
+                 ┌──────────────────────────────┼─────────────────────────────┐
+           ┌─────▼─────┐                  ┌─────▼─────┐                 ┌─────▼─────┐
+           │ Listener  │                  │ Listener  │                 │  Retry    │
+           │ (edge A)  │                  │ (edge B)  │                 │ Endpoint  │
+           └─────┬─────┘                  └─────┬─────┘                 └─────▲─────┘
+                 │ TCP SDA (listener dials)     │ TCP SDA                     │
+                 │ per-class delivery lanes     │                             │
+                 │ 9143 subtrees · 9144 blocks  │                NACK (UDP 9300)
+                 │ 9171 BEEF · 9172 headers     │                re-multicast to
+                 ▼                              ▼                the same group
+         ┌──────────────┐               ┌──────────────┐
+         │ Consumer A   │               │ Consumer B   │   UDP delivery to
+         │ (bridge/node)│               │ (bridge/node)│   consumers: legacy
+         └──────────────┘               └──────────────┘
 ```
+
+The diagram shows the production posture: SSM addressing (`-source-mode ssm`,
+global scope `FF3E`), TCP submission on the per-class ingress lanes, and TCP
+stream delivery (SDA) to consumers. The binaries default to ASM site scope
+(`FF05`) for single-site labs; UDP delivery to consumers is legacy. Ports 9143,
+9144, 9171 and 9172 are consumer-side: the consumer listens and the edge dials
+(see [lane numbering](docs/lane-numbering.md)).
 
 ---
 
@@ -850,7 +856,7 @@ BRC-131 block announce carries the 80-byte header in-frame; the proxy gates it
 (default on; `-require-block-pow=false` disables) on a cheap stateless check —
 `hash(header) ≤
 target(nBits)` and that target ≤ a configured difficulty floor
-(`-min-pow-bits`). Forging a passing header costs work proportional to the
+(`-min-pow-bits`; default `0` = no floor, header self-consistency only). Forging a passing header costs work proportional to the
 floor; verifying costs one double-SHA256. That asymmetry is the spam gate, and
 because proof of work is globally verifiable it needs **zero cross-domain
 coordination** — every domain checks identically against the same chain rules,
@@ -1180,12 +1186,13 @@ rules
 ## Block Announcement Frame Format (BRC-131)
 
 BRC-131 defines a dedicated frame version (`FrameVer 0x04`) for distributing
-block-level metadata to all fabric subscribers. Two message types are defined:
+blocks to all fabric subscribers. Two message types are defined:
 
-- **BlockAnnounce (`MsgType 0x01`)** — carries the 80-byte block header, the
-  CoinbaseTxID, and an ordered list of subtree root hashes included in the
-  block. Subscribers use this to update block templates and validate received
-  transactions against the new chain tip.
+- **BlockAnnounce (`MsgType 0x01`)** — the payload is a complete BRC-144 block
+  object carried verbatim (header, counts, subtree roots, full coinbase,
+  height, coinbase BUMP); the block header is `payload[0:80]`. Subscribers
+  use this to update block templates and validate received transactions
+  against the new chain tip.
 - **CoinbaseTx (`MsgType 0x02`)** — carries the raw coinbase transaction bytes.
   The ContentID in the frame header is the SHA256d of the coinbase transaction.
   Deprecated and retained (see BRC-133): current implementations do not
@@ -1796,6 +1803,10 @@ draws inspiration was articulated by Dr. Craig S. Wright:
 | retry-endpoint (multicast)  | 9001         | UDP      | Multicast receive                            |
 | retry-endpoint (NACK)       | 9300         | UDP      | NACK receive                                 |
 | retry-endpoint (retransmit) | 9001         | UDP      | Retransmission egress                        |
+| consumer (subtree lane)     | 9143         | TCP      | Consumer-side: BRC-143 delivery lane the edge dials (teranode-bridge, arcade-bridge) |
+| consumer (block lane)       | 9144         | TCP      | Consumer-side: BRC-144 delivery lane the edge dials (teranode-bridge, arcade-bridge) |
+| overlay-bridge (BEEF lane)  | 9171         | TCP      | Consumer-side: BRC-149 delivery-record lane the edge dials |
+| overlay-bridge (header lane)| 9172         | TCP      | Consumer-side: BRC-135 stream-form header lane the edge dials |
 
 ### Metrics Ports
 

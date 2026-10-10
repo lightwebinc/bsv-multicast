@@ -14,12 +14,13 @@ announce payload.
 
 ## Purpose
 
-The BRC-131 `BlockAnnounce` frame carries the 80-byte block header, a 32-byte
-CoinbaseTxID, and a variable-length list of subtree root hashes. For subscribers
-that only need the block header itself, this payload is oversized:
+The BRC-131 `BlockAnnounce` frame carries a complete BRC-144 block object: the
+80-byte header, block counts, subtree roots, the full coinbase, height and the
+coinbase BUMP. For subscribers that only need the block header itself, this
+payload is oversized:
 
 - **SPV clients** require only the header chain to verify proof-of-work and
-  compute chain state; subtree hashes and CoinbaseTxID are irrelevant.
+  compute chain state; subtree roots and the coinbase are irrelevant.
 - **Mining coordinators** need the previous-block hash and timestamp from the
   header to build new templates; the remainder of the announce payload adds
   latency on bandwidth-constrained links.
@@ -88,8 +89,8 @@ single UDP datagram — no fragmentation required.
 - `BlockHash` at bytes 8–39 is the SHA256d of the raw 80-byte block header
   (identical to `ContentID` in a BRC-131 `BlockAnnounce` for the same block).
 - `PayloadLen` is always exactly 80.
-- Payload contains only the raw block header — no CoinbaseTxID, no subtree
-  hashes.
+- Payload contains only the raw block header (`payload[0:80]` of the BRC-131
+  announce), none of the rest of the BRC-144 object.
 - `HashKey` is stamped by the **emitter** (not the proxy), using the emitter's
   own IPv6 address as the sender component. This reflects that the emitter is
   the originator of this split frame.
@@ -179,6 +180,32 @@ A consumer receiving BRC-135 frames:
 | `PayloadLen != 80`              | Drop; `ErrBadBlockHeaderLen`           |
 | Datagram shorter than 172 bytes | Drop; `ErrTooShort`                    |
 | BlockHash mismatch (optional)   | Drop; integrity verification failed    |
+
+---
+
+## Stream Delivery Form
+
+The frame above is the **datagram form**. On a **single-class byte stream**
+carrying nothing but block headers, the emitter writes the bare 80-byte header
+and nothing else: no frame header, no tag, no length prefix. A header is fixed
+size, so the stream is self-delimiting; the Nth header begins at byte offset
+`80 × (N − 1)`. The connection itself identifies the class.
+
+- **No frame header.** The 92-byte header classifies a datagram on a shared
+  group and carries emitter sequencing; a dedicated stream needs neither.
+- **No sequencing fields.** `HashKey`/`SeqNum` describe the emitter's flow and
+  differ between primary and standby emitters. A consumer verifies the headers
+  and the chain it builds from them.
+- **No length prefix.** Eighty bytes is fixed by consensus; a reader trusting a
+  length over the fixed size would desynchronize on a malformed writer.
+
+A stream-form consumer reads exactly 80 bytes, checks `PrevBlockHash` (bytes
+4–35) equals `SHA256d` of the previous accepted header, and computes
+`BlockHash = SHA256d(header)` where needed. The stream is a **live tail**: a
+consumer connecting mid-chain receives headers from connect time forward and
+cannot bootstrap a chain from it alone. An emitter MAY serve both forms; a
+consumer MUST NOT expect frame fields on the stream form. This is the form the
+consumer-side header lane (port 9172) carries, e.g. into overlay-bridge.
 
 ---
 

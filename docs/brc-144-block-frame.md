@@ -89,11 +89,12 @@ the edges.
 
 ## 4. Relationship to BRC-131
 
-BRC-144 is the push counterpart of the [BRC-131](brc-131-block-announcements.md)
-`BlockAnnounce`. Where BRC-131 (mirroring an announcement) carries the header,
-coinbase **TxID**, and subtree roots, BRC-144 carries the header, the **full
-coinbase**, block counts, height, and the coinbase BUMP — everything
-`ProcessBlock` needs — because a push receiver cannot pull the rest.
+A BRC-144 object is exactly what a [BRC-131](brc-131-block-announcements.md)
+`MsgType 0x01` announcement carries on the multicast fabric: the payload is the
+BRC-144 object verbatim, with no projection. The delivery edge unwraps a
+byte-identical BRC-144 object, and the block header is `payload[0:80]`. It
+carries everything `ProcessBlock` needs because a push receiver cannot pull the
+rest.
 
 ---
 
