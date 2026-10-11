@@ -247,8 +247,11 @@ shard-manifest, teranode-bridge, and arcade-bridge charts install standalone:
 
 The diagram shows the production posture: SSM addressing (`-source-mode ssm`,
 global scope `FF3E`), TCP submission on the per-class ingress lanes, and TCP
-stream delivery (SDA) to consumers. The binaries default to ASM site scope
-(`FF05`) for single-site labs; UDP delivery to consumers is legacy. Ports 9143,
+stream delivery (SDA) to consumers. SSM is the default posture in the charts
+and infra repos. The bare binary flag still defaults to ASM site scope
+(`FF05`) because SSM cannot start without per-deployment sources; set
+`-source-mode ssm` and its sources for anything beyond a single-site lab.
+UDP delivery to consumers is legacy. Ports 9143,
 9144, 9171 and 9172 are consumer-side: the consumer listens and the edge dials
 (see [lane numbering](docs/lane-numbering.md)).
 
