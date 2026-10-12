@@ -55,6 +55,11 @@ flowchart LR
     STAMP --> BEEFG
     GATE --> CTRL
     GATE -->|"BRC-132 (class gate only, no PoW)"| SUBD
+  %% The last node is an invisible spacer in the rightmost rank: the rendered
+  %% viewer places its zoom and pan controls over the bottom-right corner.
+  FRAG ~~~ pad
+  pad["&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;"]:::pad
+  classDef pad fill:none,stroke:none,color:transparent
 ```
 
 ## shard-listener (egress)
@@ -104,6 +109,11 @@ flowchart LR
     GAP --> DEDUP
     DEDUP --> TCPOUT
     DEDUP --> MCOUT
+  %% The last node is an invisible spacer in the rightmost rank: the rendered
+  %% viewer places its zoom and pan controls over the bottom-right corner.
+  DEDUP ~~~ pad
+  pad["&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;"]:::pad
+  classDef pad fill:none,stroke:none,color:transparent
 ```
 
 ## NACK retransmission (BRC-126)
