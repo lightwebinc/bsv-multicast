@@ -307,7 +307,7 @@ generation retires.
 
 Bundles cross domains over **SSM only** (RFC 8815 forbids inter-domain ASM): the
 data-plane shard groups and the BRC-139 manifest must be SSM at global scope
-(`FF3E::B:idx`; manifest beacon `FF3E::B:FFFD`), deployment Posture D. A bundle
+(`FF3E::B:idx`; manifest beacon `FF3E::B:FFFD`), deployment Posture D ([DESIGN.md § Deployment postures](../DESIGN.md#deployment-postures)). A bundle
 rides the inter-domain re-emit relay as-is (source re-stamp only, like any frame);
 the relay re-buckets only on a `ShardBits` mismatch (§11) or a smaller onward MTU
 (§10). SSM source discovery is bootstrapped (`sources.bootstrap.manifest`), which
