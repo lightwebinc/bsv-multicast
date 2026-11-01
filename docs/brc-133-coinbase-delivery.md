@@ -1,4 +1,4 @@
-# BRC-133 — Coinbase Transaction Frame Format
+# BRC-133: Coinbase Transaction Frame Format
 
 > **DEPRECATED, and retained deliberately.** Standalone coinbase carriage
 > (BRC-131 `MsgType 0x02`, `BlockMsgCoinbase`, as specified here) is
@@ -38,8 +38,9 @@ groups based on the top bits of each transaction's TxID. Coinbase transactions
 cannot be sharded this way: they are a singleton per block and every subscriber
 needs them regardless of shard assignment, because:
 
-- The coinbase TxID is included in every `BlockAnnounce` (BRC-131, MsgType
-  `0x01`) and is required to verify the block's Merkle root.
+- Every `BlockAnnounce` (BRC-131, MsgType `0x01`) commits to the coinbase (the
+  BRC-144 body carries it inline), and the coinbase id is required to verify
+  the block's Merkle root.
 - Coinbase outputs pay the block subsidy and any miner fee aggregations that
   downstream systems may need to validate template construction.
 - No subscriber can predict which shard a coinbase transaction's TxID would hash
@@ -75,14 +76,14 @@ relevant fields are:
 | ------ | ---- | ------------ | ----------------------------------------------------- |
 | 6      | 1    | FrameVersion | `0x04` (BRC-131)                                      |
 | 7      | 1    | MsgType      | `0x02` = `BlockMsgCoinbase`                           |
-| 8      | 32   | ContentID    | CoinbaseTxID — SHA256d of the raw coinbase tx bytes   |
+| 8      | 32   | ContentID    | CoinbaseTxID: SHA256d of the raw coinbase tx bytes    |
 | 40     | 8    | HashKey      | XXH64(senderIPv6 ∥ 0xFFF8 ∥ zeros); stamped by proxy  |
 | 48     | 8    | SeqNum       | Monotonic per-sender counter; stamped by proxy        |
 | 56     | 32   | LayoutPad32  | All zeros                                             |
 | 88     | 4    | PayloadLen   | Length of the raw coinbase transaction bytes          |
-| 92     | \*   | Payload      | Raw serialised coinbase transaction (no P2P envelope) |
+| 92     | \*   | Payload      | Raw serialized coinbase transaction (no P2P envelope) |
 
-**Payload encoding:** The payload is the raw BSV serialised transaction —
+**Payload encoding:** The payload is the raw BSV serialized transaction,
 identical to the encoding used in BRC-12/BRC-124 transaction frames: version (4
 bytes LE), input vector, output vector, locktime (4 bytes LE).
 
@@ -96,14 +97,14 @@ BRC-124 shard frames:
 - The proxy stamps `HashKey = XXH64(senderIPv6 ∥ 0xFFF8 ∥ zeros)` and `SeqNum`
   (monotonic per sender on the coinbase flow) in-place before forwarding. The
   virtual index `0xFFF8` (`GroupCoinbaseFlow`) is never used as an actual
-  multicast destination — it appears only in the HashKey computation to give
+  multicast destination; it appears only in the HashKey computation to give
   coinbase frames an independent flow identity from BRC-131 block announces,
   which share the same egress multicast group. If the frame arrives
   pre-stamped (`SeqNum != 0`) the `SeqNum` is preserved; `HashKey` is still
   re-stamped under `-stamp-source` (default on).
 - Listeners gap-track coinbase frames under the virtual `0xFFF8`
   (`GroupCoinbaseFlow`) index, matching the proxy's HashKey ingredient. The
-  index is process-local and never appears on the NACK wire — it affects
+  index is process-local and never appears on the NACK wire: it affects
   metric labelling only; recovery routing is unchanged, and listeners
   dispatch BRC-126 NACKs to retry endpoints on gap.
 - Retry endpoints join `FF0E::B:FFFE` and cache BRC-131 `BlockMsgCoinbase`
@@ -114,65 +115,67 @@ BRC-124 shard frames:
 
 ## Relationship to BRC-131 Block Announcements
 
-A `BlockAnnounce` frame (BRC-131, MsgType `0x01`) is sent first and carries the
-`CoinbaseTxID` in its payload. The separate `BlockMsgCoinbase` frame then
-carries the full raw coinbase bytes. Subscribers that only need to verify the
-Merkle root may use the `CoinbaseTxID` from the announce frame without waiting
-for the coinbase frame itself.
+A `BlockAnnounce` frame (BRC-131, MsgType `0x01`) carries the full coinbase
+inline in its BRC-144 body, which is why no standalone frame is produced. Under
+a split design the announce would carry the coinbase id and this frame the
+bytes; a subscriber that only verifies the Merkle root would then need the id
+alone and never wait for the coinbase frame.
 
 BlockAnnounce and Coinbase form **separate flows** on the proxy. BlockAnnounce
 frames use HashKey derived from `(sender, 0xFFFE, zeros)`; Coinbase frames use
 HashKey derived from `(sender, 0xFFF8, zeros)`. Each flow therefore has its
 own monotonic SeqNum counter, its own HashKey value, and is gap-tracked
-independently by listeners — even though both egress to the same
+independently by listeners, even though both egress to the same
 `FF0E::B:FFFE` multicast destination.
 
 ---
 
 ## Proxy Forwarding Rules
 
-1. **Receive** — BRC-131 frames (FrameVer `0x04`) are accepted over UDP or TCP
-   ingress. The proxy detects version byte `0x04` before dispatching to
-   `ProcessBlock`.
-2. **Privileged-class admission** — V4 frames are rejected unless the ingress
+1. **Receive**: a BRC-131 frame (FrameVer `0x04`) enters the forwarder on the
+   privileged ingress class only; the proxy builds announces from BRC-144
+   objects pushed on the block lane (8727), and no push lane produces a
+   `BlockMsgCoinbase` frame. The proxy detects version byte `0x04` before
+   dispatching to `ProcessBlock`.
+2. **Privileged-class admission**: V4 frames are rejected unless the ingress
    class is privileged (`rejectPrivileged` counter).
-3. **Decode** — `frame.DecodeBlock` validates Magic, FrameVer, MsgType, and
+3. **Decode**: `frame.DecodeBlock` validates Magic, FrameVer, MsgType, and
    PayLen. Invalid MsgType values (`!= 0x01` and `!= 0x02`) are dropped.
-4. **Dedup** — the ingress ContentID dedup claim drops duplicate ContentIDs.
-5. **Stamp** — the proxy stamps `SeqNum` only when 0; `HashKey` is (re)stamped
-   whenever it is zero or the proxy runs `-stamp-source` — using the
+4. **Dedup**: the ingress ContentID dedup claim drops duplicate ContentIDs.
+5. **Stamp**: the proxy stamps `SeqNum` only when 0; `HashKey` is (re)stamped
+   whenever it is zero or the proxy runs `-stamp-source`, using the
    `(senderIPv6, 0xFFF8, zeros)` flow key for `BlockMsgCoinbase`, or the
    `(senderIPv6, 0xFFFE, zeros)` flow key for `BlockMsgAnnounce`. The virtual
    index `0xFFF8` is the `GroupCoinbaseFlow` used solely to keep
    coinbase frames in a flow distinct from block announces on the shared
    `GroupBlockBroadcast` egress.
-6. **Fragment** — If `len(Payload) > fragDataSize`, fragment via BRC-130 with
+6. **Fragment**: If `len(Payload) > fragDataSize`, fragment via BRC-130 with
    `OrigFrameVer = 0x04`.
-7. **Forward** — Write frame to `FF0E::B:FFFE:<egressPort>` on all egress
+7. **Forward**: Write frame to `FF0E::B:FFFE:<egressPort>` on all egress
    interfaces.
 
 ---
 
 ## Listener Processing Rules
 
-1. **Detection** — `frame.IsBlockFrame(raw)` checks Magic and `raw[6] == 0x04`.
-2. **Decode** — `frame.DecodeBlock` returns a `BlockFrame` with `MsgType`,
+1. **Detection**: `frame.IsBlockFrame(raw)` checks Magic and `raw[6] == 0x04`.
+2. **Decode**: `frame.DecodeBlock` returns a `BlockFrame` with `MsgType`,
    `ContentID`, `HashKey`, `SeqNum`, and `Payload`.
 3. **Block-control gate:** while `-require-block-pow` is on (the default),
    a `BlockMsgCoinbase` frame is dropped here and counted as
    `bsl_frames_dropped_total{reason="coinbase_legacy"}`. The remaining steps
    apply only where an operator has disabled the gate.
-4. **Egress** — `egress.Sender.SendBlock(raw, bf)` forwards the frame (or
+4. **Egress**: `egress.Sender.SendBlock(raw, bf)` forwards the frame (or
    payload only in strip-header mode) downstream.
-5. **Gap tracking** —
+5. **Gap tracking**:
    `Tracker.Observe(ctrlGroupIdx, zeroSubtreeID, HashKey, SeqNum, ContentID, source net.IP)`
    when `SeqNum != 0`. The listener passes the virtual `0xFFF8`
    (`GroupCoinbaseFlow`) index for coinbase frames and `0xFFFE`
-   (`GroupBlockBroadcast`) for other V4 frames — matching the proxy's HashKey
+   (`GroupBlockBroadcast`) for other V4 frames, matching the proxy's HashKey
    ingredient. The index is process-local and never appears on the NACK wire;
    it affects metric labelling only, and recovery routing is unchanged (a
    NACK still targets the group the frame actually lives on).
-6. **Filtering** — Coinbase frames bypass all shard/subtree filters; every
+6. **Filtering**: Coinbase frames bypass all shard/subtree filters; every
    subscriber receives every coinbase frame.
 
 ---
@@ -200,14 +203,14 @@ independently by listeners — even though both egress to the same
 
 ## References
 
-- [BRC-124: Multicast Transaction Frame Format](./brc-124-frame-format.md)
-  — base header layout reused by BRC-131
-- [BRC-129: Multicast Group Address Assignments](./brc-129-multicast-addressing.md)
-  — control-plane group index allocations
-- [BRC-130: Fragmentation](./brc-130-fragmentation.md) —
+- [BRC-124: Multicast Transaction Frame Format](./brc-124-frame-format.md):
+  base header layout reused by BRC-131
+- [BRC-129: Multicast Group Address Assignments](./brc-129-multicast-addressing.md):
+  control-plane group index allocations
+- [BRC-130: Fragmentation](./brc-130-fragmentation.md):
   BRC-130 extension for large coinbase payloads
-- [BRC-131: Block Announcement Protocol](./brc-131-block-announcements.md)
-  — full BRC-131 header format and BlockAnnounce payload
-- [BRC-134: Chained Anchor Transaction Frames](brc-134-anchor-transactions.md) —
+- [BRC-131: Block Announcement Protocol](./brc-131-block-announcements.md):
+  full BRC-131 header format and BlockAnnounce payload
+- [BRC-134: Chained Anchor Transaction Frames](brc-134-anchor-transactions.md):
   another control-group transaction type
-- [BRC-133: Multicast Coinbase Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0133.md) — canonical spec
+- [BRC-133: Multicast Coinbase Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0133.md): canonical spec

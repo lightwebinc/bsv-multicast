@@ -1,4 +1,4 @@
-# BRC-134 — Chained Anchor Transaction Frame Format
+# BRC-134: Chained Anchor Transaction Frame Format
 
 BRC-134 defines a new frame version (`0x06`) for distributing chained anchor
 transactions over the multicast fabric. An anchor transaction is the root
@@ -22,10 +22,10 @@ sharded this way:
   transaction in the chain.
 - The anchor's TxID is not known in advance by subscribers; they cannot pre-join
   the correct shard group.
-- The chain may span many shards — the anchor itself might hash to shard 0 while
+- The chain may span many shards: the anchor itself might hash to shard 0 while
   dependents are spread across shards 1–15. Every subscriber needs the anchor
   irrespective of which shards they follow.
-- Anchor transactions do not need to be confirmed before use — they need only to
+- Anchor transactions do not need to be confirmed before use; they need only to
   be visible and valid. Wide visibility is the primary requirement.
 
 BRC-134 addresses this by routing anchor frames to the **GroupBlockBroadcast**
@@ -61,25 +61,25 @@ same offsets.
 
 | Offset | Size | Align | Field         | Value / Notes                                             |
 | ------ | ---- | ----- | ------------- | --------------------------------------------------------- |
-| 0      | 4    | —     | Network Magic | `0xE3E1F3E8` (BSV mainnet P2P magic)                      |
-| 4      | 2    | —     | Protocol Ver  | `0x02BF` (703, BSV large-block baseline)                  |
-| 6      | 1    | —     | Frame Version | **`0x06`** — BRC-134 anchor transaction                   |
-| 7      | 1    | —     | Reserved      | `0x00`                                                    |
+| 0      | 4    | -     | Network Magic | `0xE3E1F3E8` (BSV mainnet P2P magic)                      |
+| 4      | 2    | -     | Protocol Ver  | `0x02BF` (703, BSV large-block baseline)                  |
+| 6      | 1    | -     | Frame Version | **`0x06`**: BRC-134 anchor transaction                   |
+| 7      | 1    | -     | Reserved      | `0x00`                                                    |
 | 8      | 32   | 8B    | TxID          | SHA256d of the anchor transaction (internal byte order)   |
 | 40     | 8    | 8B    | HashKey       | XXH64(senderIPv6 ∥ 0xFFF9 ∥ zeros); stamped by proxy      |
 | 48     | 8    | 8B    | SeqNum        | Monotonic per-sender counter; stamped by proxy; 0 = unset |
 | 56     | 32   | 8B    | LayoutPad32   | All zeros (no subtree scope for anchor frames)            |
-| 88     | 4    | —     | PayloadLen    | Size of anchor transaction payload in bytes (uint32 BE)   |
-| 92     | \*   | —     | Payload       | Raw serialised anchor transaction (no P2P envelope)       |
+| 88     | 4    | -     | PayloadLen    | Size of anchor transaction payload in bytes (uint32 BE)   |
+| 92     | \*   | -     | Payload       | Raw serialized anchor transaction (no P2P envelope)       |
 
 **Key distinction from BRC-124:** the version byte at offset 6 is `0x06` rather
 than `0x02`. All other field offsets and sizes are identical. The `LayoutPad32`
-field at bytes 56–87 is always zeros — anchor frames have no subtree scope. The
+field at bytes 56–87 is always zeros: anchor frames have no subtree scope. The
 field is kept for layout uniformity: the proxy TCP reader, stamping path,
 listener, and retry endpoint all share the single `HeaderSize` constant with no
 special-casing.
 
-**Payload encoding:** The payload is the raw BSV serialised transaction —
+**Payload encoding:** The payload is the raw BSV serialized transaction,
 identical to the encoding used in BRC-12/BRC-124 frames: version (4 bytes LE),
 input vector, output vector, locktime (4 bytes LE).
 
@@ -110,20 +110,20 @@ BRC-124 shard frames:
 
 ## Proxy Forwarding Rules
 
-1. **Receive** — BRC-134 frames are accepted over UDP or TCP ingress. The proxy
+1. **Receive**: BRC-134 frames are accepted over UDP or TCP ingress. The proxy
    detects version byte `0x06` before dispatching to `Forwarder.ProcessAnchor`.
    V6 anchor ingress is deliberately **not** privileged-gated (permissionless
    baseline).
-2. **Decode** — `frame.DecodeAnchor` validates Magic, FrameVer, and PayLen.
+2. **Decode**: `frame.DecodeAnchor` validates Magic, FrameVer, and PayLen.
    Invalid frames are dropped.
-3. **Stamp** — `HashKey` is (re)stamped whenever it is zero or the proxy runs
+3. **Stamp**: `HashKey` is (re)stamped whenever it is zero or the proxy runs
    `-stamp-source` (default on, so chain rate-limit and cache keys are
    deterministic); `SeqNum` is stamped only when
-   0 — on the `(senderIPv6, 0xFFF9, zeros)` flow key. The virtual index `0xFFF9`
+   0, both on the `(senderIPv6, 0xFFF9, zeros)` flow key. The virtual index `0xFFF9`
    (`GroupAnchorFlow`) keeps anchor frames in a flow distinct from
    BRC-131 block announces and BRC-133 coinbase frames on the shared
    `GroupBlockBroadcast` egress.
-4. **Forward** — Write frame verbatim to `FF0E::B:FFFE:<egressPort>` on all
+4. **Forward**: Write frame verbatim to `FF0E::B:FFFE:<egressPort>` on all
    egress interfaces (normative posture; the implementation derives the prefix
    from the configured `-scope`).
 
@@ -135,16 +135,16 @@ becomes necessary it will be defined in a future revision.
 
 ## Listener Processing Rules
 
-1. **Detection** — `frame.IsAnchorFrame(raw)` checks Magic and `raw[6] == 0x06`.
-2. **Decode** — `frame.DecodeAnchor` returns a `*Frame` with
+1. **Detection**: `frame.IsAnchorFrame(raw)` checks Magic and `raw[6] == 0x06`.
+2. **Decode**: `frame.DecodeAnchor` returns a `*Frame` with
    `Version=FrameVerV6`, `TxID`, `HashKey`, `SeqNum`, `SubtreeID` (zeros), and
    `Payload`.
-3. **Egress** — `egress.Sender.Send(raw, f)` forwards the frame (or payload only
+3. **Egress**: `egress.Sender.Send(raw, f)` forwards the frame (or payload only
    in strip-header mode) downstream.
-4. **Gap tracking** —
+4. **Gap tracking**:
    `Tracker.Observe(anchorGroupIdx=0xFFF9, zeroSubtreeID, HashKey, SeqNum, TxID, source net.IP)` when
    `SeqNum != 0`.
-5. **Filtering** — Anchor frames bypass all shard/subtree filters; every
+5. **Filtering**: Anchor frames bypass all shard/subtree filters; every
    subscriber receives every anchor frame.
 
 ---
@@ -183,21 +183,21 @@ becomes necessary it will be defined in a future revision.
 
 ## References
 
-- [BRC-124: Multicast Transaction Frame Format](./brc-124-frame-format.md)
-  — base header layout reused by BRC-134
-- [BRC-126: Retransmission Protocol](./brc-126-retransmission-protocol.md)
-  — NACK/ACK/MISS used for anchor frame retransmission
-- [BRC-129: Multicast Group Address Assignments](./brc-129-multicast-addressing.md)
-  — control-plane group index allocations
-- [BRC-131: Block Announcement Protocol](./brc-131-block-announcements.md)
-  — BRC-131 shares GroupBlockBroadcast
-- [BRC-133: Coinbase Transaction Delivery](brc-133-coinbase-delivery.md) —
+- [BRC-124: Multicast Transaction Frame Format](./brc-124-frame-format.md):
+  base header layout reused by BRC-134
+- [BRC-126: Retransmission Protocol](./brc-126-retransmission-protocol.md):
+  NACK/ACK/MISS used for anchor frame retransmission
+- [BRC-129: Multicast Group Address Assignments](./brc-129-multicast-addressing.md):
+  control-plane group index allocations
+- [BRC-131: Block Announcement Protocol](./brc-131-block-announcements.md):
+  BRC-131 shares GroupBlockBroadcast
+- [BRC-133: Coinbase Transaction Delivery](brc-133-coinbase-delivery.md):
   another control-group transaction type using BRC-131 (deprecated and
   retained; see BRC-133)
-- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame)
-  — `DecodeAnchor`, `IsAnchorFrame`, `FrameVerV6`
-- [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder)
-  — `ProcessAnchor`
-- [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener)
-  — `processAnchorFrame`
-- [BRC-134: Multicast Anchor Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0134.md) — canonical spec
+- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame):
+  `DecodeAnchor`, `IsAnchorFrame`, `FrameVerV6`
+- [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder):
+  `ProcessAnchor`
+- [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener):
+  `processAnchorFrame`
+- [BRC-134: Multicast Anchor Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0134.md): canonical spec

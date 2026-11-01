@@ -19,17 +19,17 @@ ingress proxies deterministically shard transactions onto independent multicast
 groups, each subscriber receives only the shards it cares about, and lost
 packets are recovered through per-shard NACK requests to cache endpoints that
 re-multicast the missing frames. This project is the concrete implementation of
-that pipeline — stateless sharded ingress, multicast fan-out fabric, NACK-based
+that pipeline: stateless sharded ingress, multicast fan-out fabric, NACK-based
 sharded resends, and hierarchical distribution of blocks, subtrees, coinbase,
 and anchor transactions over reserved control groups.
 
 ## Documentation
 
-- [DESIGN.md](DESIGN.md) — architecture, data flow, sharding, components,
+- [DESIGN.md](DESIGN.md): architecture, data flow, sharding, components,
   retransmission, deployment
-- [docs/README.md](docs/README.md) — repository map and full document index
+- [docs/README.md](docs/README.md): repository map and full document index
   (BRC specifications, lane numbering, deliver-once)
-- [1BSV User Guide](https://1bsv.net/guide.html) — the commercial delivery
+- [1BSV User Guide](https://1bsv.net/guide.html): the commercial delivery
   network built on this stack
 
 ## License

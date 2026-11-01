@@ -1,4 +1,4 @@
-# BRC-132 — Subtree Data Frame Format
+# BRC-132: Subtree Data Frame Format
 
 BRC-132 defines a new frame version (0x05) for distributing complete subtree data payloads (transaction hashes and metadata) over the multicast fabric. Subtree data is delivered to all subscribers via the dedicated `GroupSubtreeDataAnnounce` multicast group (`FF0X::B:FFFB`), independently of the shard groups used for individual transaction distribution.
 
@@ -39,16 +39,16 @@ The BRC-132 header is **layout-identical** to a BRC-124 header. All infrastructu
 
 | Offset | Size | Align | Field          | Value / Notes                                              |
 | ------ | ---- | ----- | -------------- | ---------------------------------------------------------- |
-| 0      | 4    | —     | Network Magic  | `0xE3E1F3E8` (BSV mainnet P2P magic)                       |
-| 4      | 2    | —     | Protocol Ver   | `0x02BF` (703, BSV large-block baseline)                   |
-| 6      | 1    | —     | Frame Version  | **`0x05`** — BRC-132 subtree data                          |
-| 7      | 1    | —     | MsgType        | `0x01` = HashesOnly, `0x02` = FullNodes                    |
+| 0      | 4    | -     | Network Magic  | `0xE3E1F3E8` (BSV mainnet P2P magic)                       |
+| 4      | 2    | -     | Protocol Ver   | `0x02BF` (703, BSV large-block baseline)                   |
+| 6      | 1    | -     | Frame Version  | **`0x05`**: BRC-132 subtree data                          |
+| 7      | 1    | -     | MsgType        | `0x01` = HashesOnly, `0x02` = FullNodes                    |
 | 8      | 32   | 8B    | SubtreeID      | SHA-256 Merkle root hash (content identifier)              |
 | 40     | 8    | 8B    | HashKey        | `XXH64(senderIPv6 ∥ 0xFFFB ∥ subtreeID)`; stamped by proxy|
 | 48     | 8    | 8B    | SeqNum         | Monotonic per `(sender, subtreeID)` counter; stamped by proxy |
 | 56     | 32   | 8B    | LayoutPad32    | All zeros (field retained for uniform `HeaderSize`)        |
 | 88     | 4    | 8B    | PayloadLen     | Size of payload in bytes (uint32 BE)                       |
-| 92     | \*   | —     | Payload        | MsgType-specific subtree data payload (see §Payload Format)|
+| 92     | \*   | -     | Payload        | MsgType-specific subtree data payload (see §Payload Format)|
 
 **Key distinctions from BRC-124:**
 - Byte 7 carries `MsgType` rather than `Reserved=0x00`.
@@ -78,10 +78,10 @@ Both formats share a fixed 24-byte metadata prefix followed by N node entries th
 | Offset | Size | Field          | Description                              |
 | ------ | ---- | -------------- | ---------------------------------------- |
 | 0      | 8    | TotalFees      | Aggregate fee sum for the subtree (uint64 BE, satoshis) |
-| 8      | 8    | TotalSizeBytes | Aggregate serialised tx size (uint64 BE, bytes) |
+| 8      | 8    | TotalSizeBytes | Aggregate serialized tx size (uint64 BE, bytes) |
 | 16     | 8    | NodeCount      | Number of transaction nodes (uint64 BE)  |
 
-### MsgType 0x01 — HashesOnly
+### MsgType 0x01: HashesOnly
 
 | Offset       | Size    | Field         |
 | ------------ | ------- | ------------- |
@@ -91,7 +91,7 @@ Both formats share a fixed 24-byte metadata prefix followed by N node entries th
 
 Size at 1M nodes, 0 conflicts: 24 + 32 × 1,048,576 + 8 = **~32 MB**
 
-### MsgType 0x02 — FullNodes
+### MsgType 0x02: FullNodes
 
 | Offset       | Size    | Field       |
 | ------------ | ------- | ----------- |
@@ -110,8 +110,8 @@ Payloads of 32–48 MB far exceed any path MTU. The proxy fragments each BRC-132
 - `OrigFrameVer = 0x05` in each BRC-130 fragment header (byte 100).
 - `MsgType` is preserved in fragment header byte 7 (same pattern as BRC-131 block fragments, `fragmentBlock`).
 - Fragment reassembly is keyed by SubtreeID (bytes 8–39 of the fragment header, identical to the `TxID` slot in BRC-124 fragments).
-- SHA256d hash verification (`SHA256(SHA256(payload)) == TxID`) does **not apply** — SubtreeID is a Merkle root, not a payload double-hash. The `verifyHash` flag must be `false` for V5 reassembly slots.
-- Post-reassembly Merkle-root verification is reserved, not implemented (see §Merkle Verification).
+- SHA256d hash verification (`SHA256(SHA256(payload)) == TxID`) does **not apply**: SubtreeID is a Merkle root, not a payload double-hash. The `verifyHash` flag must be `false` for V5 reassembly slots.
+- Post-reassembly Merkle-root verification is not performed; the root is verified at ingress (see §Merkle Verification).
 
 **Fragment counts** at MTU 9000 (fragDataSize = 8848 bytes):
 
@@ -135,43 +135,42 @@ BRC-132 frames participate in the same NACK-based reliability mechanism as BRC-1
 
 ---
 
-## Merkle Verification (reserved, not implemented)
+## Merkle Verification
 
-Post-reassembly Merkle-root recomputation to verify the SubtreeID is a
-reserved design, **not implemented** — `-subtree-data-verify-merkle` /
-`SUBTREE_DATA_VERIFY_MERKLE=true` sets a flag that changes no behavior yet:
-
-- Would require decoding the payload into nodes and computing `SHA256d` pairwise up the binary tree.
-- Computationally significant at 1M nodes (~1M double-SHA256 operations).
+The listener performs no post-reassembly Merkle-root recomputation (there is no
+flag for it): at 1M nodes it would cost ~1M double-SHA256 operations per
+subtree on the delivery path. The root is verified once, at ingress: the proxy
+recomputes it from the node hashes and drops a mismatching frame before the
+ingress dedup claim (`-verify-subtree-root`, default on).
 
 ---
 
 ## Proxy Forwarding Rules
 
-1. **Receive** — BRC-132 frames are accepted over UDP or TCP ingress, on the privileged ingress class only. The TCP switch in `handleConn` recognises `FrameVerV5` using the same 44+48 two-step header read as V2/V4.
-2. **Decode** — `DecodeSubtreeData` validates Magic, FrameVer, MsgType, and PayLen. Invalid frames are dropped.
-3. **Stamp** — the proxy stamps `SeqNum` only when 0; `HashKey` is (re)stamped whenever it is zero or the proxy runs `-stamp-source`, per the `(senderIPv6, 0xFFFB, subtreeID)` flow, reading SubtreeID from bytes 8–39.
-4. **Fragment** — If `len(Payload) > fragDataSize`, fragment via BRC-130 with `OrigFrameVer=0x05` and MsgType preserved in byte 7.
-5. **Forward** — Write the frame to all egress interfaces with destination `FF0X::B:FFFB:<egressPort>`.
+1. **Receive**: a BRC-132 frame enters the forwarder on the privileged ingress class only. The proxy builds it from a BRC-143 subtree pushed on the subtree lane (`-subtree-listen-port`, 8726) and dispatches it as privileged; a pre-framed V5 frame arriving on a transaction-class socket (8725, UDP or TCP) is rejected. The framed TCP reader recognizes `FrameVerV5` with the same 44+48 two-step header read as V2/V4 before the class check.
+2. **Decode**: `DecodeSubtreeData` validates Magic, FrameVer, MsgType, and PayLen. Invalid frames are dropped.
+3. **Stamp**: the proxy stamps `SeqNum` only when 0; `HashKey` is (re)stamped whenever it is zero or the proxy runs `-stamp-source`, per the `(senderIPv6, 0xFFFB, subtreeID)` flow, reading SubtreeID from bytes 8–39.
+4. **Fragment**: If `len(Payload) > fragDataSize`, fragment via BRC-130 with `OrigFrameVer=0x05` and MsgType preserved in byte 7.
+5. **Forward**: Write the frame to all egress interfaces with destination `FF0X::B:FFFB:<egressPort>`.
 
 ---
 
 ## Listener Processing Rules
 
-1. **Detection** — `IsSubtreeDataFrame(raw)` checks Magic and `raw[6] == 0x05` before `frame.Decode` is called.
-2. **Decode** — `DecodeSubtreeData` validates the frame and returns a `SubtreeDataFrame` with `MsgType`, `SubtreeID`, `HashKey`, `SeqNum`, and `Payload`.
-3. **Egress** — The frame is forwarded to the configured downstream.
-4. **Gap tracking** — `Tracker.Observe(0xFFFB, subtreeID, HashKey, SeqNum, subtreeID, source net.IP)` when `SeqNum != 0`.
-5. **Filtering** — Subtree data frames bypass shard filtering. Listeners may optionally filter by SubtreeID.
-6. **Reassembly** — BRC-130 fragments with `OrigFrameVer=0x05` are routed to `DeliverReassembledSubtreeData` after reassembly (keyed by callback registered on construction).
+1. **Detection**: `IsSubtreeDataFrame(raw)` checks Magic and `raw[6] == 0x05` before `frame.Decode` is called.
+2. **Decode**: `DecodeSubtreeData` validates the frame and returns a `SubtreeDataFrame` with `MsgType`, `SubtreeID`, `HashKey`, `SeqNum`, and `Payload`.
+3. **Egress**: The frame is forwarded to the configured downstream.
+4. **Gap tracking**: `Tracker.Observe(0xFFFB, subtreeID, HashKey, SeqNum, subtreeID, source net.IP)` when `SeqNum != 0`.
+5. **Filtering**: Subtree data frames bypass shard filtering. Listeners may optionally filter by SubtreeID.
+6. **Reassembly**: BRC-130 fragments with `OrigFrameVer=0x05` are routed to `DeliverReassembledSubtreeData` after reassembly (keyed by callback registered on construction).
 
 ---
 
-## Retry Endpoint Behaviour
+## Retry Endpoint Behavior
 
-- **Group join** — The retry endpoint joins `FF0X::B:FFFB` only when `-subtree-data-enabled` is set (default off), in addition to all shard groups and `FF0E::B:FFFE`.
-- **Cache** — BRC-132 frames and BRC-130 fragments (`OrigFrameVer=0x05`) are cached by `HashKey ∥ SeqNum` with a configurable TTL (default `5m`; longer than the `60s` default for transaction frames to accommodate large reassembly windows).
-- **Retransmission routing** — On NACK, `FrameVer` is inspected: if `raw[6] == 0x05`, the frame is retransmitted to `FF0X::B:FFFB` rather than to the shard group derived from SubtreeID.
+- **Group join**: The retry endpoint joins `FF0X::B:FFFB` only when `-subtree-data-enabled` is set (default off), in addition to all shard groups and `FF0E::B:FFFE`.
+- **Cache**: BRC-132 frames and BRC-130 fragments (`OrigFrameVer=0x05`) are cached by `HashKey ∥ SeqNum` with a configurable TTL (default `5m`; longer than the `60s` default for transaction frames to accommodate large reassembly windows).
+- **Retransmission routing**: On NACK, `FrameVer` is inspected: if `raw[6] == 0x05`, the frame is retransmitted to `FF0X::B:FFFB` rather than to the shard group derived from SubtreeID.
 
 ---
 
@@ -181,9 +180,9 @@ reserved design, **not implemented** — `-subtree-data-verify-merkle` /
 | ---------------------- | ----------------------------------------------------------------------------------------------------- |
 | shard-common   | `FrameVerV5`, `SubtreeMsgHashesOnly`, `SubtreeMsgFullNodes`, `ErrBadSubtreeMsg` constants; `SubtreeDataFrame`, `SubtreeDataPayload` structs; `EncodeSubtreeData`, `DecodeSubtreeData`, `IsSubtreeDataFrame`, `EncodeSubtreeDataPayload`, `DecodeSubtreeDataPayload` |
 | shard-proxy    | `FrameVerV5` case in TCP `handleConn`; `ProcessSubtreeData` + `fragmentSubtreeData` methods          |
-| shard-listener | Joins `FF0X::B:FFFB`; `IsSubtreeDataFrame` detection; `processSubtreeDataFrame`; reassembly `OrigFrameVer=0x05` callback path; optional Merkle verification |
+| shard-listener | Joins `FF0X::B:FFFB`; `IsSubtreeDataFrame` detection; `processSubtreeDataFrame`; reassembly `OrigFrameVer=0x05` callback path |
 | retry-endpoint | Joins `FF0X::B:FFFB`; `processSubtreeDataFrame` in ingress; `FrameVerV5`-aware retransmit routing   |
-| Firewall               | No additional rules — `FF0X::B:FFFB` uses the same port as other groups                              |
+| Firewall               | No additional rules: `FF0X::B:FFFB` uses the same port as other groups                              |
 
 ---
 
@@ -217,15 +216,15 @@ reserved design, **not implemented** — `-subtree-data-verify-merkle` /
 
 ## References
 
-- [BRC-124: Multicast Transaction Frame Format](brc-124-frame-format.md) — base header layout reused by BRC-132
-- [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md) — NACK/ACK/MISS used for subtree frame retransmission
-- [BRC-127: Subtree Group Announcement](brc-127-subtree-announce.md) — SubtreeID→GroupID metadata (distinct from BRC-132 data delivery)
-- [BRC-129: Multicast Group Address Assignments](brc-129-multicast-addressing.md) — group index allocations; `0xFFFB` = GroupSubtreeDataAnnounce
-- [BRC-130: Fragmentation](brc-130-fragmentation.md) — BRC-130 extension for large subtree payloads; `OrigFrameVer=0x05`
-- [BRC-131: Block Announcements](brc-131-block-announcements.md) — `FrameVerV4` pattern followed by BRC-132
-- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame) — `EncodeSubtreeData`, `DecodeSubtreeData`, `IsSubtreeDataFrame`, `EncodeSubtreeDataPayload`, `DecodeSubtreeDataPayload`
-- [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder) — `ProcessSubtreeData`, `fragmentSubtreeData`
-- [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener) — `processSubtreeDataFrame`
-- [retry-endpoint/ingress](https://github.com/lightwebinc/retry-endpoint/tree/main/ingress) — `processSubtreeDataFrame`
-- [retry-endpoint/retransmit](https://github.com/lightwebinc/retry-endpoint/tree/main/retransmit) — V5-aware retransmit routing
-- [BRC-132: Multicast Subtree Data Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0132.md) — canonical spec
+- [BRC-124: Multicast Transaction Frame Format](brc-124-frame-format.md): base header layout reused by BRC-132
+- [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md): NACK/ACK/MISS used for subtree frame retransmission
+- [BRC-127: Subtree Group Announcement](brc-127-subtree-announce.md): SubtreeID→GroupID metadata (distinct from BRC-132 data delivery)
+- [BRC-129: Multicast Group Address Assignments](brc-129-multicast-addressing.md): group index allocations; `0xFFFB` = GroupSubtreeDataAnnounce
+- [BRC-130: Fragmentation](brc-130-fragmentation.md): BRC-130 extension for large subtree payloads; `OrigFrameVer=0x05`
+- [BRC-131: Block Announcements](brc-131-block-announcements.md): `FrameVerV4` pattern followed by BRC-132
+- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame): `EncodeSubtreeData`, `DecodeSubtreeData`, `IsSubtreeDataFrame`, `EncodeSubtreeDataPayload`, `DecodeSubtreeDataPayload`
+- [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder): `ProcessSubtreeData`, `fragmentSubtreeData`
+- [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener): `processSubtreeDataFrame`
+- [retry-endpoint/ingress](https://github.com/lightwebinc/retry-endpoint/tree/main/ingress): `processSubtreeDataFrame`
+- [retry-endpoint/retransmit](https://github.com/lightwebinc/retry-endpoint/tree/main/retransmit): V5-aware retransmit routing
+- [BRC-132: Multicast Subtree Data Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0132.md): canonical spec

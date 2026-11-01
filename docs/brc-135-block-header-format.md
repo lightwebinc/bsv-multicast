@@ -1,4 +1,4 @@
-# BRC-135 — Multicast Block Header Frame Format
+# BRC-135: Multicast Block Header Frame Format
 
 BRC-135 defines a new frame version (`0x07`) for distributing standalone 80-byte
 BSV block headers over the multicast fabric. Block header frames are produced as
@@ -39,7 +39,7 @@ specification.
 
 BRC-135 frames are emitted to the emitter's configured **multicast egress
 group** or **unicast egress address**. They are NOT re-injected onto the primary
-fabric group `FF0E::B:FFFE` — doing so would create a feedback loop (other
+fabric group `FF0E::B:FFFE`: doing so would create a feedback loop (other
 fabric subscribers would receive the split frame on the control channel they
 already subscribe to).
 
@@ -54,7 +54,7 @@ different scope or group-id from the ingress fabric):
 Header multicast egress is opt-in via `-header-mc-egress-enabled` (default
 false); `-header-mc-egress-scope` and `-header-mc-egress-group-id` set the
 egress scope and group-id independently of the fabric. (The `-mc-egress-*`
-flags configure the general data-frame multicast egress — a different
+flags configure the general data-frame multicast egress, a different
 sender.) This ensures BRC-135 frames reach only downstream consumers, not
 peer fabric subscribers or retry endpoints on the ingress fabric.
 
@@ -68,24 +68,24 @@ same offsets.
 
 | Offset | Size | Align | Field         | Value / Notes                                             |
 | ------ | ---- | ----- | ------------- | --------------------------------------------------------- |
-| 0      | 4    | —     | Network Magic | `0xE3E1F3E8` (BSV mainnet P2P magic)                      |
-| 4      | 2    | —     | Protocol Ver  | `0x02BF` (703, BSV large-block baseline)                  |
-| 6      | 1    | —     | Frame Version | `0x07` — BRC-135 block header                             |
-| 7      | 1    | —     | Reserved      | `0x00`                                                    |
+| 0      | 4    | -     | Network Magic | `0xE3E1F3E8` (BSV mainnet P2P magic)                      |
+| 4      | 2    | -     | Protocol Ver  | `0x02BF` (703, BSV large-block baseline)                  |
+| 6      | 1    | -     | Frame Version | `0x07`: BRC-135 block header                              |
+| 7      | 1    | -     | Reserved      | `0x00`                                                    |
 | 8      | 32   | 8B    | BlockHash     | SHA256d of the 80-byte block header (internal byte order) |
 | 40     | 8    | 8B    | HashKey       | XXH64(emitterIPv6 ∥ 0xFFFA ∥ zeros); stamped by emitter   |
 | 48     | 8    | 8B    | SeqNum        | Monotonic per-emitter counter; stamped by emitter         |
 | 56     | 32   | 8B    | LayoutPad32   | All zeros (no subtree scope for block headers)            |
-| 88     | 4    | —     | PayloadLen    | `0x00000050` (80 = fixed block header size, uint32 BE)    |
-| 92     | 80   | —     | Payload       | Raw 80-byte BSV block header                              |
+| 88     | 4    | -     | PayloadLen    | `0x00000050` (80 = fixed block header size, uint32 BE)    |
+| 92     | 80   | -     | Payload       | Raw 80-byte BSV block header                              |
 
 **Total frame size:** 172 bytes (92 header + 80 payload). Always fits in a
-single UDP datagram — no fragmentation required.
+single UDP datagram; no fragmentation required.
 
 **Key distinctions from BRC-131:**
 
 - Frame version is `0x07` (not `0x04`).
-- No `MsgType` byte — byte 7 is `Reserved = 0x00`.
+- No `MsgType` byte: byte 7 is `Reserved = 0x00`.
 - `BlockHash` at bytes 8–39 is the SHA256d of the raw 80-byte block header
   (identical to `ContentID` in a BRC-131 `BlockAnnounce` for the same block).
 - `PayloadLen` is always exactly 80.
@@ -121,7 +121,7 @@ verbatim from the BRC-131 `BlockAnnounce` payload bytes `[0:80]`.
 BRC-135 frames carry their own independent `HashKey`/`SeqNum` flow stamped by
 the emitter:
 
-- **HashKey** is `XXH64(emitterIPv6 ∥ 0xFFFA ∥ zeros)` — stable for the lifetime
+- **HashKey** is `XXH64(emitterIPv6 ∥ 0xFFFA ∥ zeros)`, stable for the lifetime
   of the emitter process. The group ingredient `0xFFFA` (`GroupBlockHeader`)
   matches the actual BRC-135 egress multicast group, so the HashKey input is
   self-consistent with the destination.
@@ -141,12 +141,12 @@ BRC-135 frames are **not retransmitted** via the standard BRC-126 NACK path on
 the primary fabric. They are a derived product: if a downstream consumer misses
 a BRC-135 frame, it can recover from a different source:
 
-1. **Redundant emitters** — multiple emitters produce the same block header;
+1. **Redundant emitters**: multiple emitters produce the same block header;
    downstream consumers subscribe to more than one for reliability.
-2. **Re-request from upstream** — the consumer re-requests the full BRC-131
+2. **Re-request from upstream**: the consumer re-requests the full BRC-131
    BlockAnnounce via BRC-126 NACK to a retry endpoint, then extracts the header
    locally.
-3. **Application-level retry** — the downstream consumer requests the block
+3. **Application-level retry**: the downstream consumer requests the block
    header by hash from any BSV peer using the standard `getheaders` protocol.
 
 If a deployment requires NACK-based retransmission for BRC-135 frames on the
@@ -161,12 +161,12 @@ protocol-level requirement.
 
 A consumer receiving BRC-135 frames:
 
-1. **Validate** — Check `raw[0:4] == Magic`, `raw[6] == 0x07`,
+1. **Validate**: Check `raw[0:4] == Magic`, `raw[6] == 0x07`,
    `PayloadLen == 80`.
-2. **Extract** — Read the 80-byte block header from `raw[92:172]`.
-3. **Verify** — Optionally compute `SHA256d(payload)` and compare against
+2. **Extract**: Read the 80-byte block header from `raw[92:172]`.
+3. **Verify**: Optionally compute `SHA256d(payload)` and compare against
    `BlockHash` (bytes 8–39) to confirm integrity.
-4. **Gap track** — If consuming from a single emitter, monitor `SeqNum`
+4. **Gap track**: If consuming from a single emitter, monitor `SeqNum`
    continuity on the `HashKey` flow to detect missed headers.
 
 ---
@@ -224,18 +224,18 @@ consumer-side header lane (port 9172) carries, e.g. into overlay-bridge.
 
 ## References
 
-- [BRC-124: Multicast Transaction Frame Format](./brc-124-frame-format.md) —
+- [BRC-124: Multicast Transaction Frame Format](./brc-124-frame-format.md):
   base header layout reused by BRC-135
-- [BRC-129: Multicast Group Address Assignments](./brc-129-multicast-addressing.md)
-  — control-plane group index allocations
-- [BRC-131: Block Announcement Protocol](./brc-131-block-announcements.md) —
+- [BRC-129: Multicast Group Address Assignments](./brc-129-multicast-addressing.md):
+  control-plane group index allocations
+- [BRC-131: Block Announcement Protocol](./brc-131-block-announcements.md):
   source of the 80-byte block header extracted by the emitter
-- [BRC-133: Coinbase Transaction Delivery](./brc-133-coinbase-delivery.md) —
+- [BRC-133: Coinbase Transaction Delivery](./brc-133-coinbase-delivery.md):
   companion control-plane frame type (deprecated and retained; see BRC-133)
-- [BRC-134: Chained Anchor Transaction Frames](./brc-134-anchor-transactions.md)
-  — companion control-plane frame type
-- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame)
-  — `EncodeBlockHeader`, `DecodeBlockHeader`, `IsBlockHeaderFrame`, `FrameVerV7`
-- [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener)
-  — reference emitter implementation
-- [BRC-135: Multicast Block Header Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0135.md) — canonical spec
+- [BRC-134: Chained Anchor Transaction Frames](./brc-134-anchor-transactions.md):
+  companion control-plane frame type
+- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame):
+  `EncodeBlockHeader`, `DecodeBlockHeader`, `IsBlockHeaderFrame`, `FrameVerV7`
+- [shard-listener/listener](https://github.com/lightwebinc/shard-listener/tree/main/listener):
+  the header emitter (`-header-egress-*`, `-header-mc-egress-*`)
+- [BRC-135: Multicast Block Header Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0135.md): canonical spec

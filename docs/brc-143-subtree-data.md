@@ -1,4 +1,4 @@
-# BRC-143 — Subtree Data Frame Format (push)
+# BRC-143: Subtree Data Frame Format (push)
 
 BRC-143 defines the **push** wire form of a subtree: the merkle root that
 identifies it plus the ordered list of transaction node hashes, delivered whole
@@ -15,17 +15,17 @@ over a byte stream. It is the counterpart of [BRC-132](brc-132-subtree-data.md)
 
 ## 1. Purpose
 
-In an announce/pull system a receiver fetches a subtree **by its root hash** —
+In an announce/pull system a receiver fetches a subtree **by its root hash**:
 Teranode's own `GET /subtree/{hash}` transfers a bare list of 32-byte node
 hashes and the root is the request key, carried out-of-band in the URL. A
 **push** delivery has no request path: the subtree arrives unsolicited, so the
 identifying root must travel **in-band**.
 
-BRC-143 is that frame — the merkle root followed by the ordered node hashes, and
+BRC-143 is that frame: the merkle root followed by the ordered node hashes, and
 nothing a receiver recomputes locally. Per-node fee/size, the aggregate totals,
 and the conflict set are deliberately omitted: a receiver's transaction-meta
 store supplies fee/size (Teranode's `AddNode(hash,0,0)` sources them locally),
-and validation does not consume the others on the ingest path — carrying them
+and validation does not consume the others on the ingest path; carrying them
 would only inflate an already large object.
 
 ---
@@ -33,7 +33,7 @@ would only inflate an already large object.
 ## 2. Wire Format
 
 All frame integers are big-endian. Node hashes are carried in internal
-(`chainhash`) byte order — not display order. `NodeCount` delimits the body, so
+(`chainhash`) byte order, not display order. `NodeCount` delimits the body, so
 the frame is self-delimiting on a back-to-back stream with no outer prefix.
 
 | Offset | Size   | Field              | Notes                                                                 |
@@ -49,7 +49,7 @@ default 128 MiB ≈ 4M leaves).
 ### 2.1 Coinbase placeholder
 
 A block's **first** subtree begins with a coinbase placeholder: **32 bytes of
-`0xFF`** at `NodeHashes[0]` — *not* zeros (a zero hash is the merkle padding
+`0xFF`** at `NodeHashes[0]`, *not* zeros (a zero hash is the merkle padding
 value; zeros where the coinbase leaf belongs corrupts the root). The placeholder
 is self-describing and detected **by value** (`CoinbasePlaceholderHashValue`),
 exactly as Teranode's `subtreevalidation` does. There is **no flag**. A
@@ -68,7 +68,7 @@ The receiver rebuilds the subtree through the go-subtree node API, then verifies
 
 Tree height is derived as `ceil(log2(N))`; the merkle computation pads to the
 next power of two with zero-hash leaves, and an odd node is hashed with itself.
-No height/capacity field is carried — it would fight that derivation.
+No height/capacity field is carried; it would fight that derivation.
 
 **Do not byte-splice.** This wire frame is **not** go-subtree's on-disk
 serialization (little-endian, root-first, with fee/size node records and a
@@ -90,14 +90,14 @@ BRC-143 is the push counterpart of the multicast [BRC-132](brc-132-subtree-data.
 subtree frame: the same node set, carried without the multicast envelope, with
 the merkle root (which rode the BRC-132 frame header as `SubtreeID`) moved
 in-band because push has no `/{hash}` request path. Fees/size/conflicts that
-BRC-132 may carry are dropped — the receiver recomputes them.
+BRC-132 may carry are dropped; the receiver recomputes them.
 
 ---
 
 ## References
 
-- [BRC-144 — Block Frame Format](brc-144-block-frame.md) — carries the ordered
+- [BRC-144: Block Frame Format](brc-144-block-frame.md): carries the ordered
   subtree list (block↔subtree association) this frame omits
-- [BRC-132 — Multicast Subtree Data Frame Format](brc-132-subtree-data.md)
+- [BRC-132: Multicast Subtree Data Frame Format](brc-132-subtree-data.md)
   (multicast counterpart)
-- BRC-12 / BRC-30 — the member transactions a subtree references by hash
+- BRC-12 / BRC-30: the member transactions a subtree references by hash

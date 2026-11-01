@@ -38,7 +38,7 @@ Craig S. Wright in
 - [Subtree Group Announcement (BRC-127)](#subtree-group-announcement-brc-127)
 - [Block Announcement Frame Format (BRC-131)](#block-announcement-frame-format-brc-131)
 - [Subtree Data Frame Format (BRC-132)](#subtree-data-frame-format-brc-132)
-- [Coinbase Transaction Frame Format (BRC-133) — deprecated](#coinbase-transaction-frame-format-brc-133--deprecated)
+- [Coinbase Transaction Frame Format (BRC-133, deprecated)](#coinbase-transaction-frame-format-brc-133-deprecated)
 - [Anchor Transaction Frame Format (BRC-134)](#anchor-transaction-frame-format-brc-134)
 - [Block Header Format (BRC-135)](#block-header-format-brc-135)
 - [Shard Manifest Announcement (BRC-139)](#shard-manifest-announcement-brc-139)
@@ -59,9 +59,9 @@ Craig S. Wright in
 | **Subtree**        | An ordered set of related transactions sharing a common 32-byte batch identifier (`SubtreeID`, or Subtree Merkle root hash). Used for transaction specialization and block template assembly. |
 | **Gap**            | A detected break in the monotonic `SeqNum` counter for a flow, indicating one or more missing frames.                                                                                         |
 | **Flow**           | The per-(sender IP, multicast group, subtree) sequence of frames sharing a common `HashKey`.                                                                                                  |
-| **NACK**           | Negative acknowledgement — a 64-byte datagram requesting retransmission of a missing frame.                                                                                                   |
-| **ACK**            | Positive acknowledgement — a 16-byte response confirming a retransmit was dispatched.                                                                                                         |
-| **MISS**           | Cache-miss response — a 16-byte response indicating the requested frame is not cached; triggers immediate escalation.                                                                         |
+| **NACK**           | Negative acknowledgement: a 64-byte datagram requesting retransmission of a missing frame.                                                                                                    |
+| **ACK**            | Positive acknowledgement: a 16-byte response confirming a retransmit was dispatched.                                                                                                          |
+| **MISS**           | Cache-miss response: a 16-byte response indicating the requested frame is not cached; triggers immediate escalation.                                                                          |
 | **ADVERT**         | A 56-byte beacon datagram advertising a retry endpoint's address, tier, and preference.                                                                                                       |
 | **Fabric**         | The IPv6 multicast network interconnecting proxies, listeners, and retry endpoints.                                                                                                           |
 | **Ingress**        | The initial stage where transactions are received and processed before being distributed to the multicast network.                                                                            |
@@ -76,10 +76,10 @@ Craig S. Wright in
 
 ## High-Level Architecture
 
-The multicast pipeline consists of three tiers. (Diagrams throughout this
+The multicast pipeline consists of three tiers. (Most diagrams in this
 document show ASM site-local addressing, `FF05::B:<shard>`, for brevity;
-[SSM](#source-specific-multicast-ssm) — `FF35::`/`FF3E::` — is the deployment
-default.)
+[SSM](#source-specific-multicast-ssm), `FF35::`/`FF3E::`, is the deployment
+default and is what the production topology below shows.)
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -152,7 +152,7 @@ speaks whatever the receiving node already speaks.
 
 | Repository                                                        | Purpose                                                                                        |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [teranode-bridge](https://github.com/lightwebinc/teranode-bridge) | Landing-tier bridge for an **unmodified** Teranode cluster. Terminates the per-class push lanes (BRC-30 transactions, BRC-143 subtrees, BRC-144 blocks), submits transactions to propagation, and — because Teranode learns of subtrees and blocks by announcement plus pull — caches pushed objects, announces itself as their source, and serves the resulting pull. The reverse path subscribes to the cluster's blockchain notifications and publishes what that cluster produced back onto the object plane. |
+| [teranode-bridge](https://github.com/lightwebinc/teranode-bridge) | Landing-tier bridge for an **unmodified** Teranode cluster. Terminates the per-class push lanes (BRC-30 transactions, BRC-143 subtrees, BRC-144 blocks), submits transactions to propagation, and, because Teranode learns of subtrees and blocks by announcement plus pull, caches pushed objects, announces itself as their source, and serves the resulting pull. A transaction-only mode terminates just the transaction lane, for a cluster whose subtrees and blocks stay on libp2p. The reverse path subscribes to the cluster's blockchain notifications and publishes what that cluster produced back onto the object plane. |
 | [arcade-bridge](https://github.com/lightwebinc/arcade-bridge)     | Landing-tier bridge for the broadcaster (application) tier: runs an **unmodified** Arcade v2 + merkle-service stack with the fabric as its transport. Terminates the BRC-143 subtree and BRC-144 block delivery lanes into merkle-service and forwards Arcade's transaction broadcasts into the fabric on the open class; it carries no miner entitlements. The shared lane/cache/retrieval machinery is imported from teranode-bridge's public packages. |
 | [overlay-bridge](https://github.com/lightwebinc/overlay-bridge)   | Landing-tier bridge for an **unmodified** overlay services engine. Terminates the BRC-149 BEEF delivery-record lane (9171) and the BRC-135 stream-form header lane (9172), feeds objects to the engine's submit interface and headers to its chain tracker, and publishes accepted submissions back onto the BEEF plane through the open ingress (8725, `0xBEEF` tag-detected). |
 | [overlay-blueprints](https://github.com/lightwebinc/overlay-blueprints) | Reference overlay services host on the BEEF object plane, fed by overlay-bridge; applications load as host-side modules. Experimental. |
@@ -175,11 +175,12 @@ speaks whatever the receiving node already speaks.
 
 ### Helm Charts
 
-Each service has a dedicated chart repository; `multicast-kube-infra` composes
-the proxy/listener/retry-endpoint/subtx-generator charts, while the
-shard-manifest, teranode-bridge, and arcade-bridge charts install standalone:
+Charts are published from one repository, `lightwebinc/charts`, one chart per
+service; `multicast-kube-infra` composes the proxy, listener, retry-endpoint
+and subtx-generator charts, while the shard-manifest, teranode-bridge, and
+arcade-bridge charts install standalone:
 
-| Repository                                                                  | Chart           |
+| Chart path                                                                  | Service         |
 | --------------------------------------------------------------------------- | --------------- |
 | [charts/shard-proxy](https://github.com/lightwebinc/charts/tree/main/charts/shard-proxy)         | shard-proxy     |
 | [charts/shard-listener](https://github.com/lightwebinc/charts/tree/main/charts/shard-listener)   | shard-listener  |
@@ -413,12 +414,12 @@ on-wire default is `0x000B` for IANA conformance.
 | 0xFFFD | Beacon (global)                 | FF0E  | FF0E::B:FFFD       |
 | 0xFFFA | Block header egress (BRC-135)   | FF0E  | FF0E::B:FFFA       |
 | 0xFFFE | Block Control channel           | FF0E  | FF0E::B:FFFE       |
-| 0xFFFF | _(reserved)_                    | —     | do not use         |
+| 0xFFFF | _(reserved)_                    | n/a   | do not use         |
 
 Two further indices are **virtual**: `0xFFF8`
 (`GroupCoinbaseFlow`, BRC-133, deprecated and reserved) and `0xFFF9`
 (`GroupAnchorFlow`, BRC-134) are HashKey flow-identity
-ingredients only — frames stamped with them still egress on the Block Control
+ingredients only: frames stamped with them still egress on the Block Control
 channel (`0xFFFE`), and no multicast group is ever joined at those indices.
 
 See
@@ -439,47 +440,46 @@ The BRC-124 data-plane frame format (92-byte header, replacing the legacy
 tx port (8725) either *framed* (a BRC-124/128/legacy-BRC-12 frame, identified by
 the leading network magic) or *bare* (a header-stripped transaction, detected by
 the absence of the magic and wrapped into an unstamped frame). A single ingress
-path serves both on both transports — there is no separate raw-tx port: on UDP
+path serves both on both transports; there is no separate raw-tx port: on UDP
 the unit is one transaction per datagram; on TCP the connection grammar-detects
 once, three ways (magic-led = framed stream, `0xBEEF`-tagged = BRC-149 BEEF
 submission-record stream, else = bare stream, self-delimiting by transaction
 structure).
 Under **`-require-ef`** the ingress is *EF-native*: a submission must
 be BRC-30 Extended Format, because Teranode requires EF and the stateless fabric
-cannot extend a raw transaction (extension needs a per-input UTXO lookup — a
-wallet operation — and a raw tx shares its extended form's TxID, so a fabric
+cannot extend a raw transaction (extension needs a per-input UTXO lookup, a
+wallet operation, and a raw tx shares its extended form's TxID, so a fabric
 re-transmit would collide with ingress dedup). Relayed (already-stamped)
-BRC-124/128 frames are exempt, so the relay hot path is untouched; legacy
-BRC-12 (V1) frames are rejected under `-require-ef` even when stamped (the
-OSS binary flag defaults off; production and commercial deployment profiles
-enable it by default). See the proxy's `docs/architecture.md` § Transaction
-ingress.
+BRC-124/128 frames are not exempt: SeqNum is sender-chosen, so an exemption
+keyed on it would be a one-byte opt-out. A relay or spine lane declares itself
+with `-allow-stamped-ingress` (default off), and on an EF-native fabric its
+traffic is EF anyway; legacy BRC-12 (V1) frames are rejected under
+`-require-ef` even when stamped. The flag defaults off in the binary and is
+enabled by deployment profile. See the proxy's `docs/architecture.md`
+§ Transaction ingress.
 
 **Edge transport: TCP lanes.** The OSS proxy implements the TCP lanes: a
 framed lane on the tx port (8725, transactions + anchors + BEEF records over
 one reliable 5-tuple) plus single-class push lanes (BRC-143 subtree → 8726,
-BRC-144 block → 8727, open-class BEEF → 8728; all default off —
+BRC-144 block → 8727, open-class BEEF → 8728; all default off:
 `-subtree-listen-port` / `-block-listen-port` / `-beef-listen-port` = 0) so
 each flow class has its own 5-tuple for load balancing and flow shaping. Both
 models run simultaneously. Posture by role: an internet-facing collector is
-typically **TCP-only** — its UDP submitter lane is disabled because the public
+typically **TCP-only**: its UDP submitter lane is disabled because the public
 path is unreliable; a collapsed edge supports both TCP and UDP submissions
 over a reliable underlay, and UDP remains the fabric relay path.
 
 Key fields: Network magic, Protocol version, Frame version, Transaction ID,
 HashKey (XXH64 per-flow identifier), SeqNum (monotonic per-flow counter),
 Subtree ID, Payload length, and BSV tx payload. Both BRC-12 (legacy) and
-BRC-124/BRC-128 frames are accepted by all components. Under the opt-in
-`-require-ef` (off by default in the reference proxy; a downstream build may
-default it on) the ingress is EF-native: raw BRC-12/BRC-124
-transaction submissions are rejected and only BRC-30 Extended Format
-(BRC-128) is admitted.
+BRC-124/BRC-128 frames are accepted by all components (subject to
+`-require-ef` above).
 
 **BRC-128 (Extended Format):** BRC-128 frames carry BRC-30 Extended Format (EF)
 transaction payloads inside the standard 92-byte BRC-124 header. Frame Version
 remains `0x02`; the payload is self-identifying via the 6-byte EF marker at
 payload bytes 4–9 (`0x0000000000EF`). All infrastructure components are
-payload-agnostic — no changes required to proxy, listener, or retry endpoint.
+payload-agnostic: no changes required to proxy, listener, or retry endpoint.
 
 **→ [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md)**
 
@@ -524,8 +524,8 @@ recombine them at the edges, so the message type, the BRC-133 number, and the
 [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)**
 
 **BRC-134 (Anchor Transaction):** BRC-134 defines Frame Version `0x06` for
-distributing chained anchor transactions — the root transaction of a dependent
-chain — over the control plane. Because all subsequent chain transactions
+distributing chained anchor transactions (the root transaction of a dependent
+chain) over the control plane. Because all subsequent chain transactions
 reference the anchor as an input, every subscriber must receive it regardless of
 shard assignment. The 92-byte header is layout-identical to BRC-124 with
 `FrameVer=0x06`; the TxID field carries the SHA256d of the anchor transaction.
@@ -549,8 +549,8 @@ fabric. No fragmentation is required.
 
 **BRC-142 (Transaction Bundle / Coalescing):** BRC-142 packs many small
 transactions destined for the same shard group and subtree into a single
-datagram (Frame Version `0x08`, 66-byte bundle header) — the inverse of BRC-130
-fragmentation — to cut packets-per-second on the fabric. A bundle carries a
+datagram (Frame Version `0x08`, 66-byte bundle header), the inverse of BRC-130
+fragmentation, to cut packets-per-second on the fabric. A bundle carries a
 single `HashKey`/`SeqNum` and rides the BRC-126 NACK/retransmission machinery
 as one "fat frame"; gap tracking and retry are at bundle granularity. Bundles
 never exceed the path MTU (coalescing and fragmentation are mutually exclusive
@@ -627,8 +627,8 @@ TCP connections carry the same frame stream plus BRC-127 SubtreeAnnounce control
 datagrams (forwarded verbatim to the announce multicast group).
 
 **→
-[shard-proxy Architecture](https://github.com/lightwebinc/shard-proxy/blob/main/docs/architecture.md)**
-— hot-path detail, configuration reference, metrics
+[shard-proxy Architecture](https://github.com/lightwebinc/shard-proxy/blob/main/docs/architecture.md)**:
+hot-path detail, configuration reference, metrics
 
 ---
 
@@ -642,15 +642,17 @@ and/or multicast consumers, performs NACK-based gap recovery.
 - Role modes: `-mode collapsed` (default: join + demux + gap/NACK + fan-out),
   `receiver` (multicast half only), `delivery` (consumer half: unicast ingest +
   fan-out; no multicast join, no gap/NACK)
-- SO_REUSEPORT multi-worker receive (kernel-level source affinity)
+- One multicast receive worker per process (multicast is not SO_REUSEPORT
+  balanced; SO_REUSEPORT applies to unicast ingest only)
 - Dual-level filtering: MLD group join + userspace shard/subtree filter
 - NORM-inspired gap tracking per flow via HashKey/SeqNum monotonic counter
 - NACK dispatch to configurable retry endpoints
-- Egress via TCP (optional strip-header mode); UDP egress is legacy — lossy
+- Egress via TCP (optional strip-header mode); UDP egress is legacy: lossy
   toward the consumer, retained for lab use
 - Multicast egress for domain bridging (re-emit filtered frames to a separate
   multicast address space)
-- BRC-130 fragment reassembly (`reassembly` package) with SHA256d verification
+- BRC-130 fragment reassembly (`reassembly` package) with optional
+  canonical-TxID verification (`-verify-payload-hash`)
 
 **Architecture:**
 
@@ -691,7 +693,7 @@ Gap Tracker Sweeper (100ms interval)
 **Important:** Linux delivers multicast to ALL SO_REUSEPORT sockets (no load
 balancing). For multicast deployments, `NUM_WORKERS` must be set to 1.
 
-**Filtering:** Dual-level — shard index (MLD group join + userspace filter) and
+**Filtering:** Dual-level, by shard index (MLD group join + userspace filter) and
 subtree ID (static include/exclude lists, plus dynamic BRC-127 group membership
 via `subtreegroup.Registry`). See [Subtree Filtering](#subtree-filtering) and
 [BRC-127](#subtree-group-announcement-brc-127) below.
@@ -702,8 +704,8 @@ sweeper dispatches NACKs with exponential backoff. Gaps are auto-closed when the
 missing frame arrives via multicast or explicit NACK ACK.
 
 **→
-[shard-listener Architecture](https://github.com/lightwebinc/shard-listener/blob/main/docs/architecture.md)**
-— filter behavior table, gap tracker internals, configuration reference, metrics
+[shard-listener Architecture](https://github.com/lightwebinc/shard-listener/blob/main/docs/architecture.md)**:
+filter behavior table, gap tracker internals, configuration reference, metrics
 
 ---
 
@@ -713,7 +715,10 @@ missing frame arrives via multicast or explicit NACK ACK.
 
 **Key Characteristics:**
 
-- Single-worker multicast receiver (SO_REUSEPORT limitation)
+- Multicast receive workers partition the joined groups: each worker joins
+  every Nth group on its own socket (`-ingress-workers`, default 1), so no
+  frame is cached twice; multicast is not SO_REUSEPORT balanced, so groups,
+  not datagrams, are what gets split
 - Pluggable cache backend (`shard-common/cache`): in-process striped map
   (default), Redis, or Aerospike; per-class TTLs (tx/BEEF 60 s, block 10 m,
   subtree 5 m, anchor 2 m), single 16-byte key: `HashKey ∥ SeqNum`
@@ -726,9 +731,10 @@ missing frame arrives via multicast or explicit NACK ACK.
 **Architecture:**
 
 ```text
-Multicast Receiver (1 worker, SO_REUSEPORT)
+Multicast Receivers (INGRESS_WORKERS, groups partitioned)
   ┌──────────────────┐
-  │ Join all groups  │──▶ Cache (memory/redis/aerospike, per-class TTL)
+  │ Join every Nth   │──▶ Cache (memory/redis/aerospike, per-class TTL)
+  │ group            │
   └──────────────────┘
 
 NACK Server (NACK_WORKERS goroutines)
@@ -749,8 +755,8 @@ TTLs: tx/BEEF 60 s, block 10 m, subtree 5 m, anchor 2 m). See
 [shard-common cache backend](https://github.com/lightwebinc/shard-common/blob/main/docs/cache-backend.md).
 
 **→
-[retry-endpoint Architecture](https://github.com/lightwebinc/retry-endpoint/blob/main/docs/architecture.md)**
-— cache encoding, rate-limit configuration, configuration reference, metrics
+[retry-endpoint Architecture](https://github.com/lightwebinc/retry-endpoint/blob/main/docs/architecture.md)**:
+cache encoding, rate-limit configuration, configuration reference, metrics
 
 ---
 
@@ -770,7 +776,7 @@ dedup), `cache` (pluggable memory/Redis/Aerospike backend), `pow` (stateless
 block-header PoW check), `manifest` (BRC-139 registry + adoption gates), and
 `netjoin` (SSM join/leave management). Full list in the repo README.
 
-**→ [shard-common README](https://github.com/lightwebinc/shard-common)** —
+**→ [shard-common README](https://github.com/lightwebinc/shard-common)**:
 package API,
 [protocol spec](https://github.com/lightwebinc/shard-common/blob/main/docs/protocol.md)
 
@@ -791,34 +797,34 @@ miner-tier peers:
 | Subtree data | BRC-132 (`FrameVerV5`) | `GroupSubtreeDataAnnounce` |
 
 End-user / service consumers (which both submit ordinary transactions) must
-not be able to announce blocks — including indirectly, e.g. relaying a libp2p
+not be able to announce blocks, including indirectly, e.g. relaying a libp2p
 block-gossip message up a consumer tunnel.
 
-Two distinct mechanisms cover this, and the distinction is load-bearing —
+Two distinct mechanisms cover this, and the distinction is load-bearing:
 conflating them is how a permissionless network accidentally becomes a
 permissioned one:
 
 1. **Permissionless protocol gate (validate the artifact).** A block
-   announcement carries its own authorization in the form of proof of work —
+   announcement carries its own authorization in the form of proof of work:
    anyone may announce, but the announcement must hash under its claimed
    target. No identity, no allowlist, nothing to coordinate across domains.
    This is the BSV-native gate and the right default for an open network.
 2. **Domain-local admission control (govern your own resources).** An operator
    may additionally restrict *which peers may use this domain's edges and
-   metered bandwidth* — a business/operational policy (subscription, abuse
+   metered bandwidth*: a business/operational policy (subscription, abuse
    attribution), not a network-wide permission. It is identity/network based
    and therefore only meaningful inside the issuing domain. A peer an operator
    declines can still announce through another domain or its own ingress; the
    network stays open.
 
-The frame-class gate and source allowlist below are mechanism (2) — admission
+The frame-class gate and source allowlist below are mechanism (2), admission
 control. Proof-of-work validation is mechanism (1). They compose: a privileged
 frame may be required to both arrive on an admitted path AND carry valid work.
 
 ### Per-socket frame-class gate (admission control)
 
-The proxy enforces authorization as a property of the **ingress socket** —
-every listen socket carries a fixed ingress class — so one edge serves miners
+The proxy enforces authorization as a property of the **ingress socket**
+(every listen socket carries a fixed ingress class), so one edge serves miners
 and ordinary consumers interleaved (best fit per device + bandwidth):
 
 - **User / transaction ingress** (`-udp-listen-port`, default 8725;
@@ -833,10 +839,10 @@ and ordinary consumers interleaved (best fit per device + bandwidth):
   proxy reframes each onto the fabric internally (BRC-132 subtree data;
   BRC-131 announce with the coinbase carried inline in the block body). Both
   default `0` (disabled) ⇒ the proxy ingests transactions only. There is no
-  miner multicast ingress — privileged classes are never submitted as
+  miner multicast ingress: privileged classes are never submitted as
   multicast frames; multicast is fabric-internal transport.
 - **BEEF lane** (`-beef-listen-port`, standard 8728) is a single-class TCP
-  lane for BRC-148/149 BEEF object submissions — an **open** class like
+  lane for BRC-148/149 BEEF object submissions, an **open** class like
   transactions (flow separation, not privilege); BEEF records are also
   accepted on the tx port itself.
 
@@ -848,7 +854,7 @@ lanes is the network-access layer: an operator's control plane / subscription
 system routes miner-tier peers to the edge's push lanes (8726/8727,
 tunnel-bound) and maintains the firewall source set that admits them; consumer
 paths reach only 8725. Miners that are not customers can be added to the
-miner source set out of band — no subscription record required. The open data plane stays tier-agnostic (just
+miner source set out of band; no subscription record required. The open data plane stays tier-agnostic (just
 sockets + a frame-class gate); the operator's control plane supplies the
 routing and source roster.
 
@@ -856,13 +862,13 @@ routing and source roster.
 
 The permissionless mechanism validates the **artifact**, not the emitter. A
 BRC-131 block announce carries the 80-byte header in-frame; the proxy gates it
-(default on; `-require-block-pow=false` disables) on a cheap stateless check —
+(default on; `-require-block-pow=false` disables) on a cheap stateless check:
 `hash(header) ≤
 target(nBits)` and that target ≤ a configured difficulty floor
 (`-min-pow-bits`; default `0` = no floor, header self-consistency only). Forging a passing header costs work proportional to the
 floor; verifying costs one double-SHA256. That asymmetry is the spam gate, and
 because proof of work is globally verifiable it needs **zero cross-domain
-coordination** — every domain checks identically against the same chain rules,
+coordination**: every domain checks identically against the same chain rules,
 with no shared key registry to replicate or reconcile.
 
 This is deliberately not full consensus validation (the proxy has no chain
@@ -873,7 +879,7 @@ Rejections increment `bsp_block_pow_rejected_total`. Implemented in
 
 **The check belongs at the listener too, not only the proxy.** A block
 announcement that originates in another domain arrives over the multicast
-fabric (inter-domain peering) and never passes our proxy — so the **listener**
+fabric (inter-domain peering) and never passes our proxy, so the **listener**
 independently re-validates before fan-out (default on;
 `-require-block-pow=false` disables):
 
@@ -895,16 +901,16 @@ Implemented in `shard-common/pow` + `shard-listener`
 (`listener.Worker.SetBlockPoW`), on both the direct and the
 BRC-130-reassembled block paths.
 
-> **Anchor transactions (BRC-134) are deliberately ungated — and stay that way.**
+> **Anchor transactions (BRC-134) are deliberately ungated, and stay that way.**
 > Anchors are **user-submitted**: any participant may create and emit one, and
-> wide dissemination to every subscriber is the intended behaviour. They carry
-> no PoW gate and no admission requirement — the permissionless baseline. This
+> wide dissemination to every subscriber is the intended behavior. They carry
+> no PoW gate and no admission requirement: the permissionless baseline. This
 > is a firm design decision: anchors are NOT folded into the miner-tier gate.
 
 > **Cross-domain note on signing.** Cryptographic frame signing (a per-frame
 > identity signature against a pubkey allowlist) is a *domain-local* attribution
-> tool — useful inside one operator's domain for billing / abuse attribution,
-> but it does NOT generalise across domains: a signature registry is shared
+> tool, useful inside one operator's domain for billing / abuse attribution,
+> but it does NOT generalize across domains: a signature registry is shared
 > mutable state with revocation/split-brain coordination costs, exactly what
 > multicast set out to avoid. Inter-domain, frames are re-validated by proof of
 > work, not by signature. Signing stays an optional per-domain add-on, never the
@@ -923,24 +929,24 @@ are defined in:
 **→
 [BRC-126 (Retransmission Protocol)](docs/brc-126-retransmission-protocol.md)**
 
-**Key changes from the original fire-and-forget NACK model:**
+**Protocol elements beyond the bare NACK:**
 
-- **ACK/MISS responses** — every NACK receives a unicast response (16 bytes).
+- **ACK/MISS responses**: every NACK receives a unicast response (16 bytes).
   ACK confirms retransmit dispatched; MISS indicates cache miss and triggers
   immediate escalation to the next endpoint.
-- **THROTTLED response (optional)** — an honest-congestion signal (16 bytes,
+- **THROTTLED response (optional)**: an honest-congestion signal (16 bytes,
   `MsgType 0x13`) emitted by the per-flow/per-gap/per-group rate-limit tiers
   when enabled (`-rl-throttle-response`). The listener holds the gap for a
   hinted backoff and retries the same endpoint without escalating or consuming
   its retry budget. The flood (per-source-IP) tier stays silent to avoid
   reflection.
-- **Beacon discovery** — retry endpoints periodically multicast ADVERT messages
+- **Beacon discovery**: retry endpoints periodically multicast ADVERT messages
   (56 bytes) to site/global beacon groups. Listeners maintain a dynamic endpoint
   registry, sorted by `(Tier ASC, Preference DESC)`.
-- **Tier-based escalation** — on MISS, listeners advance through endpoints at
+- **Tier-based escalation**: on MISS, listeners advance through endpoints at
   the same tier, then escalate to the next tier. No backoff on MISS; immediate
   retry.
-- **Configurable retransmit modes** — endpoints can retransmit via multicast,
+- **Configurable retransmit modes**: endpoints can retransmit via multicast,
   unicast, or both. Responses can be selectively suppressed.
 
 ### NACK Dispatch Flow
@@ -983,7 +989,7 @@ Group address assignments for beacons and the control channel are defined in:
 **→
 [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md)**
 
-Inter-AS extension via MP-BGP requires no protocol changes — network teams
+Inter-AS extension via MP-BGP requires no protocol changes: network teams
 extend the multicast fabric; endpoints and listeners operate identically.
 
 ### Retry Endpoint Processing
@@ -1037,11 +1043,9 @@ for the full processing pipeline and rate-limit configuration.
 
 A _subtree_ is an ordered set of related transactions sharing a common batch
 context. The 32-byte `SubtreeID` field allows downstream subscribers to
-associate frames with a named batch. In Teranode, this is currently used to
-batch transactions for processing and to link ordered sets of validated
-transactions from block templates. This may be extended to support transaction
-specialization, and some sort of dynamic announcement and hashing mechanism may
-be required later. A rudimentary implementation is specified in
+associate frames with a named batch. Teranode uses subtrees to batch
+transactions for processing and to link ordered sets of validated transactions
+from block templates. Dynamic subtree-to-group binding is specified in
 [BRC-127: Subtree Group Announcement](docs/brc-127-subtree-announce.md).
 
 **Use Cases:**
@@ -1095,15 +1099,15 @@ at bytes 0–91 (`FrameVer=0x03`).
 `-frag-mtu 0` disables it, which makes any payload larger than the
 unfragmented ceiling (`MTU − 140`) undeliverable. The value MUST be sized to
 the **smallest MTU on the egress path** (tunnel underlays commonly yield
-~1448), never the local NIC — a frame that fits the NIC but not a downstream
+~1448), never the local NIC: a frame that fits the NIC but not a downstream
 tunnel is silently dropped in the underlay with no NACK signal, because the
 frame never reaches a listener's gap tracker. Values below the IPv6 minimum
 MTU (1280) are not meaningful; 1280 is the floor.
 
 **Per-fragment gap tracking:** The proxy stamps an independent
 `HashKey`/`SeqNum` per fragment so each fragment is treated as a separate frame.
-Individual lost fragments are recovered via the standard BRC-126 NACK mechanism
-— no changes to the retry endpoint.
+Individual lost fragments are recovered via the standard BRC-126 NACK mechanism,
+with no changes to the retry endpoint.
 
 **Listener reassembly (`reassembly` package):**
 
@@ -1121,7 +1125,7 @@ Individual lost fragments are recovered via the standard BRC-126 NACK mechanism
 Key metrics: `bsl_reassembly_started_total`, `bsl_reassembly_completed_total`,
 `bsl_reassembly_abandoned_total`, `bsl_reassembly_hash_mismatch_total`.
 
-**→ [BRC-130 Fragmentation](docs/brc-130-fragmentation.md)** — header layout,
+**→ [BRC-130 Fragmentation](docs/brc-130-fragmentation.md)**: header layout,
 fragDataSize derivation, error handling, constants reference
 
 ---
@@ -1131,7 +1135,7 @@ fragDataSize derivation, error handling, constants reference
 BRC-142 is the inverse of BRC-130: instead of splitting one oversized
 transaction across many datagrams, it packs many small transactions destined
 for the same shard group and subtree into a single bundle datagram (Frame
-Version `0x08`). The motivation is packets-per-second — the dominant
+Version `0x08`). The motivation is packets-per-second, the dominant
 data-plane forwarding cost on the replicated fabric and per-tunnel egress
 hops; a payload that would cross the fabric as N small packets crosses it as
 one.
@@ -1146,13 +1150,13 @@ mixed.
 
 The reference proxy coalesces at the **origin** only (opt-in `-coalesce`,
 default off), packing eligible frames within one receive batch and flushing at
-batch end — no timer, near-zero added latency. A bundle never exceeds the path
+batch end: no timer, near-zero added latency. A bundle never exceeds the path
 MTU (a transaction that would need BRC-130 is never a member; the two are
 mutually exclusive per datagram). Relays re-emit bundles verbatim. NACK
 retransmission (BRC-126) operates at bundle granularity: the retry endpoint
 caches a bundle as one opaque frame keyed `HashKey ∥ SeqNum`.
 
-Listeners **edge-decoalesce** by default — split the bundle back into
+Listeners **edge-decoalesce** by default: they split the bundle back into
 individual frames before per-consumer egress, so the consumer contract is
 unchanged; whole-bundle (consumer-decoalesce) delivery is opt-in. A bundle
 built at a different `ShardBits` generation is re-bucketed to the local
@@ -1160,8 +1164,8 @@ generation at the delivery edge before delivery. Malformed or truncated
 bundles are dropped and counted, not silently discarded (relay
 `bundle_short`/`bundle_malformed`; listener `bundle_decode_error`).
 
-**→ [BRC-142 Coalescing (Bundle) Frame Format](docs/brc-142-coalescing-frame.md)**
-— bundle header layout, member format, MTU sizing, bundle-unit NACK,
+**→ [BRC-142 Coalescing (Bundle) Frame Format](docs/brc-142-coalescing-frame.md)**:
+bundle header layout, member format, MTU sizing, bundle-unit NACK,
 re-bucketing rules, deployment decisions
 
 ---
@@ -1180,7 +1184,7 @@ Announcements must be re-sent before their TTL expires (recommended: interval
 10–30 s; TTL ≥ 3× interval). If announcements cease, entries expire and frames
 are dropped.
 
-**→ [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md)** —
+**→ [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md)**:
 wire format, listener configuration flags, distribution path, refresh/expiry
 rules
 
@@ -1191,12 +1195,12 @@ rules
 BRC-131 defines a dedicated frame version (`FrameVer 0x04`) for distributing
 blocks to all fabric subscribers. Two message types are defined:
 
-- **BlockAnnounce (`MsgType 0x01`)** — the payload is a complete BRC-144 block
+- **BlockAnnounce (`MsgType 0x01`)**: the payload is a complete BRC-144 block
   object carried verbatim (header, counts, subtree roots, full coinbase,
   height, coinbase BUMP); the block header is `payload[0:80]`. Subscribers
   use this to update block templates and validate received transactions
   against the new chain tip.
-- **CoinbaseTx (`MsgType 0x02`)** — carries the raw coinbase transaction bytes.
+- **CoinbaseTx (`MsgType 0x02`)**: carries the raw coinbase transaction bytes.
   The ContentID in the frame header is the SHA256d of the coinbase transaction.
   Deprecated and retained (see BRC-133): current implementations do not
   produce it, the listener's default-on block-control gate drops it, and the
@@ -1205,12 +1209,12 @@ blocks to all fabric subscribers. Two message types are defined:
 Both types share the 92-byte BRC-124 header layout and are delivered on the
 **GroupBlockBroadcast** group (`FF0E::B:FFFE`), ensuring global reach
 independent of shard assignment. Every subscriber receives every block
-announcement — there is no shard or subtree filtering for block frames.
+announcement; there is no shard or subtree filtering for block frames.
 
 Sequence tracking and NACK-based retransmission work identically to BRC-124: the
 proxy stamps `HashKey` and `SeqNum` in-place, listeners track the control flow
 for gaps, and retry endpoints cache and retransmit V4 frames back to the control
-group (not to a shard group — a critical routing distinction).
+group (not to a shard group, a critical routing distinction).
 
 For payloads exceeding the path MTU (uncommon for typical block announcements
 but relevant for large coinbase transactions under the deprecated `CoinbaseTx`
@@ -1218,8 +1222,8 @@ type), the proxy uses BRC-130
 fragmentation with `OrigFrameVer=0x04` in the fragment header.
 
 **→
-[BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md)**
-— frame header layout, BlockAnnounce payload format, CoinbaseTx payload, gap
+[BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md)**:
+frame header layout, BlockAnnounce payload format, CoinbaseTx payload, gap
 tracking on the control flow, fragmentation rules, proxy/listener/retry-endpoint
 changes
 
@@ -1228,18 +1232,18 @@ changes
 ## Subtree Data Frame Format (BRC-132)
 
 BRC-132 defines Frame Version `0x05` for distributing complete subtree data
-payloads — the transaction hashes (and optionally fee/size metadata) that make
-up a Merkle subtree — over the multicast fabric. This fills the gap between
+payloads, the transaction hashes (and optionally fee/size metadata) that make
+up a Merkle subtree, over the multicast fabric. This fills the gap between
 individual transaction distribution (BRC-124) and block-level metadata
 (BRC-131), enabling subscribers to reconstruct subtree Merkle trees locally and
 verify block inclusion without fetching individual transactions.
 
 Two message types are defined:
 
-- **HashesOnly (`MsgType 0x01`)** — 32-byte transaction hash per node, plus a
+- **HashesOnly (`MsgType 0x01`)**: 32-byte transaction hash per node, plus a
   24-byte metadata prefix (TotalFees, TotalSizeBytes, NodeCount) and a conflict
   set.
-- **FullNodes (`MsgType 0x02`)** — 48-byte entry per node (TxHash + Fee + Size),
+- **FullNodes (`MsgType 0x02`)**: 48-byte entry per node (TxHash + Fee + Size),
   same prefix and conflict set.
 
 Both types are delivered on the **GroupSubtreeDataAnnounce** group (`FF0X::B:FFFB`).
@@ -1252,22 +1256,22 @@ an independent sequence stream. Because payloads range from ~32 MB (HashesOnly,
 1M nodes) to ~48 MB (FullNodes, 1M nodes), BRC-130 fragmentation is always
 required in practice; the proxy sets `OrigFrameVer=0x05` in each fragment
 header. Listener reassembly is keyed by SubtreeID; SHA256d hash verification is
-skipped (SubtreeID is a Merkle root, not a payload double-hash). The
-`-subtree-data-verify-merkle` flag is reserved; post-reassembly Merkle-root
-recomputation is not performed.
+skipped (SubtreeID is a Merkle root, not a payload double-hash). The listener
+performs no post-reassembly Merkle-root recomputation; the proxy verifies the
+root at ingress (`-verify-subtree-root`, default on).
 
 Sequence tracking and NACK retransmission are identical to BRC-124 and BRC-131:
 the retry endpoint joins `FF0X::B:FFFB`, caches BRC-132 frames and their BRC-130
 fragments, and retransmits to `FF0X::B:FFFB` on NACK (not to a shard group).
 
-**→ [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md)** — frame
+**→ [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md)**: frame
 header layout, MsgType payload formats, fragmentation rules, Merkle
 verification, proxy/listener/retry-endpoint changes, error handling, constants
 reference
 
 ---
 
-## Coinbase Transaction Frame Format (BRC-133) — deprecated
+## Coinbase Transaction Frame Format (BRC-133, deprecated)
 
 > **Deprecated, and retained deliberately.** Current implementations do not
 > produce standalone coinbase frames: a coinbase is invalid to a node unless it
@@ -1290,9 +1294,9 @@ of shard assignment.
 The 92-byte header is identical to the BRC-124 / BRC-131 layout. The ContentID
 field (bytes 8–39) carries the CoinbaseTxID (SHA256d of the coinbase
 transaction). The proxy stamps `HashKey` as `XXH64(senderIPv6 ∥ 0xFFF8 ∥ zeros)`
-— the virtual `GroupCoinbaseFlow` index, giving the coinbase lane a flow
+(the virtual `GroupCoinbaseFlow` index, giving the coinbase lane a flow
 identity independent of other `0xFFFE` traffic while frames still egress on the
-Block Control channel — and a monotonic `SeqNum` in-place. The raw BSV-serialised coinbase transaction
+Block Control channel) and a monotonic `SeqNum` in-place. The raw BSV-serialized coinbase transaction
 (no P2P envelope) is carried as the payload.
 
 Sequence tracking and NACK retransmission are identical to BRC-131: the retry
@@ -1300,8 +1304,8 @@ endpoint joins `FF0E::B:FFFE`, caches FrameVerV4 frames with `MsgType=0x02`, and
 retransmits to `FF0E::B:FFFE` on NACK.
 
 **→
-[BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)**
-— header layout, MsgType constants, proxy/listener/retry-endpoint changes,
+[BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)**:
+header layout, MsgType constants, proxy/listener/retry-endpoint changes,
 sequencing rules
 
 ---
@@ -1321,9 +1325,9 @@ announcements and (deprecated, retained) BRC-133 coinbase transactions.
 The 92-byte header is layout-identical to BRC-124 with Frame Version `0x06` at
 offset 6. The TxID field (bytes 8–39) carries the SHA256d of the anchor
 transaction. `HashKey` is stamped as `XXH64(senderIPv6 ∥ 0xFFF9 ∥ zeros)` by the
-proxy — the virtual `GroupAnchorFlow` index, giving anchors a flow identity
+proxy (the virtual `GroupAnchorFlow` index, giving anchors a flow identity
 independent of other `0xFFFE` traffic while frames still egress on the Block
-Control channel; `SeqNum` is a monotonic per-sender counter. The raw BSV-serialised anchor
+Control channel); `SeqNum` is a monotonic per-sender counter. The raw BSV-serialized anchor
 transaction is carried as the payload (no P2P envelope). BRC-130 fragmentation
 is not defined for BRC-134.
 
@@ -1332,8 +1336,8 @@ the retry endpoint joins `FF0E::B:FFFE`, caches FrameVerV6 frames, and
 retransmits to `FF0E::B:FFFE` on NACK.
 
 **→
-[BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)**
-— header layout, FrameVerV6 constant, proxy/listener/retry-endpoint changes,
+[BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)**:
+header layout, FrameVerV6 constant, proxy/listener/retry-endpoint changes,
 sequencing rules
 
 ---
@@ -1355,7 +1359,7 @@ primary-fabric BRC-126 NACK path; recovery relies on redundant emitters,
 upstream BRC-131 NACK retransmission, or application-level retry.
 
 **→
-[BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md)** —
+[BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md)**:
 header layout, FrameVerV7 constant, payload format, sequencing, retransmission
 strategy
 
@@ -1372,12 +1376,12 @@ proxy-stamped, are not retransmitted, and are never ACKed.
 
 The `shard-manifest` daemon is the canonical announcer. (Protocol-wise any
 participant MAY self-announce its own configuration, but no data-plane
-component implements it — proxy, listener, and retry-endpoint are consumers
+component implements it: proxy, listener, and retry-endpoint are consumers
 only.) Consumers detect cross-peer divergence and, when opted in via
 [Automatic Shard Configuration](#automatic-shard-configuration), adopt
 `Authoritative=1` values after a quorum + hysteresis gate.
 
-**→ [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md)** —
+**→ [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md)**:
 wire format, flags, encoding-form rules, beacon-group routing, observer and
 auto-config consumer profiles
 
@@ -1386,15 +1390,15 @@ auto-config consumer profiles
 ## Source-Specific Multicast (SSM)
 
 The fabric runs in either Source-Specific Multicast (SSM, **the default and
-first-class mode**) or Any-Source Multicast (ASM, a **lab/dev fallback** —
+first-class mode**) or Any-Source Multicast (ASM, a **lab/dev fallback**,
 `sourceMode: asm`). SSM is required for **inter-domain** operation (RFC 8815
 forbids inter-domain ASM) and gives RP-less, loop-free source trees; it is the
 default across the Helm charts and infra repos. ASM is retained only for
 smcroute collapsed-unicast labs (and the bare
 binary CLI default, since a bare invocation is a lab/dev scenario). SSM vs ASM is
-a deployment/transport mode only — frame format, NACK protocol, HashKey
+a deployment/transport mode only: frame format, NACK protocol, HashKey
 computation, and shard derivation are unchanged. Under SSM, receivers
-`(S,G)`-join the publisher roster (`-ssm-publishers-static` — the
+`(S,G)`-join the publisher roster (`-ssm-publishers-static`, the
 lab/bootstrap path; above 16 publishers production must use manifest
 discovery) instead of `(*,G)`, each emitter binds a routable per-node source
 (`-bind-source` / Helm `config.bindSource`), and the fabric
@@ -1463,7 +1467,7 @@ postures (the beacon-socket join is ASM under A/B, SSM under C/D). When disabled
 
 A shared `shard-common/manifest/` package holds the registry, adoption gates,
 and source-set union; proxy and listener wrap it with their own apply semantics.
-shard-manifest is the sole authority — data-plane components are consumers only.
+shard-manifest is the sole authority; data-plane components are consumers only.
 
 ### Adoption modes
 
@@ -1473,7 +1477,7 @@ shard-manifest is the sole authority — data-plane components are consumers onl
   the registry. Listener-side restart-on-adopt is not yet implemented
   (log-only).
 - **Live re-sharding (opt-in, `liveResharding=true`).** A re-shard is a
-  generation transition signalled by a BRC-139 `Successor` block carrying the
+  generation transition signaled by a BRC-139 `Successor` block carrying the
   incoming `ShardBits` (constrained to ±1) and a `TransitionEpoch`. During the
   bridging window the proxy dual-emits each frame to both the current and
   successor layouts (`forwarder.BridgingEngine`); downstream TxID dedup
@@ -1492,7 +1496,7 @@ Static `-shard-include` entries are
 never leaved; pilot-added groups are leaved only when no pilot still claims
 them.
 
-**→ [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md)** —
+**→ [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md)**:
 the normative wire format, adoption gates, and Successor-block layout this
 behavior implements.
 
@@ -1508,7 +1512,7 @@ behavior implements.
 optional gap injection (`-seq-gap-every`, `-seq-gap-delay`) for NACK/retransmit
 tests, multi-core token-bucket pacer.
 
-**→ [subtx-generator README](https://github.com/lightwebinc/subtx-generator)** —
+**→ [subtx-generator README](https://github.com/lightwebinc/subtx-generator)**:
 usage examples, flags
 
 ### shard-listener E2E Tests
@@ -1586,9 +1590,9 @@ which composes the per-service Helm charts (`charts/shard-proxy`,
 standalone and are deployed separately.
 
 For a single-host footprint, the three services deploy as a **collapsed
-node** — `shard-proxy`, `shard-listener`, and `retry-endpoint` co-located on
+node**: `shard-proxy`, `shard-listener`, and `retry-endpoint` co-located on
 one multi-homed host (uplink for sender ingress, multicast-fabric interface
-for IPv6 multicast in/out) — on Ubuntu 24.04, Debian 13, FreeBSD 14, AWS EC2,
+for IPv6 multicast in/out), on Ubuntu 24.04, Debian 13, FreeBSD 14, AWS EC2,
 or any SSH host.
 
 ### Networking Requirements
@@ -1620,7 +1624,7 @@ or any SSH host.
   from all consumers
 - If the push lanes are enabled (`-subtree-listen-port` 8726 /
   `-block-listen-port` 8727), bind them tunnel-side and allow them **only**
-  from the miner-tier source set (tunnels / firewall allowlist) — they accept
+  from the miner-tier source set (tunnels / firewall allowlist); they accept
   privileged subtree/block push frames. See
   [§ Ingress Authorization](#ingress-authorization-miner-tier-gate).
 - Allow IPv6 multicast egress on egress interface
@@ -1712,47 +1716,47 @@ processing, flush OTLP exporter.
 
 **Protocol:**
 
-- [Wire Protocol Specification](https://github.com/lightwebinc/shard-common/blob/main/docs/protocol.md)
-  — Complete BRC-12/BRC-124/BRC-128 frame format
-- [BRC-124 Frame Format](docs/brc-124-frame-format.md) — 92-byte header,
+- [Wire Protocol Specification](https://github.com/lightwebinc/shard-common/blob/main/docs/protocol.md):
+  Complete BRC-12/BRC-124/BRC-128 frame format
+- [BRC-124 Frame Format](docs/brc-124-frame-format.md): 92-byte header,
   HashKey/SeqNum per-flow sequencing, backward compatibility
-- [BRC-126 Retransmission Protocol](docs/brc-126-retransmission-protocol.md) —
+- [BRC-126 Retransmission Protocol](docs/brc-126-retransmission-protocol.md):
   NACK/ACK/MISS wire formats, ADVERT beacon, tier/preference model
-- [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md) —
+- [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md):
   SubtreeAnnounce wire format, proxy forwarding, listener integration
-- [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md) — EF payload
+- [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md): EF payload
   format, detection, infrastructure impact
-- [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md)
-  — IPv6 address scheme, control-plane indices, beacon groups
-- [BRC-130 Fragmentation](docs/brc-130-fragmentation.md) — fragment header
+- [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md):
+  IPv6 address scheme, control-plane indices, beacon groups
+- [BRC-130 Fragmentation](docs/brc-130-fragmentation.md): fragment header
   layout, fragDataSize, per-fragment NACK, reassembly algorithm, metrics
-- [BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md)
-  — block frame header, BlockAnnounce + CoinbaseTx payloads, control-group
+- [BRC-131 Block Announcement Frame Format](docs/brc-131-block-announcements.md):
+  block frame header, BlockAnnounce + CoinbaseTx payloads, control-group
   routing, proxy/listener/retry-endpoint changes
-- [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md) — frame
+- [BRC-132 Subtree Data Frame Format](docs/brc-132-subtree-data.md): frame
   header layout, HashesOnly/FullNodes payload formats, fragmentation rules,
   Merkle verification, proxy/listener/retry-endpoint changes
-- [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md)
-  — coinbase frame wire format, MsgType constants, proxy/listener/retry-endpoint
+- [BRC-133 Coinbase Transaction Frame Format](docs/brc-133-coinbase-delivery.md):
+  coinbase frame wire format, MsgType constants, proxy/listener/retry-endpoint
   changes (deprecated and retained; reserved for a possible split carriage)
-- [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md)
-  — anchor frame wire format, FrameVerV6, proxy/listener/retry-endpoint changes
-- [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md) —
+- [BRC-134 Anchor Transaction Frame Format](docs/brc-134-anchor-transactions.md):
+  anchor frame wire format, FrameVerV6, proxy/listener/retry-endpoint changes
+- [BRC-135 Multicast Block Header Format](docs/brc-135-block-header-format.md):
   standalone block header split, FrameVerV7, emitter-originated sequencing
-- [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md) —
+- [BRC-139 Shard Manifest Announcement](docs/brc-139-shard-manifest.md):
   periodic participant configuration announcement (shard_bits, joined groups,
   GenerationID); beacon-group distribution
-- [BRC-142 Coalescing (Bundle) Frame Format](docs/brc-142-coalescing-frame.md)
-  — bundle header layout, member format, MTU sizing, bundle-unit NACK,
+- [BRC-142 Coalescing (Bundle) Frame Format](docs/brc-142-coalescing-frame.md):
+  bundle header layout, member format, MTU sizing, bundle-unit NACK,
   re-bucketing rules
-- [BRC-143 Subtree Data Frame Format](docs/brc-143-subtree-data.md) —
+- [BRC-143 Subtree Data Frame Format](docs/brc-143-subtree-data.md):
   push-lane subtree object format (in-band root, node count, ordered hashes)
-- [BRC-144 Block Frame Format](docs/brc-144-block-frame.md) — push-lane block
+- [BRC-144 Block Frame Format](docs/brc-144-block-frame.md): push-lane block
   object format (strict Teranode block-body parity, inline coinbase)
-- [BRC-148 Shard Domain Partitioning and BEEF Object Plane](docs/brc-148-shard-domain-beef-plane.md)
-  — object planes by index high nibble; BEEF plane as domain `0x1`
-- [BRC-149 Multicast BEEF Object Frame Format](docs/brc-149-beef-object-frame.md)
-  — FrameVer `0x09`, submission/delivery record grammars
+- [BRC-148 Shard Domain Partitioning and BEEF Object Plane](docs/brc-148-shard-domain-beef-plane.md):
+  object planes by index high nibble; BEEF plane as domain `0x1`
+- [BRC-149 Multicast BEEF Object Frame Format](docs/brc-149-beef-object-frame.md):
+  FrameVer `0x09`, submission/delivery record grammars
 
 **Services:**
 
@@ -1762,6 +1766,9 @@ processing, flush OTLP exporter.
 
 **Infrastructure:**
 
+- [Host deployment](docs/infra/README.md): the Ansible/Terraform conventions
+  shared by the infra repositories (platforms, operations, Terraform layout,
+  OS notes)
 - [ingress-infra Architecture](https://github.com/lightwebinc/ingress-infra/blob/main/docs/architecture.md)
 - [listener-infra Architecture](https://github.com/lightwebinc/listener-infra/blob/main/docs/architecture.md)
 - [retransmission-infra Architecture](https://github.com/lightwebinc/retransmission-infra/blob/main/docs/architecture.md)

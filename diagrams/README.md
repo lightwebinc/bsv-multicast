@@ -6,13 +6,13 @@ sources (rendered natively by GitHub). [DESIGN.md](../DESIGN.md) and the
 orientation aids.
 
 Addressing is shown as SSM (`FF3E::B:<shard>`, the deployment default);
-ASM (`FF05::`/`FF0E::`) remains supported — see DESIGN.md § Source-Specific
+ASM (`FF05::`/`FF0E::`) remains supported; see DESIGN.md § Source-Specific
 Multicast.
 
 ## shard-proxy (ingress)
 
 Stateless ingress: parse, gate, shard, stamp, emit. One frame in, one (or k
-fragments, or one bundle) out — no per-flow state beyond monotonic SeqNum
+fragments, or one bundle) out, with no per-flow state beyond monotonic SeqNum
 counters.
 
 ```mermaid
@@ -133,8 +133,8 @@ sequenceDiagram
     P->>F: frame (HashKey, SeqNum=n)
     F->>L: deliver
     F->>R: deliver (cache, per-class TTL)
-    P--)F: frame (SeqNum=n+2) — n+1 lost
-    F->>L: deliver — gap detected
+    P--)F: frame (SeqNum=n+2); n+1 lost
+    F->>L: deliver; gap detected
     L->>R: NACK (unicast, 64 B): HashKey, missing range
     alt cached
         R->>F: re-multicast missing frame(s) into original group
@@ -148,6 +148,6 @@ sequenceDiagram
         end
         L->>R: escalate to next tier on MISS/timeout
     else overloaded
-        R->>L: THROTTLED (16 B) — back off
+        R->>L: THROTTLED (16 B); back off
     end
 ```

@@ -1,4 +1,4 @@
-# BRC-126 — Retransmission Protocol
+# BRC-126: Retransmission Protocol
 
 BRC-126 defines the NACK-based retransmission and endpoint discovery protocol for the BSV multicast pipeline. It specifies the ADVERT beacon message, the MISS/ACK/THROTTLED response messages, tier/preference-based endpoint selection, and configurable retransmit modes.
 
@@ -11,15 +11,15 @@ BRC-126 defines the NACK-based retransmission and endpoint discovery protocol fo
 
 Retry endpoints cache BRC-124 frames received via multicast and respond to NACK requests from listeners experiencing gaps. BRC-126 adds:
 
-1. **ADVERT** — periodic multicast beacon advertising retry endpoint availability.
-2. **ACK/MISS responses** — every NACK receives a unicast response (16 bytes).
-3. **THROTTLED response** — optional honest-congestion signal (16 bytes); the listener holds the gap and retries the same endpoint without escalating.
-4. **Tier/Preference** — hierarchical endpoint selection for multi-AS deployments, as well as local preference.
-5. **Configurable retransmit modes** — multicast, unicast, or both.
+1. **ADVERT**: periodic multicast beacon advertising retry endpoint availability.
+2. **ACK/MISS responses**: every NACK receives a unicast response (16 bytes).
+3. **THROTTLED response**: optional honest-congestion signal (16 bytes); the listener holds the gap and retries the same endpoint without escalating.
+4. **Tier/Preference**: hierarchical endpoint selection for multi-AS deployments, as well as local preference.
+5. **Configurable retransmit modes**: multicast, unicast, or both.
 
 ---
 
-## ADVERT Wire Format (`MsgType 0x20`) — 56 bytes
+## ADVERT Wire Format (`MsgType 0x20`): 56 bytes
 
 Sent periodically (default **60 s**, configurable via `-beacon-interval`) to the beacon group determined by `-beacon-scope`. Valid values: `site` → `FF05::B:FFFD`; `org` → `FF08::B:FFFD`; `global` → `FF0E::B:FFFD`; `both` / `all` → sends to all three groups (site + org + global). Listeners derive TTL as `3 × BeaconInterval`.
 
@@ -55,20 +55,20 @@ Offset  Size  Field
 
 ### NACK Proxying (cross-domain recovery)
 
-A retry-endpoint serving a downstream multicast domain (fed by a `shard-listener`'s multicast egress) can only cache what the listener actually emitted. A frame the listener never put on the downstream wire — egress send error, interface flap, in-fabric loss — is missed identically by the downstream endpoint and every downstream consumer, so a downstream-only cache cannot repair it. NACK proxying recovers such frames from an upstream endpoint that received them directly from the proxy:
+A retry-endpoint serving a downstream multicast domain (fed by a `shard-listener`'s multicast egress) can only cache what the listener actually emitted. A frame the listener never put on the downstream wire (egress send error, interface flap, in-fabric loss) is missed identically by the downstream endpoint and every downstream consumer, so a downstream-only cache cannot repair it. NACK proxying recovers such frames from an upstream endpoint that received them directly from the proxy:
 
 1. A downstream consumer NACKs the downstream endpoint → local cache miss → MISS returned immediately.
 2. The downstream endpoint forwards the NACK to a configured upstream endpoint with the **Proxied** flag set (`0x01`). Recovery is asynchronous ("cache-warm") so no NACK worker is held.
-3. The upstream endpoint serves the proxied NACK from its cache. Because the requester (the downstream endpoint) is not joined to the upstream shard groups, the frame is returned via **unicast** to the NACK source — a proxied NACK is always served a unicast copy regardless of the upstream's advertised retransmit mode.
+3. The upstream endpoint serves the proxied NACK from its cache. Because the requester (the downstream endpoint) is not joined to the upstream shard groups, the frame is returned via **unicast** to the NACK source; a proxied NACK is always served a unicast copy regardless of the upstream's advertised retransmit mode.
 4. The downstream endpoint re-caches the recovered frame (keyed `HashKey ∥ SeqNum`, per-FrameVer TTL) and multicast-retransmits it into the downstream domain; the consumer's gap auto-fills.
 
 **One-hop bound:** the Proxied flag prevents an upstream endpoint from re-proxying, so a chain is at most one hop. Upstream discovery is static configuration (a separated downstream domain generally cannot receive upstream multicast beacons). When several downstream endpoints run with proxying, a shared cache backend (Redis/Aerospike) lets an in-flight claim dedup the upstream NACKs so only one endpoint recovers each gap.
 
-**Opt-in, and it applies to peer fabrics too:** `-proxy-enabled` defaults **false** and `-upstream-retry-endpoints` must be populated, so an unconfigured deployment has no cross-domain recovery at all. Besides a bridged downstream domain, this is the mechanism for a peer fabric across an interconnect — a listener can only NACK caches it discovered by beacon, so when the loss is upstream of beacon scope every reachable cache is missing exactly the frames requested and answers MISS. Reach, not escalation depth, is the limit. Without the shared backend each sibling endpoint proxies the same gap independently, so one gap costs N upstream fetches and N local retransmits.
+**Opt-in, and it applies to peer fabrics too:** `-proxy-enabled` defaults **false** and `-upstream-retry-endpoints` must be populated, so an unconfigured deployment has no cross-domain recovery at all. Besides a bridged downstream domain, this is the mechanism for a peer fabric across an interconnect: a listener can only NACK caches it discovered by beacon, so when the loss is upstream of beacon scope every reachable cache is missing exactly the frames requested and answers MISS. Reach, not escalation depth, is the limit. Without the shared backend each sibling endpoint proxies the same gap independently, so one gap costs N upstream fetches and N local retransmits.
 
 ---
 
-## NACK Wire Format (`MsgType 0x10`) — 64 bytes
+## NACK Wire Format (`MsgType 0x10`): 64 bytes
 
 Sent by listener to retry endpoint on gap detection. Identifies the missing frame by its flow (`HashKey`) and sequence number (`StartSeq`). `StartSeq == EndSeq` for single-frame retrieval; range requests (`StartSeq < EndSeq`) are reserved for future use.
 
@@ -91,11 +91,11 @@ Offset  Size  Field
 
 > **SubtreeID** (offset 32) is carried for informational purposes; the cache key is `HashKey ∥ SeqNum` and does not require SubtreeID for disambiguation.
 
-> **Flags / Proxied** (offset 7, bit `0x01`) marks a NACK that an endpoint issued on behalf of a downstream domain (cross-domain proxying — see below). An endpoint receiving a NACK with this bit set MUST serve it from its own cache but MUST NOT re-proxy it, bounding any proxy chain to a single hop. The bit was previously reserved and is ignored by legacy endpoints (which simply never re-proxy).
+> **Flags / Proxied** (offset 7, bit `0x01`) marks a NACK that an endpoint issued on behalf of a downstream domain (cross-domain proxying, see below). An endpoint receiving a NACK with this bit set MUST serve it from its own cache but MUST NOT re-proxy it, bounding any proxy chain to a single hop. An endpoint that does not implement proxying ignores the bit (it never re-proxies).
 
 ---
 
-## MISS Response (`MsgType 0x11`) — 16 bytes
+## MISS Response (`MsgType 0x11`): 16 bytes
 
 Sent unicast to the NACK source when the requested frame is not in cache. Listener advances to next endpoint immediately (no backoff wait).
 
@@ -111,9 +111,9 @@ Offset  Size  Field
 
 ---
 
-## ACK Response (`MsgType 0x12`) — 16 bytes
+## ACK Response (`MsgType 0x12`): 16 bytes
 
-Sent unicast to the NACK source when the frame is found and retransmit dispatched. Whether the listener may stop there depends on the Flags: a **unicast-flagged** ACK (`0x02`) is only a PROMISE — the listener keeps the gap pending, drains for the data frame, and escalates to the next cache on timeout. This applies when the listener has unicast recovery wired (`SetRecoverFunc`); without it, a unicast-only ACK is booked unrecovered (`no_recover`) because the returned frame reaches no consumer, while an ACK flagged both unicast and multicast still closes on trust of the multicast repair. The post-ACK drain window is 80 ms. A bare or multicast-only ACK closes the gap on TRUST, so a repair lost on the same degraded link is never retried and the loss is never reported.
+Sent unicast to the NACK source when the frame is found and retransmit dispatched. Whether the listener may stop there depends on the Flags: a **unicast-flagged** ACK (`0x02`) is only a PROMISE; the listener keeps the gap pending, drains for the data frame, and escalates to the next cache on timeout. This applies when the listener has unicast recovery wired (`SetRecoverFunc`); without it, a unicast-only ACK is booked unrecovered (`no_recover`) because the returned frame reaches no consumer, while an ACK flagged both unicast and multicast still closes on trust of the multicast repair. The post-ACK drain window is 80 ms. A bare or multicast-only ACK closes the gap on TRUST, so a repair lost on the same degraded link is never retried and the loss is never reported.
 
 ```text
 Offset  Size  Field
@@ -127,7 +127,7 @@ Offset  Size  Field
 
 ---
 
-## THROTTLED Response (`MsgType 0x13`) — 16 bytes
+## THROTTLED Response (`MsgType 0x13`): 16 bytes
 
 Sent unicast to the NACK source when the request was rejected by a congestion-control tier that limits per-gap (per-`(HashKey, StartSeq)`), per-flow (per-HashKey/chain), or per-group (groupIdx) request rate. It is a flow-control signal, **not** a failure: the endpoint is healthy, and for a per-gap throttle a retransmit for this exact gap was likely just served and is propagating over the multicast data plane. On receipt a listener MUST hold the gap for the hinted backoff and retry the **same** endpoint; it MUST NOT escalate to another endpoint and MUST NOT count the throttle as a recovery failure.
 
@@ -156,7 +156,7 @@ Offset  Size  Field
 | N    | N hops from source                                 |
 | 0xFF | Static seed (no beacon received; lowest priority)  |
 
-Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER` — 255 is the static-seed sentinel and is rejected at config load) and `-beacon-preference` (0–255, default 128; env `BEACON_PREFERENCE`) on each `retry-endpoint`. Endpoints are sorted by `(Tier ASC, Preference DESC)` — higher-preference endpoints are tried first within a tier. Assign these deliberately: the implementation defaults Tier to `0`, so an unconfigured fleet has every endpoint claiming source-adjacency, and because the registry sort is not stable the resulting order is arbitrary and unrepeatable between runs. Tier must NOT be derived from a topology fact such as "this fabric imports remote sources" — interconnects are bidirectional, so that stamps the same tier on the receiver and the true origin.
+Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER`; 255 is the static-seed sentinel and is rejected at config load) and `-beacon-preference` (0–255, default 128; env `BEACON_PREFERENCE`) on each `retry-endpoint`. Endpoints are sorted by `(Tier ASC, Preference DESC)`: higher-preference endpoints are tried first within a tier. Assign these deliberately: the implementation defaults Tier to `0`, so an unconfigured fleet has every endpoint claiming source-adjacency, and because the registry sort is not stable the resulting order is arbitrary and unrepeatable between runs. Tier must NOT be derived from a topology fact such as "this fabric imports remote sources": interconnects are bidirectional, so that stamps the same tier on the receiver and the true origin.
 
 ### Escalation State Machine
 
@@ -221,11 +221,11 @@ Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER` — 255 is the stati
 ## Implementation
 
 - **Listener:** `shard-listener/nack/wire.go` (NACK encode/decode), `shard-listener/discovery/` (ADVERT decode, registry, beacon listener)
-- **Endpoint:** `retry-endpoint/server/server.go` (NACK receive, ACK/MISS send), `retry-endpoint/beacon/` (ADVERT encode/send), `retry-endpoint/proxy/` (cross-domain relay: upstream fetch, re-cache, local retransmit — the fetch socket source-binds the advertised NACK address so the upstream's reply is addressed inside the fabric allow-list)
+- **Endpoint:** `retry-endpoint/server/server.go` (NACK receive, ACK/MISS send), `retry-endpoint/beacon/` (ADVERT encode/send), `retry-endpoint/proxy/` (cross-domain relay: upstream fetch, re-cache, local retransmit; the fetch socket source-binds the advertised NACK address so the upstream's reply is addressed inside the fabric allow-list)
 - **Common:** `shard-common/frame/` (MsgType constants; THROTTLED `0x13` is declared in `shard-listener/nack/wire.go` and `retry-endpoint/server` rather than in the shared block)
 
 ---
 
 ## References
 
-- [BRC-126: Multicast Transaction NACK Retransmission Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md) — canonical spec
+- [BRC-126: Multicast Transaction NACK Retransmission Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md): canonical spec

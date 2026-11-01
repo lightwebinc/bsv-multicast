@@ -1,4 +1,4 @@
-# BRC-139 — Shard Manifest Announcement
+# BRC-139: Shard Manifest Announcement
 
 BRC-139 defines the protocol by which multicast participants periodically advertise their `shard_bits` configuration and the set of shard groups they are joined to. Manifest datagrams are emitted directly to the beacon multicast group (`GroupBeacon`, index `0xFFFD`) at a configurable scope. This BRC supports operator visibility into network-wide sharding configuration, enables divergence detection, and defines the consumer profile for automated, rate-limited shard coordination (see the normative consumer rules below).
 
@@ -9,7 +9,7 @@ BRC-139 defines the protocol by which multicast participants periodically advert
 
 ## Purpose
 
-All components of the multicast pipeline (proxy, listener, retry endpoint, transaction producer) must agree on a single `shard_bits` value to interoperate. Today this value is configured manually on each component and there is no on-network signal to verify agreement. BRC-139 introduces a small, dedicated announcement service that:
+All components of the multicast pipeline (proxy, listener, retry endpoint, transaction producer) must agree on a single `shard_bits` value to interoperate. Without BRC-139 this value is configured manually on each component and there is no on-network signal to verify agreement. BRC-139 introduces a small, dedicated announcement service that:
 
 1. Lets every participant periodically declare its current `shard_bits` and the set of shard group indices it claims to have joined.
 2. Lets observers detect inconsistent configuration across peers.
@@ -19,7 +19,7 @@ The service that emits these announcements is `shard-manifest` (defined separate
 
 ---
 
-## ShardManifest Wire Format (`MsgType 0x40`) — 64 B header + variable payload
+## ShardManifest Wire Format (`MsgType 0x40`): 64 B header + variable payload
 
 All multi-byte integers are big-endian.
 
@@ -45,7 +45,8 @@ Offset  Size  Field
     36     1  ShardBits        0..12 (MUST be ≤12 per BRC-129)
     37     1  RoleHint         0 generic, 1 proxy, 2 listener,
                                3 retry-endpoint, 4 producer,
-                               5 manifest-only (informational)
+                               5 manifest-only, 6 ProducerBEEF,
+                               7 ListenerBEEF (informational)
     38     2  GroupCount       N: number of groupIndex entries in list form
                                (0 if Flags.GroupsValid=0 or bitmap form)
     40     2  BitmapBytes      M: length of trailing bitmap; 0 ⇒ list form
@@ -98,7 +99,7 @@ A datagram with `Flags.GroupsValid=1` and both `BitmapBytes=0` and
 with `Flags.GroupsValid=1` and both `BitmapBytes>0` and `GroupCount>0` is
 also malformed.
 
-For bitmap form the bitmap MUST cover only valid shard indices (0..2^ShardBits − 1). Bits at positions ≥ 2^ShardBits MUST be zero and MUST be ignored by consumers. The same bound applies to the list form — entries ≥ 2^ShardBits MUST NOT be emitted and MUST be ignored by consumers. Both forms address the one index space the announced `ShardBits` defines, and an index outside it names a group no publisher sends to: a consumer that auto-joins it (`-shard-include-from-manifest`) buys membership and MFC state for a group that can never deliver.
+For bitmap form the bitmap MUST cover only valid shard indices (0..2^ShardBits − 1). Bits at positions ≥ 2^ShardBits MUST be zero and MUST be ignored by consumers. The same bound applies to the list form: entries ≥ 2^ShardBits MUST NOT be emitted and MUST be ignored by consumers. Both forms address the one index space the announced `ShardBits` defines, and an index outside it names a group no publisher sends to: a consumer that auto-joins it (`-shard-include-from-manifest`) buys membership and MFC state for a group that can never deliver.
 
 ### Sources payload (when `Flags.SourcesValid=1`)
 
@@ -169,7 +170,7 @@ Consumer rules (normative when auto-configuration is enabled):
   Successor-block adoption as a divergence event and otherwise wait for
   the pilot to roll `GenerationID` (i.e. drop the Successor block and
   promote it to the active generation) before reacting on the new
-  value. Pilots MUST honour this by rolling `GenerationID` to the
+  value. Pilots MUST honor this by rolling `GenerationID` to the
   former `SuccessorGenerationID` at or after `TransitionEpoch`.
 
 Pilot guidance:
@@ -234,7 +235,7 @@ The announcer chooses one or more scopes via `-manifest-scope` (default `site`).
 
 Because BRC-126 ADVERT (`MsgType 0x20`) shares this group, listeners on the beacon group MUST dispatch on `buf[6]` (MsgType byte) before parsing.
 
-The group is shared; the **UDP port is not**. The announcer sends to its own `-port` (default `9001`) while BRC-126 ADVERTs arrive on the endpoints' NACK/beacon port (default `9300`), so a consumer bound only to the ADVERT port receives no manifest however many announcers are running. A consumer MUST therefore bind the announcers' port — `shard-proxy` as `-manifest-beacon-port`, `shard-listener` likewise as `-manifest-beacon-port` (both default `9001`) — in addition to the ADVERT port. Binding one socket for both (equal ports) is valid: the MsgType demux above makes it safe.
+The group is shared; the **UDP port is not**. The announcer sends to its own `-port` (default `9001`) while BRC-126 ADVERTs arrive on the endpoints' NACK/beacon port (default `9300`), so a consumer bound only to the ADVERT port receives no manifest however many announcers are running. A consumer MUST therefore bind the announcers' port (`shard-proxy` as `-manifest-beacon-port`, `shard-listener` likewise as `-manifest-beacon-port`, both default `9001`) in addition to the ADVERT port. Binding one socket for both (equal ports) is valid: the MsgType demux above makes it safe.
 
 ---
 
@@ -244,7 +245,7 @@ The group is shared; the **UDP port is not**. The announcer sends to its own `-p
 | ----------------- | -------- | -------------------------------------------------- |
 | AnnounceInterval  | `300 s`  | every 5 minutes                                    |
 | Default TTL       | `900 s`  | 3 × AnnounceInterval (used when `TTL == 0`)        |
-| Send jitter       | ±10 %    | RECOMMENDED to avoid global synchronisation        |
+| Send jitter       | ±10 %    | RECOMMENDED to avoid global synchronization        |
 
 Consumers MUST treat entries older than `Epoch + TTL` (or `Epoch + 3 × AnnounceInterval` when TTL=0) as expired. If announcements cease, entries expire naturally; an empty registry is valid.
 
@@ -262,7 +263,7 @@ Consumers SHOULD key registry entries on `(SrcIPv6, InstanceID)`. `SrcIPv6` is s
 
 ## Producer Service (`shard-manifest`)
 
-A new standalone daemon emits ShardManifest datagrams. It does not subscribe to or interpret data-plane shard groups. Configuration:
+A standalone daemon emits ShardManifest datagrams. It does not subscribe to or interpret data-plane shard groups. Configuration:
 
 | Flag / Env                                 | Default        | Description                                                        |
 | ------------------------------------------ | -------------- | ------------------------------------------------------------------ |
@@ -276,8 +277,8 @@ A new standalone daemon emits ShardManifest datagrams. It does not subscribe to 
 | `-announce-interval` / `ANNOUNCE_INTERVAL` | `300s`         | re-announce period                                                 |
 | `-ttl` / `TTL`                             | `0`            | seconds; 0 = consumer default                                      |
 | `-iface` / `IFACE`                         | first non-lo   | egress interface for multicast send                                |
-| `-port` / `PORT`                           | `9001`         | UDP destination port; both `shard-proxy` and `shard-listener` consume manifests on their own `-manifest-beacon-port` (default `9001`), a port distinct from the BRC-126 ADVERT port (`-beacon-port`, default `9300`) — align per deployment |
-| `-source-mode` / `SOURCE_MODE`             | `asm`          | data-plane addressing model `asm`\|`ssm`; sets `Flags.SourceModeSSM` only — the beacon prefix derives from `-manifest-scope` alone (ASM `FF0X` prefixes) |
+| `-port` / `PORT`                           | `9001`         | UDP destination port; both `shard-proxy` and `shard-listener` consume manifests on their own `-manifest-beacon-port` (default `9001`), a port distinct from the BRC-126 ADVERT port (`-beacon-port`, default `9300`); align per deployment |
+| `-source-mode` / `SOURCE_MODE`             | `asm`          | data-plane addressing model `asm`\|`ssm`; sets `Flags.SourceModeSSM` only; the beacon prefix derives from `-manifest-scope` alone (ASM `FF0X` prefixes) |
 | `-mc-group-id` / `MC_GROUP_ID`             | `0x000B`       | per BRC-129                                                        |
 | `-metrics-addr` / `METRICS_ADDR`           | `[::]:9091`    | Prometheus/health HTTP listener                                    |
 | `-otlp-endpoint` / `OTLP_ENDPOINT`         | `""`           | optional OTLP gRPC endpoint                                        |
@@ -298,15 +299,15 @@ A new standalone daemon emits ShardManifest datagrams. It does not subscribe to 
 
 The daemon exposes:
 
-- `GET /metrics` — Prometheus exposition.
-- `GET /healthz` — process-alive probe.
-- `GET /readyz` — ready when at least one successful send has occurred within `2 × AnnounceInterval`.
+- `GET /metrics`: Prometheus exposition.
+- `GET /healthz`: process-alive probe.
+- `GET /readyz`: ready when at least one successful send has occurred within `2 × AnnounceInterval`.
 
 On `SIGTERM` the daemon emits one final manifest with `Flags.Shutdown=1` before shutting down its HTTP server (5 s deadline).
 
 ---
 
-## Consumer Behaviour — Observation (informative)
+## Consumer Behavior: Observation (informative)
 
 A BRC-139 consumer MAY join the beacon group(s) of interest and:
 
@@ -319,7 +320,7 @@ A BRC-139 consumer MAY join the beacon group(s) of interest and:
 Operators MAY also scrape manifests with packet capture tools for
 visibility-only deployments.
 
-## Consumer Behaviour — Auto-configuration (normative when opted in)
+## Consumer Behavior: Auto-configuration (normative when opted in)
 
 A consumer that opts in to automatic configuration (e.g. a `shard-proxy`
 or `shard-listener` with `-manifest-consumer-enabled=true`) MUST implement
@@ -375,15 +376,15 @@ information base.
 
 The consumer MUST emit, at minimum:
 
-- `multicast_manifest_divergence_total{field=...,kind=peer-disagree|pin-disagree|crc-fail}` —
+- `multicast_manifest_divergence_total{field=...,kind=peer-disagree|pin-disagree|crc-fail}`:
   counter. (The proxy and listener consumers emit `kind="peer-disagree"`.)
-- `multicast_manifest_last_divergence_epoch{field=...}` — gauge of the
+- `multicast_manifest_last_divergence_epoch{field=...}`: gauge of the
   most recent Unix-seconds disagreement timestamp. A field appears only once
-  it has diverged at least once, and keeps its last value afterwards — a
+  it has diverged at least once, and keeps its last value afterwards: a
   stale timestamp, not a disappearing series, is the recovered signal.
-- `multicast_manifest_pilots_known` — gauge of distinct authoritative
+- `multicast_manifest_pilots_known`: gauge of distinct authoritative
   announcers currently within TTL.
-- `multicast_manifest_quorum_met_bits` — bitmask gauge (no `field` label).
+- `multicast_manifest_quorum_met_bits`: bitmask gauge (no `field` label).
 
 Implementations MUST NOT label any metric with raw source IPv6 addresses;
 cardinality MUST be bounded by role, group-role, or fleet bucket.
@@ -394,9 +395,9 @@ A consumer MUST NOT silently drop traffic when an adopted value changes.
 Components SHOULD signal `ShardBits` or `SourceModeSSM` changes by
 flipping their readiness probe and draining in-flight datagrams within the
 configured drain window before reloading, so the orchestrator can roll the
-pod predictably. Incremental changes — adding or removing entries from
+pod predictably. Incremental changes, adding or removing entries from
 `Flags.GroupsValid` payloads (when consumed as join hints) or from the
-source set — MAY be applied in place without restart. (`shard-proxy`
+source set, MAY be applied in place without restart. (`shard-proxy`
 drains and exits for the orchestrator; `shard-listener` logs the
 transition.)
 
@@ -404,7 +405,7 @@ transition.)
 
 ## Safety Guidance
 
-The Consumer Behaviour — Auto-configuration section above promotes the
+The auto-configuration section of Consumer Behavior above promotes the
 hysteresis, quorum, and ±1 `ShardBits` shift bound to normative
 requirements for opted-in consumers. The following remain operator-side
 guidance:
@@ -416,7 +417,7 @@ guidance:
    can distinguish operator intent from the announcer's own joins.
 4. Treat non-authoritative manifests as observational (and, when
    `Flags.SourcesValid=1`, as per-publisher source contributions).
-5. Warn (do not auto-shift) on observed `ShardBits` divergence — the
+5. Warn (do not auto-shift) on observed `ShardBits` divergence: the
    adoption gates already prevent unsafe shifts, but operator visibility
    is the right place to catch misconfiguration.
 
@@ -424,9 +425,9 @@ guidance:
 
 ## Interactions With Other BRCs
 
-- **BRC-126 (Retransmission / ADVERT)** — shares the beacon group `0xFFFD`; the two conversations are on **different UDP ports by default** (`9001` manifests, `9300` ADVERTs), so a consumer binds both. Where an operator does put them on one port they are distinguished by the MsgType byte at offset 6 (`0x20` ADVERT vs `0x40` ShardManifest). BRC-139 does not retransmit and is not retransmitted.
-- **BRC-127 (Subtree group announcements)** — orthogonal: BRC-127 announces SubtreeID→GroupID bindings on `0xFFFC` and goes through the proxy. BRC-139 announces participant configuration directly on `0xFFFD`.
-- **BRC-129 (Multicast addressing)** — no new index allocated. Manifests reuse the existing beacon group.
+- **BRC-126 (Retransmission / ADVERT)**: shares the beacon group `0xFFFD`; the two conversations are on **different UDP ports by default** (`9001` manifests, `9300` ADVERTs), so a consumer binds both. Where an operator does put them on one port they are distinguished by the MsgType byte at offset 6 (`0x20` ADVERT vs `0x40` ShardManifest). BRC-139 does not retransmit and is not retransmitted.
+- **BRC-127 (Subtree group announcements)**: orthogonal. BRC-127 announces SubtreeID→GroupID bindings on `0xFFFC` and goes through the proxy. BRC-139 announces participant configuration directly on `0xFFFD`.
+- **BRC-129 (Multicast addressing)**: no new index allocated. Manifests reuse the existing beacon group.
 
 ---
 
@@ -447,6 +448,6 @@ guidance:
 - [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md)
 - [BRC-127: Subtree Group Announcement](brc-127-subtree-announce.md)
 - [BRC-129: Multicast Group Addressing](brc-129-multicast-addressing.md)
-- [BRC-139: Shard Manifest Announcement](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md) — canonical spec
+- [BRC-139: Shard Manifest Announcement](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md): canonical spec
 - [Automatic Shard Configuration](../DESIGN.md#automatic-shard-configuration)
 - [Source-Specific Multicast (SSM)](../DESIGN.md#source-specific-multicast-ssm)

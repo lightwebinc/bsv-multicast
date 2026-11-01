@@ -1,11 +1,11 @@
-# BRC-142 — Multicast Transaction Bundle Frame Format
+# BRC-142: Multicast Transaction Bundle Frame Format
 
 BRC-142 packs many small BSV transactions destined for the **same shard group and
 subtree** into a single datagram (a *bundle*), so a payload that would otherwise
 cross the fabric as N small packets crosses it as one. It is the **inverse of
 [BRC-130](brc-130-fragmentation.md)**: BRC-130 splits one oversized transaction
 across many datagrams; BRC-142 merges many small transactions into one. The goal
-is to cut **packets-per-second** — the dominant data-plane forwarding cost — on
+is to cut **packets-per-second**, the dominant data-plane forwarding cost, on
 the replicated fabric and per-tunnel egress hops.
 
 > **Canonical spec:** [BRC-142](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0142.md).
@@ -31,12 +31,12 @@ the replicated fabric and per-tunnel egress hops.
 - **Intra-group, intra-subtree only.** The multicast group is derived per
   transaction (`groupIdx = f(TxID)`), and the subtree partitions a group further,
   so a bundle may only contain transactions sharing both.
-- **Bounded.** A bundle never exceeds the path MTU (it does not fragment —
+- **Bounded.** A bundle never exceeds the path MTU (it does not fragment,
   mutually exclusive with BRC-130) and is flushed under a bounded coalescing
   delay.
 - **Default delivery is edge-decoalesce.** The fabric carries bundles; the edge
   listener splits them back into individual transactions in the consumer's format
-  (a multicast frame — BRC-124/128 at FrameVer 0x02 — or the transaction's base
+  (a multicast frame, BRC-124/128 at FrameVer 0x02, or the transaction's base
   BRC-12 / BRC-30 format) before per-consumer egress, so the consumer contract is
   unchanged.
   Consumer-decoalesce (bundles end-to-end) is an opt-in.
@@ -52,7 +52,7 @@ is no single TxID for N transactions. All multi-byte integers are big-endian.
 | ------ | ---- | ------------- | ------------------------------------------------------------------- |
 | 0      | 4    | Network Magic | 0xE3E1F3E8 (BSV mainnet P2P magic)                                  |
 | 4      | 2    | Protocol Ver  | 0x02BF (703, BSV large-block baseline)                              |
-| 6      | 1    | Frame Version | **0x08** — BRC-142 bundle                                           |
+| 6      | 1    | Frame Version | **0x08**: BRC-142 bundle                                           |
 | 7      | 1    | Flags         | bit0 = `TxIDsPresent` (per-member 32-byte TxID present, all-or-none); bits 1–7 reserved (0) |
 | 8      | 32   | Subtree ID    | The single 32-byte subtree shared by all members; zeros = unset (mempool flow) |
 | 40     | 8    | HashKey       | `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)`; the bundle flow identity; stamped by the coalescing node |
@@ -66,7 +66,7 @@ is no single TxID for N transactions. All multi-byte integers are big-endian.
 
 ### 2.1 Why `GroupIdx` + `ShardBits` are carried
 
-BRC-124 carries no explicit group — it is derived from `TxID[0:4]`. A bundle could
+BRC-124 carries no explicit group; it is derived from `TxID[0:4]`. A bundle could
 likewise be derived by hashing any member, **except** during a re-shard: the
 multicast address is generation-ambiguous (the same numeric index is a different
 group at a different `ShardBits`), and `ShardBits` is exactly what is in flux
@@ -74,7 +74,7 @@ during the BRC-139 adoption window. Carrying `GroupIdx` (2 B) + `ShardBits` (1 B
 lets any node classify and re-bucket deterministically without hashing or relying
 on the delivery address (which is absent on the unicast-recovery and relay paths).
 The cost is amortized per-bundle (~0.4 B/member at 1500, ~0.06 B/member at jumbo),
-so it does not affect the density goal — that constraint applies to *per-member*
+so it does not affect the density goal; that constraint applies to *per-member*
 fields only.
 
 ---
@@ -87,16 +87,16 @@ Each member is a length-prefixed transaction:
 | ----------------- | ---- | ------- | ----------------------------------------------------------------- |
 | 0                 | 2    | TxLen   | Member transaction byte length (uint16 BE)                        |
 | 2                 | 32   | TxID    | **Present only when `Flags.TxIDsPresent`**; raw 256-bit TxID      |
-| 2 or 34           | TxLen| Tx      | Raw serialised BSV transaction (standard **or** EF — §6)          |
+| 2 or 34           | TxLen| Tx      | Raw serialized BSV transaction (standard **or** EF, §6)          |
 
 - **`TxLen` is a fixed uint16, not a varint and not uint32.** A member must fit the
   datagram (≤ MTU, ≤ 64 KB even at super-jumbo); transactions that would exceed the
   MTU are ineligible (they go via BRC-130). UDP's own length field is 16-bit, so a
   4 GiB uint32 is dead range; fixed width keeps the member parse branch-free.
 - **Per-member TxID is optional.** Carry it when receivers need cheap
-  dedup/billing/receipts; otherwise omit and recompute on receipt — `SHA256d(Tx)`
+  dedup/billing/receipts; otherwise omit and recompute on receipt: `SHA256d(Tx)`
   for a raw member, or the hash of the de-extended *base* transaction for an EF
-  member (the canonical id is **not** a hash of the EF bytes — see §6). Trades
+  member (the canonical id is **not** a hash of the EF bytes; see §6). Trades
   32 B/member for a hash; **not** a retransmission aid (§7).
 - The parser walks members until `PayloadLen` bytes are consumed; `TxCount` is a
   convenience and a cross-check. A `TxCount`/`PayloadLen` disagreement is malformed
@@ -136,7 +136,7 @@ A coalescing node (proxy, spine, relay):
 2. Buckets frames by `(groupIdx, subtreeID)`.
 3. Packs each bucket's frames, in arrival order, into one or more bundles. A new
    bundle is started when adding the next member would exceed **either** the MTU
-   budget **or** `TxCount = 65535`. (At 1500 MTU the MTU budget binds first — §10.)
+   budget **or** `TxCount = 65535`. (At 1500 MTU the MTU budget binds first, §10.)
 4. Stamps `GroupIdx`, `ShardBits`, `SubtreeID`, the flow `HashKey`, and a monotonic
    per-flow bundle `SeqNum`.
 5. Flushes a bundle when it reaches the MTU/count cap **or** when the oldest
@@ -146,12 +146,12 @@ A coalescing node (proxy, spine, relay):
 Coalescing is **opt-in**: low-latency paths opt out and pay the small-packet
 price; bulk/replay/archival paths opt in.
 
-> **Implementation note (§20).** The reference proxy realizes the bounded-delay
-> requirement as a **within-batch flush** — it packs only the eligible frames of
+> **Implementation note (§20).** The proxy realizes the bounded-delay
+> requirement as a **within-batch flush**: it packs only the eligible frames of
 > one receive batch (`recvmmsg`) and flushes at batch end, so there is *no timer
 > and no configurable delay knob*; added latency is the batch dwell (≈0). This is
-> the limit of the "window is irrelevant at 1500 MTU" finding (§14). Opt-in is
-> **per proxy** (a `-coalesce` flag), not yet per-flow; per-flow opt-in is a future
+> the limit of the §14 analysis (the window is irrelevant at 1500 MTU). Opt-in is
+> **per proxy** (a `-coalesce` flag), not per-flow; per-flow opt-in is a possible
 > refinement.
 
 ---
@@ -165,7 +165,7 @@ bytes 4–9) exactly as a standalone EF frame, so:
 - No per-member type flag and no separate bundle version are needed.
 - Standard and EF members may be **mixed** in one bundle; each self-describes.
 - On edge-decoalesce, each member is re-emitted in the consumer's format (a
-  multicast frame — BRC-124/128 at `FrameVer 0x02` — or the transaction's base
+  multicast frame, BRC-124/128 at `FrameVer 0x02`, or the transaction's base
   BRC-12 / BRC-30 format) with the EF marker intact where present, so standard/EF
   correctness is preserved without extra metadata.
 - An EF member's canonical TxID is the hash of its *de-extended* base transaction,
@@ -182,7 +182,7 @@ the bundle `SeqNum` stream and cannot enumerate the members to request a subset.
 per-member index or carried TxID does **not** enable partial retransmission.
 
 - A retry endpoint caches a bundle by `(HashKey ∥ SeqNum)` and retransmits it to
-  the bundle's group on NACK — identical mechanics to a BRC-124 frame, no retry
+  the bundle's group on NACK: identical mechanics to a BRC-124 frame, no retry
   endpoint changes beyond treating a bundle as an opaque cached frame.
 - Once edge-decoalesced, retransmission reverts to per-tx BRC-124/126 on the last
   hop, so a bundle's NACK lifetime is bounded to the coalesced segment.
@@ -197,7 +197,7 @@ dictates where decoalescing happens:
 
 - **Edge-decoalesce (default, REQUIRED to support).** Coalesce across the shared
   fabric; the edge listener splits the bundle into individual transactions in the
-  consumer's format (a multicast frame — BRC-124/128 at `FrameVer 0x02` — or the
+  consumer's format (a multicast frame, BRC-124/128 at `FrameVer 0x02`, or the
   transaction's base BRC-12 / BRC-30 format) before the per-consumer unicast
   fan-out. The consumer
   contract is unchanged. On the split, each emitted frame inherits the bundle's `SubtreeID`,
@@ -217,7 +217,7 @@ A bundle is `≤` MTU by construction, so a transaction that would itself need
 fragmentation is **never** a bundle member; the two extensions are mutually
 exclusive per datagram. A coalescing node MUST exclude any transaction whose
 encoded member size exceeds `MTU − 48 − 66 − memberOverhead` and route it
-through BRC-130 instead (the 48 is the IPv6+UDP header — the same subtraction
+through BRC-130 instead (the 48 is the IPv6+UDP header, the same subtraction
 BRC-130 makes before deriving its fragment data capacity).
 
 ---
@@ -240,9 +240,9 @@ fragments or drops.
 | 64000 (super-jumbo) | ~384                    | ~234                   |
 
 **The design baseline is 1500.** On the public internet (and over ip6gre/WireGuard
-tunnels, ~1440) the cap is ~8 members, giving a ~5–8× packet reduction. Jumbo —
+tunnels, ~1440) the cap is ~8 members, giving a ~5–8× packet reduction. Jumbo,
 available only on operator-controlled underlay (private peering / DX / same-DC L2),
-typically inter-spine — raises the cap into the tens and is the prerequisite for
+typically inter-spine, raises the cap into the tens and is the prerequisite for
 order-of-magnitude reduction. `TxCount` (uint16, max 65535) is sufficient with
 >10× headroom even at a 64 KB super-jumbo; `PayloadLen` bounds the parse so a count
 overflow cannot desync it.
@@ -260,7 +260,7 @@ on the new per-`(group, subtree)` flows. The relay learns the target `ShardBits`
 from the inter-domain **[BRC-139](brc-139-shard-manifest.md)** manifest, so the
 re-bucket is deterministic, not inferred.
 
-**Normative rule (load-bearing — derived from the loss/over-delivery analysis):** a
+**Normative rule (load-bearing; derived from the loss/over-delivery analysis):** a
 relay MUST NOT raw-deliver a parent-group bundle to a subscriber whose interest is
 finer than the bundle's `ShardBits`. Raw parent-bundle delivery over-delivers
 `2^k` for a `k`-shardbit-finer subscriber, which at 1500 MTU is already
@@ -271,25 +271,25 @@ benefit for any `k`. Re-shard cutover follows the BRC-139 `Successor` block
 routes each bundle by its tagged `ShardBits`; past `TransitionEpoch` the old
 generation retires.
 
-> **Deployment decision (§20) — enforced at the delivery edge, guarded.** A node
-> that re-buckets — a delivery-edge listener running a finer generation than the
-> fabric, or a cross-generation relay — declares itself with `-rebucket-relay`.
+> **Deployment decision (§20): enforced at the delivery edge, guarded.** A node
+> that re-buckets (a delivery-edge listener running a finer generation than the
+> fabric, or a cross-generation relay) declares itself with `-rebucket-relay`.
 > `shard-listener` `processBundle`, before filter/dedup/delivery, compares the
 > bundle's `ShardBits` to its own generation and on a mismatch re-buckets to the
-> local `ShardBits` (`bundle.Rebucketer` — split + re-coalesce each member into its
+> local `ShardBits` (`bundle.Rebucketer`: split + re-coalesce each member into its
 > correct local group) so neither edge- nor consumer-decoalesce over-delivers a
 > coarser bundle to a finer subscriber. A mismatch on a listener **not** declared a
 > relay is treated as a misconfiguration: it raises `bsl_rebucket_unguarded_total`
-> and a one-shot WARN (delivery still proceeds — refusing would only discard
+> and a one-shot WARN (delivery still proceeds; refusing would only discard
 > deliverable members). Re-bucketing is applied **once, where subscribers attach**,
 > not per hop: a mid-fabric relay re-emits **verbatim**.
 >
 > **Upstream-loss recovery.** A re-bucketed child's SeqNum is re-stamped from a
 > local counter that advances only for parents that arrive, so a dropped parent
-> leaves no hole in any child stream — child streams are NOT gap-detectable for
+> leaves no hole in any child stream: child streams are NOT gap-detectable for
 > upstream loss. Loss is detected on the **parent** stream instead: when ≥1
 > re-bucketed member survives the listener's filter, `processBundle` gap-tracks the
-> parent `(HashKey, SeqNum)` — the identity the origin's retry cached — so the
+> parent `(HashKey, SeqNum)`, the identity the origin's retry cached, so the
 > BRC-126 NACK path recovers the whole parent bundle, and the recovered parent's
 > re-entry auto-fills the gap. A relay that **re-multicasts** re-stamped children
 > must additionally own a child-generation retry (a `retry-endpoint` joined to the
@@ -298,7 +298,7 @@ generation retires.
 >
 > **Caveat:** re-bucketing re-stamps child-flow
 > HashKeys from a re-emit identity, so own-traffic exclusion (which keys on the
-> original sender's HashKey) does not apply to re-bucketed cross-generation flows —
+> original sender's HashKey) does not apply to re-bucketed cross-generation flows:
 > a documented re-shard-boundary limitation, not a common-path regression.
 
 ---
@@ -307,7 +307,7 @@ generation retires.
 
 Bundles cross domains over **SSM only** (RFC 8815 forbids inter-domain ASM): the
 data-plane shard groups and the BRC-139 manifest must be SSM at global scope
-(`FF3E::B:idx`; manifest beacon `FF3E::B:FFFD`) — deployment Posture D. A bundle
+(`FF3E::B:idx`; manifest beacon `FF3E::B:FFFD`), deployment Posture D. A bundle
 rides the inter-domain re-emit relay as-is (source re-stamp only, like any frame);
 the relay re-buckets only on a `ShardBits` mismatch (§11) or a smaller onward MTU
 (§10). SSM source discovery is bootstrapped (`sources.bootstrap.manifest`), which
@@ -318,7 +318,7 @@ is also the trust gate for which peer domains' manifests a node accepts.
 ## 13. Dedup & Own-traffic Exclusion
 
 Only the proxy **ingress** claim is per-member: the coalescing node claims each
-member's TxID (`bsp:tx:` — `claimIngress`) before packing, and MUST drop
+member's TxID (`bsp:tx:`, `claimIngress`) before packing, and MUST drop
 individual already-claimed members rather than the whole bundle. Everything
 downstream operates at **bundle** granularity, before decoalescing (consistent
 with §18): the listener-side egress filter, cross-listener dedup
@@ -337,16 +337,16 @@ dwell is sub-millisecond and the window setting is largely irrelevant (the bundl
 is MTU-capped, not window-capped). Set the max delay to roughly the bundle
 fill-time for the flow's arrival rate; a delay beyond fill-time adds latency
 without adding density. Recommended starting point at 1500: `≤ 250 µs`–`1 ms`.
-The reference implementation takes this to its limit and uses **no delay knob at
-all** — a within-batch flush (§5/§20), so its added latency is the receive-batch
-dwell (≈0) and bundles form only when a batch carries enough same-flow members.
+The proxy takes this to its limit and uses **no delay knob at all**: a
+within-batch flush (§5/§20), so its added latency is the receive-batch dwell
+(≈0) and bundles form only when a batch carries enough same-flow members.
 
 ---
 
 ## 15. Metrics
 
-The metrics the reference implementation emits (there is no flush timer, §5, so
-no flush-timer metric exists; decoalesced members are counted on the shared
+The metrics the proxy and listener emit (there is no flush timer, §5, so no
+flush-timer metric exists; decoalesced members are counted on the shared
 `bsl_frames_forwarded_total`):
 
 | Metric (label)                                   | Where         | Description                                                                 |
@@ -360,7 +360,7 @@ no flush-timer metric exists; decoalesced members are counted on the shared
 | `bsl_frames_dropped_total{reason="bundle_decode_error"}` | listener | Bundles that failed to decode                                          |
 | `bsl_frames_forwarded_total`                     | listener      | Decoalesced member frames forwarded (shared with non-bundle frames)        |
 | `bsl_bundles_rebucketed_total`                   | listener      | Bundles re-bucketed to the local ShardBits generation before delivery (§11) |
-| `bsl_rebucket_unguarded_total`                   | listener      | Re-bucketing on a listener not declared `-rebucket-relay` — a generation-mismatch alarm; alert on rate > 0 (§11) |
+| `bsl_rebucket_unguarded_total`                   | listener      | Re-bucketing on a listener not declared `-rebucket-relay`: a generation-mismatch alarm; alert on rate > 0 (§11) |
 
 A relay implementation SHOULD count oversize/ring-saturated TX drops; a metering
 implementation MAY bill on receiver wire datagrams while crediting member
@@ -378,18 +378,18 @@ transactions as receipts.
 | `PayloadLen` > datagram remainder      | Silent drop (truncated)                         |
 | Member `TxLen` runs past `PayloadLen`  | Silent drop (truncated member section)          |
 | `TxCount` members not consumed exactly | Malformed; drop bundle (`ErrCountMismatch`)     |
-| Member group ≠ `GroupIdx` at `ShardBits` | Encoder invariant — origin MUST pack only same-group members (not decoder-enforced) |
-| Member tx > MTU budget                 | Encoder invariant — origin MUST route via BRC-130, never pack |
+| Member group ≠ `GroupIdx` at `ShardBits` | Encoder invariant: origin MUST pack only same-group members (not decoder-enforced) |
+| Member tx > MTU budget                 | Encoder invariant: origin MUST route via BRC-130, never pack |
 
-> **Implementation note (§20).** The reference impl makes these drops **counted,
+> **Implementation note (§20).** The proxy and listener make these drops **counted,
 > not silent** (`bundle_short` / `bundle_malformed` on the relay; `bundle_decode_error`
-> on the listener decoder) — silence would hide upstream corruption, so each drop
-> increments a labelled counter. The decoder (`bundle.Decode`) enforces magic,
+> on the listener decoder): silence would hide upstream corruption, so each drop
+> increments a labeled counter. The decoder (`bundle.Decode`) enforces magic,
 > short-header, `PayloadLen ≤ datagram`, per-member truncation, **and exact
 > consumption** (`ErrCountMismatch` when the `TxCount` members do not consume
-> `PayloadLen` exactly — a `TxCount`/`PayloadLen` disagreement). The one row it does
+> `PayloadLen` exactly, a `TxCount`/`PayloadLen` disagreement). The one row it does
 > **not** enforce is *"member group ≠ `GroupIdx`"*: that is an **encoder invariant**
-> (like the BRC-130-routing row), not a decode-time check — verifying it would cost
+> (like the BRC-130-routing row), not a decode-time check: verifying it would cost
 > a hash per member and a routing engine the decoder does not carry, so the decoder
 > trusts the coalescing origin to pack only same-group members.
 
@@ -401,10 +401,10 @@ transactions as receipts.
 | BundleHeaderSize    | 66    | 0x42   | Bundle header size in bytes              |
 | FlagTxIDsPresent    | 1     | 0x01   | Flags bit0: per-member TxIDs present      |
 | MaxMembers          | 65535 | 0xFFFF | TxCount ceiling (uint16)                 |
-| MaxMemberTxLen      | 65535 | 0xFFFF | Largest member tx **length** (uint16 TxLen) — a length ceiling, distinct from the `MaxMembers` count |
+| MaxMemberTxLen      | 65535 | 0xFFFF | Largest member tx **length** (uint16 TxLen): a length ceiling, distinct from the `MaxMembers` count |
 
-The member-section field sizes — length prefix `2` and per-member TxID `32` — are
-fixed by the member format (§3) and kept unexported in the reference codec
+The member-section field sizes (length prefix `2` and per-member TxID `32`) are
+fixed by the member format (§3) and kept unexported in the codec
 (`memberLenSize` / `memberTxIDSize`); they are structural, not part of the public
 constant API, so the brief BRC omits them (the member-format table already states
 them).
@@ -413,24 +413,24 @@ them).
 
 ## 18. Infrastructure Impact
 
-- **Proxy (`shard-proxy`, OSS)** — opt-in coalescing stage at an **origin** proxy:
+- **Proxy (`shard-proxy`, OSS)**: opt-in coalescing stage at an **origin** proxy:
   bucket eligible BRC-124/128 frames by `(sender, group, subtree)` within a receive
   batch, pack to the MTU/count cap, stamp, emit FrameVer 0x08. Plus a verbatim
   **relay** path (`ProcessBundle`): a node that *receives* a bundle re-emits it
   unchanged to the group in its header. Default-off (`-coalesce`).
-- **Listener (`shard-listener`, OSS)** — `processBundle` runs ahead of the existing
+- **Listener (`shard-listener`, OSS)**: `processBundle` runs ahead of the existing
   filter/own-exclusion/fan-out path: filter + gap-track + dedup at **bundle**
   granularity, then **edge-decoalesce** (split into BRC-124/128 frames, re-stamp
-  per-tx egress SeqNum) — the default. An optional `BundleSink`/`fanout.SendBundle`
+  per-tx egress SeqNum), the default. An optional `BundleSink`/`fanout.SendBundle`
   seam delivers whole bundles to consumers that advertise `BundleCapable`
   (consumer-decoalesce). A bundle built at a different `ShardBits` generation is
   **re-bucketed to the local generation** in `processBundle` before delivery
   (`bundle.Rebucketer`), so neither delivery mode over-delivers a coarser bundle to
   a finer subscriber (§11/§20).
-- **Retry endpoint** — caches/retransmits a bundle as an opaque frame keyed by
+- **Retry endpoint**: caches/retransmits a bundle as an opaque frame keyed by
   `(HashKey ∥ SeqNum)`; group derived from the bundle header. No new logic beyond
   the larger frame.
-- **Firewall / classifiers** — magic and `ProtoVer` are at the same offsets; the
+- **Firewall / classifiers**: magic and `ProtoVer` are at the same offsets; the
   TxID/HashKey/SeqNum offsets differ from BRC-124, so any classifier that reads
   those fields must branch on FrameVer 0x08.
 
@@ -438,13 +438,13 @@ them).
 
 ## 19. References
 
-- [BRC-124: Multicast Transaction Frame Format](brc-124-frame-format.md) — base frame coalesced by BRC-142
-- [BRC-128: Extended Format (EF) Frames](brc-128-ef-frame-format.md) — EF members (self-identifying)
-- [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md) — bundle-unit NACK/retransmit
-- [BRC-129: Multicast Addressing](brc-129-multicast-addressing.md) — group/subtree addressing, SSM scope
-- [BRC-130: Fragmentation](brc-130-fragmentation.md) — the inverse; mutually exclusive per datagram
-- [BRC-139: Shard Manifest](brc-139-shard-manifest.md) — `ShardBits`/generation coordination, re-shard `Successor`
-- [§20 Deployment decisions & spec delta](#20-deployment-decisions--spec-delta) — design rationale + deliberate deployment decisions
+- [BRC-124: Multicast Transaction Frame Format](brc-124-frame-format.md): base frame coalesced by BRC-142
+- [BRC-128: Extended Format (EF) Frames](brc-128-ef-frame-format.md): EF members (self-identifying)
+- [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md): bundle-unit NACK/retransmit
+- [BRC-129: Multicast Addressing](brc-129-multicast-addressing.md): group/subtree addressing, SSM scope
+- [BRC-130: Fragmentation](brc-130-fragmentation.md): the inverse; mutually exclusive per datagram
+- [BRC-139: Shard Manifest](brc-139-shard-manifest.md): `ShardBits`/generation coordination, re-shard `Successor`
+- [§20 Deployment decisions & spec delta](#20-deployment-decisions--spec-delta): design rationale + deliberate deployment decisions
 
 ---
 
@@ -453,20 +453,14 @@ them).
 The wire format (§2, §3), constants (§17), addressing/flow identity (§4),
 retransmission (§7), edge-/consumer-decoalesce (§8), re-bucketing (§11), and EF
 handling (§6) are implemented as specified. The rows below are **deliberate
-deployment decisions** (not gaps) — they do **not** change the wire format, so an
+deployment decisions** (not gaps); they do **not** change the wire format, so an
 independent implementation that follows §2–§17 interoperates.
 
 | Topic | Decision | Rationale |
 | --- | --- | --- |
-| Flush trigger (§5/§8/§14) | **Within-batch flush** — pack one `recvmmsg` batch, flush at batch end; **no timer, no delay knob** | Zero added latency; the limit of the "window irrelevant at 1500 MTU" finding. A delay timer is **deferred** while the design targets 1500 MTU (bundles MTU-cap quickly). Bundles form under load; at low rate it degrades to ~1 member/bundle |
-| Opt-in granularity (§5/§1) | **Per proxy** (a `-coalesce` flag) | Per-flow opt-in is a possible future refinement; per-proxy is sufficient for the pps win and matches how operators run the reference deployment |
+| Flush trigger (§5/§8/§14) | **Within-batch flush**: pack one `recvmmsg` batch, flush at batch end; **no timer, no delay knob** | Zero added latency; the limit of the §14 analysis (the window is irrelevant at 1500 MTU). A delay timer is **deferred** while the design targets 1500 MTU (bundles MTU-cap quickly). Bundles form under load; at low rate it degrades to ~1 member/bundle |
+| Opt-in granularity (§5/§1) | **Per proxy** (a `-coalesce` flag) | Per-flow opt-in is a possible future refinement; per-proxy is sufficient for the pps win and matches how the proxy is deployed |
 | Where coalescing runs (§1/§18) | **Origin only** (collapsed/ingress); the **spine relays, does not coalesce** | The coalescing divert keys the bundle HashKey on the per-source IP for own-traffic exclusion; a spine re-emit has `src=nil`, so coalescing there would mis-key the flow |
 | Re-bucketing (§11) | **Implemented, relay-declared** (`-rebucket-relay`), via `processBundle` generation-alignment; the mid-fabric spine relay stays verbatim. An undeclared mismatch raises `bsl_rebucket_unguarded_total` + a one-shot WARN. Upstream loss is recovered on the **parent** stream (survivorship-gated `Observe` of the parent HashKey/SeqNum → BRC-126 NACK) | Re-bucket once where subscribers attach, not per hop. Child SeqNums are local (phantom) → track the parent, not the child. Own-traffic exclusion does not survive a cross-generation re-stamp (documented §11 caveat) |
 | Drop visibility (§16) | Drops are **counted, not silent** (`bundle_short`/`bundle_malformed`/`bundle_decode_error`/`ErrCountMismatch`) | Silence hides upstream corruption. The one un-enforced row (member group ≠ GroupIdx) is an **encoder invariant**, not a decode-time check (a hash + routing engine per member) |
 
-**Congruence with the canonical spec:** congruent on wire format and behavior.
-The member-length ceiling is named **`MaxMemberTxLen`** consistently in the
-canonical text, this doc, and the code (`shard-common/bundle`). The member field
-sizes (`2`, `32`) stay unexported in the codec and appear in both documents'
-member-format tables, so the brief canonical text omits them from its constants
-list. The canonical error-handling table is a deliberate subset of §16.

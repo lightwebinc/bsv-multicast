@@ -22,7 +22,7 @@ unchanged as domain `0x0`; a new **BEEF object plane** is allocated as domain
 [BRC-62](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md),
 [BRC-95](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0095.md), and
 [BRC-96](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0096.md)
-BEEF-family transaction objects for peer-to-peer and overlay synchronisation.
+BEEF-family transaction objects for peer-to-peer and overlay synchronization.
 The BEEF plane shards by **overlay topic**: each object carries a topic
 identifier from which its multicast group is derived by the BRC-129 top-bits
 rule, and overlay-tier subscribers filter delivery by elected topic and by BEEF
@@ -43,14 +43,14 @@ The multicast network today works like a set of numbered broadcast channels:
 every new Bitcoin transaction is announced on one of up to 4,096 channels, and
 receivers such as miners tune into the channels they want instead of drinking
 from one giant firehose. This document adds a **second, independent set of
-channels** for a different kind of traffic — BEEF transactions, the
-proof-carrying package format that apps and wallets exchange — without changing
+channels** for a different kind of traffic (BEEF transactions, the
+proof-carrying package format that apps and wallets exchange) without changing
 anything about the existing transaction channels. In the 16-bit channel
 numbering, the first hex digit now names the *plane* (`0` = transactions,
 `1` = BEEF) and the rest names the channel within it.
 
 The important design choice is **what decides the channel**. On the transaction
-plane it is the transaction's own ID, which spreads traffic evenly — right for
+plane it is the transaction's own ID, which spreads traffic evenly, right for
 miners, who want everything. On the BEEF plane it is the **topic**: the name of
 the app community a transaction belongs to (for example `tm_uhrp_files`). A
 topic name mathematically maps to exactly one channel, so an application host
@@ -67,7 +67,7 @@ app identifier and is never used as one). So the network does coarse sorting by
 channel, and the edge does exact sorting per customer.
 
 Why this scales to millions of overlays: the network itself never keeps a list
-of topics. There is no registry, nothing to provision — any topic name hashes
+of topics. There is no registry, nothing to provision: any topic name hashes
 to a channel, the way a word hashes to a dictionary page. The only places that
 remember topics are the delivery edges, and each remembers only the topics its
 own paying customers asked for. Channel counts, router state, and
@@ -75,9 +75,9 @@ retransmission bookkeeping all stay bounded no matter how many topics exist,
 and the BEEF plane has reserved room to grow eight-fold (to 32,768 channels)
 without renumbering.
 
-Two deliberate limits: this plane carries the **live feed**, not history — a
+Two deliberate limits: this plane carries the **live feed**, not history: a
 host joining a topic catches up through the existing overlay sync protocols,
-then stays current here; and it does **not** get transactions mined — anyone
+then stays current here; and it does **not** get transactions mined: anyone
 who needs settlement also submits to the transaction plane, exactly as before.
 
 ## Copyright
@@ -95,11 +95,11 @@ expansion ... as well as specialty transmission domains for purpose-specific
 multicast services that are not general-purpose transaction sharding."
 
 BEEF-family transactions are exactly such a purpose-specific service. Unlike the
-transaction plane — whose consumers are miners and settlement infrastructure
-requiring raw or Extended Format transactions — BEEF objects carry ancestry and
+transaction plane, whose consumers are miners and settlement infrastructure
+requiring raw or Extended Format transactions, BEEF objects carry ancestry and
 Merkle-path proofs
 ([BRC-74](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0074.md))
-for **peer-to-peer and overlay synchronisation**: SPV wallets, overlay services,
+for **peer-to-peer and overlay synchronization**: SPV wallets, overlay services,
 and application-layer indexers that validate without a UTXO set. The two use
 cases do not overlap. A BEEF object is never a substitute for the settlement
 transaction on the transaction plane, and the transaction plane never carries
@@ -119,11 +119,11 @@ per-host fan-out is the step that does not scale as topics and hosts multiply.
 This BRC gives that propagation step a multicast substrate: a publisher emits a
 topical BEEF object once, and every subscribed host of that topic receives it,
 globally, with multicast-native retransmission. History bootstrap remains the
-province of the existing synchronisation protocols (see Operational
+province of the existing synchronization protocols (see Operational
 Considerations).
 
-Carrying BEEF objects on their own multicast plane — rather than translating them
-into the transaction plane — keeps the fabric stateless and lossless: no proof
+Carrying BEEF objects on their own multicast plane, rather than translating them
+into the transaction plane, keeps the fabric stateless and lossless: no proof
 data is stripped, no per-input UTXO resolution is required, and subscribers
 receive exactly the format they requested. It also establishes the addressing and
 coordination pattern for the broader application/overlay layer, which is expected
@@ -150,10 +150,10 @@ This BRC specifies:
 This BRC supersedes the
 [BRC-129](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md)
 section *"Free Space and Specialty Transmission Domains"* and refines the
-*"Data-Plane Shard Groups"* derivation. All other BRC-129 provisions — the IANA
+*"Data-Plane Shard Groups"* derivation. All other BRC-129 provisions (the IANA
 allocation, the group-id field (bytes `[12:14]`, default `0x000B`), the
 source-mode / address-range rules (ASM `FF0x` vs SSM `FF3x`), the group-id
-override, and the control-plane assignments `0xF800`–`0xFFFF` — remain in force
+override, and the control-plane assignments `0xF800`–`0xFFFF`) remain in force
 unchanged. Domain `0x0` under this BRC is bit-for-bit identical to a BRC-129
 deployment; a participant that implements only BRC-129 interoperates fully with
 the transaction plane of a BRC-148 deployment.
@@ -169,7 +169,7 @@ IDX[15:0] =  D D D D | S S S S S S S S S S S S
 ```
 
 Because the transaction plane bounds `shard_bits ≤ 12`, its shard index never
-occupies the high nibble, which is therefore always `0x0` for domain `0x0` —
+occupies the high nibble, which is therefore always `0x0` for domain `0x0`,
 i.e. the pre-existing `0x0000`–`0x0FFF` range. A non-zero domain selects a
 distinct plane whose base address is offset by the domain value.
 
@@ -199,12 +199,12 @@ significant only for **wide planes** (see below); for any plane with
 `shard_bits ≤ 12` and a `0x1000`-aligned base, the low-12-bit shard index and the
 high-nibble base do not overlap and the result is identical to an OR.
 
-**`shardBits = 0` — the single-group plane.** A width of zero is valid and
+**`shardBits = 0`: the single-group plane.** A width of zero is valid and
 means the plane is not sharded: `shardIndex` is `0` for every object and the
 plane occupies exactly its base slot, `IDX = planeBase(domain)`. Implementers
 MUST special-case it rather than evaluate the expression above, whose
-`>> (32 - shardBits)` term becomes a 32-bit shift of a 32-bit value — zero in
-some languages, undefined behaviour in others. This is the expected
+`>> (32 - shardBits)` term becomes a 32-bit shift of a 32-bit value: zero in
+some languages, undefined behavior in others. This is the expected
 configuration for a plane whose delivery selectivity comes from elsewhere: on
 the BEEF plane a subscriber's topics are filtered per-consumer at the delivery
 operator, so a single group carrying every topic is a deliberate operating
@@ -226,7 +226,7 @@ it, joining the child before leaving the parent during the transition window.
 | `0x0`  | `0x0000` | Transaction plane (raw / EF)            | BRC-124, BRC-128, BRC-129 |
 | `0x1`  | `0x1000` | **BEEF object plane**                   | this BRC |
 | `0x2`–`0xE` | `0x2000`–`0xE000` | Reserved for future object planes | future BRC |
-| `0xF`  | `0xF000` | **Forbidden** — overlaps control plane (`0xF800`–`0xFFFF`) | — |
+| `0xF`  | `0xF000` | **Forbidden**: overlaps control plane (`0xF800`–`0xFFFF`) | none |
 
 Domain `0xF` MUST NOT be assigned as a plane base: its slot spans
 `0xF000`–`0xFFFF`, of which `0xF800`–`0xFFFF` is the BRC-129 control plane. Planes
@@ -285,7 +285,7 @@ marker, so a single plane carries them without a per-format sub-allocation:
 | BEEF V2 (TXID-only extension) | `0200BEEF`                | [BRC-96](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0096.md) |
 
 The fabric never parses BEEF structure. Sharding, identity, and filtering key
-on envelope fields fixed at ingress — the submitted topic (TopicID), a hash of
+on envelope fields fixed at ingress: the submitted topic (TopicID), a hash of
 the whole object bytes (ContentID), and the fixed-offset version word. It
 performs no UTXO resolution and strips no proof data.
 
@@ -318,7 +318,7 @@ Properties:
   `shard_bits = 12`, ≈31 at the reserved width of 15.
 - **Zero fabric topic state.** Any topic string hashes to a group without
   registration, matching the permissionless BRC-22 topic space. Per-topic state
-  exists only where topics are *elected* — at delivery operators, for their own
+  exists only where topics are *elected*: at delivery operators, for their own
   subscribers. The fabric's routing state scales with groups and sources, never
   with topic count.
 - **Consistent-hash splits.** Widening `shard_bits` by one sends each topic to
@@ -337,22 +337,22 @@ descriptor revision (`Version > 0`) may define a declared-spread mechanism (a
 hot topic spread across `2^w` sibling groups by ContentID bits); this revision
 reserves the problem and does not define it.
 
-**Subject transaction.** The subject TxID remains consumer-level semantics —
+**Subject transaction.** The subject TxID remains consumer-level semantics:
 Atomic BEEF (BRC-95) carries it explicitly in the 32 bytes after its prefix;
 for BRC-62/BRC-96 it is the last transaction in topological order. The fabric
 does not use it for sharding or identity.
 
 #### Publication (ingress)
 
-BEEF-plane publishers — overlay hosts, application services, and end users —
+BEEF-plane publishers (overlay hosts, application services, and end users)
 form an **overlay ingress class**, distinct from transaction-plane
 submitters. A submission is the pair *(topic list, BEEF object)*, mirroring
 the BRC-22 submit shape, and names 1..15 topics on every path; it is never
 rejected for its count. The ingress emits it as one frame carrying the
 record verbatim, keyed to the first topic, so every submission is delivered
-to a single topical group — linear and election-scoped, carrying the
+to a single topical group (linear and election-scoped, carrying the
 bounded amplification of transaction submission, not the network-wide
-amplification of block or subtree ingress — and is admitted as an **open
+amplification of block or subtree ingress) and is admitted as an **open
 class**, exactly as for transactions. What the ingress path decides is how
 many of the leading names are **deliverable**: open/anonymous ingress
 delivers the first topic only, an authenticated ingress up to the
@@ -367,8 +367,8 @@ Re-submission of the same subject transaction with an updated proof (a BRC-62
 BUMP refreshed after the transaction mines) is a legitimate, distinct object,
 and the same object under a different topic list is a distinct submission
 (its ContentID is over the record). Ingress duplicate suppression MUST
-therefore key on the **(ContentID, TopicID) pair** — derived from the
-payload bytes and the emitted frame's topic — never on the subject TxID.
+therefore key on the **(ContentID, TopicID) pair** (derived from the
+payload bytes and the emitted frame's topic), never on the subject TxID.
 
 #### Independent-plane semantics
 
@@ -395,14 +395,14 @@ object, so the read is bounded by the record envelope and never parses
 BEEF):
 
 1. **TopicID** (header offset 56) plus the record's next `DeliverCount − 1`
-   names — the **selectivity axis**. Cardinality is unbounded: the plane
+   names: the **selectivity axis**. Cardinality is unbounded: the plane
    accommodates millions of concurrent topics because the fabric holds no
    per-topic state and filters resolve by hash lookup.
-2. **BEEF version** (the object's bytes 0–3) — the
+2. **BEEF version** (the object's bytes 0–3): the
    **encoding-capability axis**. Cardinality is small and closed: the three
    markers in the Payload table above. [BRC-62](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md)
    fixes the version word as a Uint32LE sequence beginning at `4022206465`
-   (`0100BEEF`) whose marker remains `BEEF` only through `4022271999` — at most
+   (`0100BEEF`) whose marker remains `BEEF` only through `4022271999`, at most
    65,535 format versions. The version identifies an *encoding*, never an
    overlay: it MUST NOT be repurposed as an overlay namespace, both because it
    collides with future BEEF format revisions and because its space is orders
@@ -411,16 +411,16 @@ BEEF):
 An **overlay-tier** subscriber's election is the pair *(topics, versions)*. A
 subscriber's group set follows from its election: a topical subscriber's groups
 are derived from its elected topics (one group per topic hash); an aggregator
-elects groups directly — up to the whole plane — and takes every topic they
+elects groups directly (up to the whole plane) and takes every topic they
 carry.
 
-- **Topic filter** — the set of elected TopicIDs. An object is delivered only
+- **Topic filter**: the set of elected TopicIDs. An object is delivered only
   when one of its **deliverable** topics (BRC-149: the header TopicID and
   the record's next `DeliverCount − 1` names) is a member, and it is
   delivered **once** however many are, under the first in record order;
   a label topic never matches. An absent topic filter admits every topic on
   the subscriber's elected groups (aggregator mode).
-- **Version filter** — the set of accepted BEEF versions; absent admits all.
+- **Version filter**: the set of accepted BEEF versions; absent admits all.
   This is a capability gate: for example, a host that cannot resolve BRC-96
   TXID-only ancestors excludes `0200BEEF`.
 
@@ -462,13 +462,13 @@ stamping and
 [BRC-126](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md)
 NACK retransmission; objects that exceed the path MTU are fragmented per
 [BRC-130](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md).
-The concrete frame format — and the unicast submission/delivery record
-grammars used at ingress and delivery — are specified in
+The concrete frame format, and the unicast submission/delivery record
+grammars used at ingress and delivery, are specified in
 [BRC-149](brc-149-beef-object-frame.md),
 which assigns `FrameVersion 0x09`. This BRC constrains the header fields that
 addressing, retransmission, and filtering depend on:
 
-- **ContentID (offset 8, 32 bytes)** — SHA-256d over the complete payload
+- **ContentID (offset 8, 32 bytes)**: SHA-256d over the complete payload
   bytes: the submission record when the ingress carried one, the bare
   object otherwise. This is the same hash BRC-130 already requires for
   reassembly verification of fragmented payloads, so fragmentation needs no
@@ -476,25 +476,25 @@ addressing, retransmission, and filtering depend on:
   same subject with different bytes. BRC-130 reassembly keys on this field
   **paired with TopicID**, hence two in-flight objects for one subject must
   never share it.
-- **TopicID (offset 56, 32 bytes)** — the field that carries the SubtreeID in
+- **TopicID (offset 56, 32 bytes)**: the field that carries the SubtreeID in
   transaction frames.
 - **HashKey** = `XXH64(senderIPv6 ∥ domain-tagged groupIdx ∥ zeros)`. Unlike
   transaction frames, the 32-byte field (TopicID) is **excluded** from the flow
-  key: including it would create one flow — and one gap tracker — per
+  key: including it would create one flow (and one gap tracker) per
   (sender, topic). Flows are per (sender, group), as in
   [BRC-131](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0131.md), so
   retransmission and sequencing state is bounded by groups × multicast sources
   regardless of topic count. The domain-tagged IDX (`0x1nnn`) in the HashKey
   keeps BEEF flows distinct from transaction flows for the same shard number.
-- **SeqNum** — per-sender monotonic within the (sender, group) flow; gap
+- **SeqNum**: per-sender monotonic within the (sender, group) flow; gap
   detection and NACK recovery operate on it unchanged.
-- **NACK field mapping** —
+- **NACK field mapping**:
   [BRC-126](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md)
   NACK datagrams for object-plane flows carry **zero** in their 32-byte
   SubtreeID field, and responders MUST ignore it: retransmission lookup is
   keyed on HashKey ∥ SeqNum alone, and because a (sender, group) flow
   interleaves topics, a requester cannot know a missing frame's TopicID.
-- **BEEF version** — the object's first four bytes; not duplicated in the
+- **BEEF version**: the object's first four bytes; not duplicated in the
   header.
 
 Fragmentation composes cleanly with filtering: BRC-130 fragment headers are
@@ -551,7 +551,7 @@ DomainCount (1 byte)  — number of descriptors, 1..15 (domains 0x00–0x0E)
 followed by DomainCount × Domain Descriptor
 ```
 
-**Domain Descriptor** — 24-byte core, optionally followed by a 24-byte Successor
+**Domain Descriptor**: 24-byte core, optionally followed by a 24-byte Successor
 block:
 
 | Offset | Size | Field         | Description                                                          |
@@ -604,9 +604,9 @@ comfortably within that budget.
 
 #### Per-domain adoption and live resharding
 
-The BRC-139 normative consumer profile — authoritative quorum, hysteresis, ±1
+The BRC-139 normative consumer profile (authoritative quorum, hysteresis, ±1
 `shard_bits`-shift bound, manual-pin precedence, divergence telemetry, and
-Successor-block generation transitions with dual-emit bridging — applies **per
+Successor-block generation transitions with dual-emit bridging) applies **per
 domain**, keyed on `DomainID`. Each plane adopts, pins, and transitions its own
 `ShardBits`/`GenerationID` independently; a generation transition on one plane
 does not perturb another. Domain `0x0` continues to be coordinated by the
@@ -669,7 +669,7 @@ planes MUST be published from the announced global source set.
   population, which is what admits millions of concurrent overlays.
 - **Live tail, not history.** Multicast delivery begins at join time; NACK
   recovers transit gaps, not missed history. A host bootstrapping a topic
-  acquires history through the overlay synchronisation protocols
+  acquires history through the overlay synchronization protocols
   ([BRC-88](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0088.md)
   propagation,
   [BRC-76](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0076.md)
@@ -686,39 +686,39 @@ planes MUST be published from the announced global source set.
 
 ## References
 
-- [BRC-22: Overlay Network Data Synchronization](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0022.md)
-  — topical submission and admittance model the plane transports
-- [BRC-62: Background Evaluation Extended Format (BEEF) Transactions](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md)
-  — BEEF encoding carried on the object plane
-- [BRC-74: BSV Unified Merkle Path (BUMP) Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0074.md)
-  — proof payload embedded in BEEF
-- [BRC-76: Graph Aware Sync Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0076.md)
-  — overlay history synchronisation complementing the live tail
-- [BRC-87: Standardized Naming Conventions for BRC-22 Topic Managers and BRC-24 Lookup Services](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0087.md)
-  — `tm_*` topic naming hashed into TopicIDs
-- [BRC-88: Overlay Services Synchronization Architecture](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0088.md)
-  — SHIP/SLAP host discovery and the per-host propagation this plane subsumes
-- [BRC-95: Atomic BEEF Transactions](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0095.md)
-  — explicit-subject BEEF encoding
-- [BRC-96: BEEF V2 Txid Only Extension](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0096.md)
-  — TXID-only BEEF encoding
-- [BRC-124: Multicast Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md)
-  — data-frame header reused by object-plane frames
-- [BRC-126: Multicast Transaction NACK Retransmission Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md)
-  — retransmission machinery inherited by object planes
-- [BRC-128: Multicast Extended Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0128.md)
-  — Extended Format frames on the transaction plane
-- [BRC-129: IPv6 Multicast Group Address Assignments](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md)
-  — base addressing scheme this BRC extends
-- [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md)
-  — fragmentation for large objects
-- [BRC-136: Block-Anchored Overlay Synchronization via Block-Aligned Sparse Merkle Trees (BASM)](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0136.md)
-  — block-anchored overlay history synchronisation
-- [BRC-139: Multicast Shard Manifest Announcement Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
-  — manifest protocol this BRC forward-extends
-- [BRC-149: Multicast BEEF Object Frame Format](brc-149-beef-object-frame.md)
-  — companion: the concrete frame and submission/delivery record formats
-- [RFC 4607: Source-Specific Multicast for IP](https://www.rfc-editor.org/rfc/rfc4607)
-  — SSM address range
-- [RFC 8815: Deprecating Any-Source Multicast (ASM) for Interdomain Multicast](https://www.rfc-editor.org/rfc/rfc8815)
-  — rationale for SSM-only global scope
+- [BRC-22: Overlay Network Data Synchronization](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0022.md):
+  topical submission and admittance model the plane transports
+- [BRC-62: Background Evaluation Extended Format (BEEF) Transactions](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0062.md):
+  BEEF encoding carried on the object plane
+- [BRC-74: BSV Unified Merkle Path (BUMP) Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0074.md):
+  proof payload embedded in BEEF
+- [BRC-76: Graph Aware Sync Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0076.md):
+  overlay history synchronization complementing the live tail
+- [BRC-87: Standardized Naming Conventions for BRC-22 Topic Managers and BRC-24 Lookup Services](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0087.md):
+  `tm_*` topic naming hashed into TopicIDs
+- [BRC-88: Overlay Services Synchronization Architecture](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0088.md):
+  SHIP/SLAP host discovery and the per-host propagation this plane subsumes
+- [BRC-95: Atomic BEEF Transactions](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0095.md):
+  explicit-subject BEEF encoding
+- [BRC-96: BEEF V2 Txid Only Extension](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0096.md):
+  TXID-only BEEF encoding
+- [BRC-124: Multicast Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md):
+  data-frame header reused by object-plane frames
+- [BRC-126: Multicast Transaction NACK Retransmission Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md):
+  retransmission machinery inherited by object planes
+- [BRC-128: Multicast Extended Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0128.md):
+  Extended Format frames on the transaction plane
+- [BRC-129: IPv6 Multicast Group Address Assignments](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md):
+  base addressing scheme this BRC extends
+- [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md):
+  fragmentation for large objects
+- [BRC-136: Block-Anchored Overlay Synchronization via Block-Aligned Sparse Merkle Trees (BASM)](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0136.md):
+  block-anchored overlay history synchronization
+- [BRC-139: Multicast Shard Manifest Announcement Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md):
+  manifest protocol this BRC forward-extends
+- [BRC-149: Multicast BEEF Object Frame Format](brc-149-beef-object-frame.md):
+  companion: the concrete frame and submission/delivery record formats
+- [RFC 4607: Source-Specific Multicast for IP](https://www.rfc-editor.org/rfc/rfc4607):
+  SSM address range
+- [RFC 8815: Deprecating Any-Source Multicast (ASM) for Interdomain Multicast](https://www.rfc-editor.org/rfc/rfc8815):
+  rationale for SSM-only global scope

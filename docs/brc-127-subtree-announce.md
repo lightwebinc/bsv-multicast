@@ -1,4 +1,4 @@
-# BRC-127 — Subtree Group Announcement
+# BRC-127: Subtree Group Announcement
 
 BRC-127 defines the protocol for dynamically advertising SubtreeID–GroupID bindings over the multicast fabric. Producers send periodic `SubtreeGroupAnnounce` datagrams to the proxy via TCP; the proxy forwards them to the `GroupSubtreeGroupAnnounce` multicast group (`FF05::B:FFFC`). Listeners subscribe to this group and populate a dynamic registry used at the subtree filter layer.
 
@@ -13,7 +13,7 @@ Static subtree filtering (`-subtree-include`, `-subtree-exclude`) requires opera
 
 ---
 
-## SubtreeGroupAnnounce Wire Format (`MsgType 0x30`) — 64 bytes
+## SubtreeGroupAnnounce Wire Format (`MsgType 0x30`): 64 bytes
 
 ```text
 Offset  Size  Field
@@ -54,7 +54,7 @@ Defined in `shard-common/shard/control.go`. Occupies the top of the 16-bit shard
 ```text
 Producer (subtx-gen, block assembler)
     │
-    │  TCP connection to proxy (e.g. [::1]:9002)
+    │  TCP connection to proxy (e.g. [::1]:8725)
     │  One 64-byte SubtreeGroupAnnounce per (SubtreeID, GroupID) pair
     ▼
 shard-proxy  (TCP ingress, worker/tcp.go)
@@ -79,11 +79,11 @@ filter.Allow (hot path, per received frame)
 
 ## Proxy Forwarding
 
-The proxy TCP ingress (`worker/tcp.go`) handles SubtreeGroupAnnounce datagrams transparently in the same connection loop as BRC-124 frames:
+The proxy TCP ingress (`worker/tcp.go`) commits each connection to one grammar from its first four bytes (network magic = framed stream; `0xBEEF` = BRC-149 record stream; anything else = bare transactions). SubtreeGroupAnnounce datagrams travel on a framed connection, interleaved with BRC-124 frames:
 
-1. Read 44 bytes (common TCP preamble).
+1. Read 44 bytes (the common preamble of every framed message).
 2. Check `buf[6]`:
-   - `0x01` or `0x02` → data frame path (BRC-12 / BRC-124).
+   - a frame version (`0x01` legacy BRC-12; `0x02`, `0x04`, `0x05`, `0x06`, `0x09`) → data frame path.
    - `0x30` → control frame path.
 3. Read remaining 20 bytes to complete the 64-byte datagram.
 4. Call `fwd.ForwardControl(egr, ctrlBuf[:], shard.GroupSubtreeGroupAnnounce, fwd.EgressPort())`.
@@ -115,7 +115,7 @@ The proxy TCP ingress (`worker/tcp.go`) handles SubtreeGroupAnnounce datagrams t
 
 Thread-safe map: `groupID → map[subtreeID]expiry`. Constructed with the set of GroupIDs from `-subtree-groups`; announcements for other GroupIDs are silently dropped. Memory is bounded by the number of subscribed GroupIDs × active SubtreeIDs.
 
-Hot-path method: `Contains(subtreeID [32]byte) bool` — holds a read lock, scans subscribed groups. Returns `true` if any live (non-expired) entry matches.
+Hot-path method: `Contains(subtreeID [32]byte) bool` holds a read lock and scans subscribed groups. Returns `true` if any live (non-expired) entry matches.
 
 ### filter.Allow Integration
 
@@ -148,7 +148,7 @@ The `subtx-gen` tool includes BRC-127 announcement support:
 
 | Flag                 | Default | Description                                             |
 | -------------------- | ------- | ------------------------------------------------------- |
-| `-announce-addr`     | `""`    | Proxy TCP address (e.g. `[::1]:9002`); empty = disabled |
+| `-announce-addr`     | `""`    | Proxy TCP address (e.g. `[::1]:8725`); empty = disabled |
 | `-subtree-group`     | `""`    | Comma-separated 32-char hex GroupIDs for all subtrees   |
 | `-announce-interval` | `10s`   | Re-announce period                                      |
 | `-announce-ttl`      | `0`     | TTL in seconds; `0` = use listener default              |
@@ -175,4 +175,4 @@ When both `-announce-addr` and `-subtree-group` are set, `subtx-gen` maintains a
 
 ## References
 
-- [BRC-127: Multicast Subtree Group Announcement Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0127.md) — canonical spec
+- [BRC-127: Multicast Subtree Group Announcement Protocol](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0127.md): canonical spec

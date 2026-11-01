@@ -1,4 +1,4 @@
-# BRC-124 — Data-Plane Frame Format
+# BRC-124: Data-Plane Frame Format
 
 BRC-124 defines the wire format for transporting BSV transactions over IPv6 multicast and TCP/UDP unicast. This document is a reference for the 92-byte BRC-124 header and the 44-byte legacy BRC-12 header.
 
@@ -13,16 +13,16 @@ All multi-byte integers are big-endian. 8-byte alignment for all fields after of
 
 | Offset | Size | Align | Field          | Value / Notes                                            |
 | ------ | ---- | ----- | -------------- | -------------------------------------------------------- |
-| 0      | 4    | —     | Network magic  | 0xE3E1F3E8 (BSV mainnet P2P magic)                       |
-| 4      | 2    | —     | Protocol ver   | 0x02BF = 703 (BSV node version baseline)                 |
-| 6      | 1    | —     | Frame version  | 0x02 (BRC-124)                                           |
-| 7      | 1    | —     | Reserved       | 0x00                                                     |
+| 0      | 4    | -     | Network magic  | 0xE3E1F3E8 (BSV mainnet P2P magic)                       |
+| 4      | 2    | -     | Protocol ver   | 0x02BF = 703 (BSV node version baseline)                 |
+| 6      | 1    | -     | Frame version  | 0x02 (BRC-124)                                           |
+| 7      | 1    | -     | Reserved       | 0x00                                                     |
 | 8      | 32   | 8B    | Transaction ID | Raw 256-bit txid (internal byte order)                   |
 | 40     | 8    | 8B    | HashKey        | Stable per-flow XXH64 identifier; 0 = unstamped           |
 | 48     | 8    | 8B    | SeqNum         | Monotonic per-flow counter (starts at 1); 0 = unstamped   |
 | 56     | 32   | 8B    | Subtree ID     | 32-byte batch identifier; zeros = unset                  |
 | 88     | 4    | 8B    | Payload length | uint32 BE; bound is application-defined                  |
-| 92     | \*   | —     | BSV tx payload | Raw serialised transaction bytes                         |
+| 92     | \*   | -     | BSV tx payload | Raw serialized transaction bytes                         |
 
 ### Field Details
 
@@ -30,14 +30,14 @@ All multi-byte integers are big-endian. 8-byte alignment for all fields after of
 - **Protocol version (4:6):** Informational; 703 = BSV large-block policy baseline.
 - **Frame version (6):** `0x02` for BRC-124, `0x01` for legacy BRC-12.
 - **Transaction ID (8:40):** Raw 256-bit txid in internal byte order (NOT display-reversed).
-- **HashKey (40:48):** Stable per-flow identifier computed as `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)` over a fixed 52-byte input — 16-byte IPv6 address ∥ 4-byte big-endian `uint32` group index ∥ 32-byte subtree ID — stamped in-place by the proxy. Constant for all frames of the same flow. A value of `0` means the proxy has not yet stamped the frame. Control-plane docs that write the group-index ingredient as a 2-byte constant (e.g. `0xFFFB`, `0xFFFE`) mean this same 4-byte encoding.
+- **HashKey (40:48):** Stable per-flow identifier computed as `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)` over a fixed 52-byte input (16-byte IPv6 address ∥ 4-byte big-endian `uint32` group index ∥ 32-byte subtree ID), stamped in-place by the proxy. Constant for all frames of the same flow. A value of `0` means the proxy has not yet stamped the frame. Control-plane docs that write the group-index ingredient as a 2-byte constant (e.g. `0xFFFB`, `0xFFFE`) mean this same 4-byte encoding.
 - **SeqNum (48:56):** Monotonic per-flow counter starting at 1, stamped in-place by the proxy. A gap (`SeqNum` advances by >1) indicates a missing frame. The pair `(HashKey, SeqNum)` forms the 16-byte cache key for NACK-based retransmission. A value of `0` means the frame has not been stamped.
 - **Subtree ID (56:88):** Opaque 32-byte batch identifier for subtree-level filtering.
 - **Payload (92+):** BSV transaction bytes. BRC-124 frames carry BRC-12 raw transactions; BRC-128 frames carry BRC-30 Extended Format (EF) transactions. Inspect payload bytes 4–9 to distinguish: `0x00 0x00 0x00 0x00 0x00 0xEF` = BRC-30 EF (BRC-128), otherwise BRC-12 raw (BRC-124). See **[BRC-128 Extended Format](brc-128-ef-frame-format.md)**.
 
 ---
 
-## BRC-12 Frame Format (Legacy — 44-byte header)
+## BRC-12 Frame Format (Legacy, 44-byte header)
 
 Accepted and forwarded verbatim for backward compatibility.
 
@@ -80,7 +80,7 @@ Accepted and forwarded verbatim for backward compatibility.
 ## Backward Compatibility
 
 - BRC-12 frames are decoded with zero-valued BRC-124-only fields (`HashKey = 0`, `SeqNum = 0`, `SubtreeID = zeros`).
-- The forwarder (proxy) forwards BRC-12 frames verbatim — no upgrade to BRC-124 encoding.
+- The forwarder (proxy) forwards BRC-12 frames verbatim; there is no upgrade to BRC-124 encoding.
 - Unknown frame versions are dropped with `ErrBadVer`.
 - All components accept both BRC-12 and BRC-124/BRC-128 frames on the wire.
 
@@ -95,4 +95,4 @@ Accepted and forwarded verbatim for backward compatibility.
 
 ## References
 
-- [BRC-124: Multicast Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md) — canonical spec
+- [BRC-124: Multicast Transaction Frame Format](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md): canonical spec

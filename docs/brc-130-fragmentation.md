@@ -1,4 +1,4 @@
-# BRC-130 — Multicast Transaction Frame Fragmentation
+# BRC-130: Multicast Transaction Frame Fragmentation
 
 BRC-130 is a fragmentation extension to BRC-124. When a BSV transaction payload exceeds the path MTU, the proxy decomposes it into a sequence of fixed-size fragment datagrams. Listeners reassemble the fragments and verify the reconstructed payload against the TxID before forwarding.
 
@@ -13,10 +13,10 @@ Bytes 0–91 are **layout-identical** to a BRC-124 header (FrameVer `0x03` and t
 
 | Offset | Size | Align | Field           | Value / Notes                                                  |
 | ------ | ---- | ----- | --------------- | -------------------------------------------------------------- |
-| 0      | 4    | —     | Network Magic   | 0xE3E1F3E8 (BSV mainnet P2P magic)                             |
-| 4      | 2    | —     | Protocol Ver    | 0x02BF (703, BSV large-block baseline)                         |
-| 6      | 1    | —     | Frame Version   | **0x03** — BRC-130 fragment                                    |
-| 7      | 1    | —     | MsgType         | Carried through from the original frame: `0x01`/`0x02` for fragmented BRC-131/BRC-132, `0x00` for BRC-124/128; `DeliverCount` for BRC-149 |
+| 0      | 4    | -     | Network Magic   | 0xE3E1F3E8 (BSV mainnet P2P magic)                             |
+| 4      | 2    | -     | Protocol Ver    | 0x02BF (703, BSV large-block baseline)                         |
+| 6      | 1    | -     | Frame Version   | **0x03**: BRC-130 fragment                                     |
+| 7      | 1    | -     | MsgType         | Carried through from the original frame: `0x01`/`0x02` for fragmented BRC-131/BRC-132, `0x00` for BRC-124/128; `DeliverCount` for BRC-149 |
 | 8      | 32   | 8B    | Transaction ID  | SHA256d(reassembled payload); same on every fragment           |
 | 40     | 8    | 8B    | HashKey         | XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID); stamped by proxy     |
 | 48     | 8    | 8B    | SeqNum          | Per-flow monotonic counter; independent per fragment           |
@@ -27,7 +27,7 @@ Bytes 0–91 are **layout-identical** to a BRC-124 header (FrameVer `0x03` and t
 | 98     | 2    | 2B    | FragTotal       | Total number of fragments in this transaction (uint16 BE)      |
 | 100    | 1    | 1B    | OrigFrameVer    | Original FrameVer: `0x00`/`0x02`=V2, `0x04`=V4 block, `0x05`=V5 subtree data, `0x09`=V9 BEEF object |
 | 101    | 3    | 1B    | Reserved2       | `0x000000`                                                     |
-| 104    | \*   | —     | Fragment data   | Slice of the original payload (PayloadLen bytes)               |
+| 104    | \*   | -     | Fragment data   | Slice of the original payload (PayloadLen bytes)               |
 
 ---
 
@@ -54,18 +54,18 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 
 ## Reassembly (Listener)
 
-1. **Slot allocation** — On first fragment, allocate a slot keyed by the offset-8 field (TxID / SubtreeID / ContentID); for `OrigFrameVer = 0x09` the slot key is the `(ContentID, TopicID)` pair — `SHA-256(ContentID ∥ TopicID)`. The slot holds an `OrigPayloadLen`-byte buffer, a `FragTotal`-bit received-fragment bitmask, and a TTL timer.
-2. **Fragment placement** — Copy data into buffer at `offset = FragIndex × fragDataSize`. Mark the bit. The fragment's data length MUST be consistent with that grid: `FragTotal − 1` fragments of `fragDataSize` bytes and a final fragment holding the remainder (≥ 1 byte), so every fragment of one object implies the same `fragDataSize` and the fragments sum to `OrigPayloadLen`. A fragment that implies a different `fragDataSize` cannot be placed; the receiver MUST drop the whole object and count it (`bsl_reassembly_bad_fragment_total`) rather than concatenate a payload of the wrong length — with hash verification optional, nothing downstream would catch it.
-3. **Completion** — When all `FragTotal` bits are set, proceed to verification.
-4. **Completion callback** — The reassembly buffer invokes the callback registered for the given `OrigFrameVer`:
+1. **Slot allocation**: On first fragment, allocate a slot keyed by the offset-8 field (TxID / SubtreeID / ContentID); for `OrigFrameVer = 0x09` the slot key is the `(ContentID, TopicID)` pair, `SHA-256(ContentID ∥ TopicID)`. The slot holds an `OrigPayloadLen`-byte buffer, a `FragTotal`-bit received-fragment bitmask, and a TTL timer.
+2. **Fragment placement**: Copy data into buffer at `offset = FragIndex × fragDataSize`. Mark the bit. The fragment's data length MUST be consistent with that grid: `FragTotal − 1` fragments of `fragDataSize` bytes and a final fragment holding the remainder (≥ 1 byte), so every fragment of one object implies the same `fragDataSize` and the fragments sum to `OrigPayloadLen`. A fragment that implies a different `fragDataSize` cannot be placed; the receiver MUST drop the whole object and count it (`bsl_reassembly_bad_fragment_total`) rather than concatenate a payload of the wrong length; with hash verification optional, nothing downstream would catch it.
+3. **Completion**: When all `FragTotal` bits are set, proceed to verification.
+4. **Completion callback**: The reassembly buffer invokes the callback registered for the given `OrigFrameVer`:
    - `OrigFrameVer == 0x00 / 0x02` → canonical-TxID verification when `-verify-payload-hash` is set (`SHA256(SHA256(buffer)) == TxID` for raw payloads; the TxID of the de-extended transaction for BRC-128 EF payloads); deliver as synthetic BRC-124 frame via `DeliverReassembled`.
    - `OrigFrameVer == 0x04` → Deliver as synthetic BRC-131 block control frame; route through `DeliverReassembledBlock` (which applies the block-control gate).
    - `OrigFrameVer == 0x05` → Deliver as synthetic BRC-132 subtree data frame; SHA256d does **not** apply (SubtreeID is a Merkle root, not a payload hash); route through `DeliverReassembledSubtreeData`.
    - `OrigFrameVer == 0x09` → ContentID verification when `-verify-payload-hash` is set (the offset-8 field is the ContentID = `SHA256(SHA256(buffer))`); deliver as synthetic BRC-149 BEEF object frame; route through `DeliverReassembledBeef`.
-5. **Delivery** — Route the reassembled frame through the normal egress and gap-tracking path for its frame version.
-6. **TTL eviction** — Slots not completed within 10 s are discarded; increment `bsl_reassembly_abandoned_total`. If any fragment arrived, the missing fragments' SeqNums are dispatched as BRC-126 NACKs (`SetIncompleteHook`); capacity eviction does not trigger recovery.
-7. **Slot cap** — Default maximum 4096 concurrent slots; oldest incomplete slot evicted on overflow.
-8. **Duplicates** — Same slot key (offset-8 field; `(ContentID, TopicID)` pair for `0x09`) + FragIndex silently ignored.
+5. **Delivery**: Route the reassembled frame through the normal egress and gap-tracking path for its frame version.
+6. **TTL eviction**: Slots not completed within 10 s are discarded; increment `bsl_reassembly_abandoned_total`. If any fragment arrived, the missing fragments' SeqNums are dispatched as BRC-126 NACKs (`SetIncompleteHook`); capacity eviction does not trigger recovery.
+7. **Slot cap**: Default maximum 4096 concurrent slots; oldest incomplete slot evicted on overflow.
+8. **Duplicates**: Same slot key (offset-8 field; `(ContentID, TopicID)` pair for `0x09`) + FragIndex silently ignored.
 
 ---
 
@@ -101,10 +101,10 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
 
 ## Infrastructure Impact
 
-- **Proxy** — slices payload into _k_ fragments, stamps independent HashKey/SeqNum per fragment, forwards each as a normal UDP datagram.
-- **Listener** — new `reassembly` package handles BRC-130 datagrams; delivers synthetic BRC-124 frame to existing filter/egress/gap-tracker pipeline. No changes to the gap tracker or egress path.
-- **Retry endpoint** — no changes. Caches each fragment by `HashKey ∥ SeqNum`; retransmits individual fragments on NACK exactly as for BRC-124 frames.
-- **Firewall / classifiers** — no changes. Magic bytes, TxID, HashKey, SeqNum, and Subtree ID are at the same offsets as BRC-124.
+- **Proxy**: slices payload into _k_ fragments, stamps independent HashKey/SeqNum per fragment, forwards each as a normal UDP datagram.
+- **Listener**: new `reassembly` package handles BRC-130 datagrams; delivers synthetic BRC-124 frame to existing filter/egress/gap-tracker pipeline. No changes to the gap tracker or egress path.
+- **Retry endpoint**: no changes. Caches each fragment by `HashKey ∥ SeqNum`; retransmits individual fragments on NACK exactly as for BRC-124 frames.
+- **Firewall / classifiers**: no changes. Magic bytes, TxID, HashKey, SeqNum, and Subtree ID are at the same offsets as BRC-124.
 
 ---
 
@@ -129,18 +129,18 @@ rows are protocol values. Fragmentation is on by default: `-frag-mtu` defaults
 to `1500` (the Ethernet baseline). An explicit `-frag-mtu 0` disables
 fragmentation, which strands every payload larger than MTU−140 as an
 undeliverable oversize datagram. Deployments size the value to the smallest
-MTU on the egress path — on a tunnelled fabric that is the tunnel inner MTU
-(commonly ~1448), never the local NIC — and values below the IPv6 minimum MTU
-of 1280 are not meaningful.
+MTU on the egress path: on a tunnelled fabric that is the tunnel inner MTU
+(commonly ~1448), never the local NIC. Values below the IPv6 minimum MTU of
+1280 are not meaningful.
 
 ---
 
 ## References
 
-- [BRC-124: Multicast Transaction Frame Format](brc-124-frame-format.md) — base frame format extended by BRC-130
-- [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md) — NACK/ACK/MISS used for per-fragment retransmission
-- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame) — `EncodeFragment`, `DecodeFragment`, `IsFragment`
-- [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder) — proxy-side fragmentation
-- [shard-listener/reassembly](https://github.com/lightwebinc/shard-listener/tree/main/reassembly) — listener-side reassembly
-- [BRC-132: Subtree Data Multicast Protocol](brc-132-subtree-data.md) — `OrigFrameVer=0x05` usage
-- [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md) — canonical spec
+- [BRC-124: Multicast Transaction Frame Format](brc-124-frame-format.md): base frame format extended by BRC-130
+- [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md): NACK/ACK/MISS used for per-fragment retransmission
+- [shard-common/frame](https://github.com/lightwebinc/shard-common/tree/main/frame): `EncodeFragment`, `DecodeFragment`, `IsFragment`
+- [shard-proxy/forwarder](https://github.com/lightwebinc/shard-proxy/tree/main/forwarder): proxy-side fragmentation
+- [shard-listener/reassembly](https://github.com/lightwebinc/shard-listener/tree/main/reassembly): listener-side reassembly
+- [BRC-132: Subtree Data Multicast Protocol](brc-132-subtree-data.md): `OrigFrameVer=0x05` usage
+- [BRC-130: Multicast Transaction Frame Fragmentation](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0130.md): canonical spec

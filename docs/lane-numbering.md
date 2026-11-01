@@ -57,3 +57,7 @@ same bytes across one tunnel) fails fast. See [deliver-once.md](deliver-once.md)
 4. Divergent lane ports are allowed only on loopback behind a local tee (see
    [deliver-once.md](deliver-once.md)), never tunnel-facing and never as a
    default.
+5. A lane is at-most-once. Past the listener there is no sequencing, replay
+   or NACK path: the edge writes each object once to the lane it elected, and
+   BRC-126 recovery ends at the listener. A consumer that needs reliable
+   downstream delivery provides it on its own side.
