@@ -129,7 +129,7 @@ rows are protocol values. Fragmentation is on by default: `-frag-mtu` defaults
 to `1500` (the Ethernet baseline). An explicit `-frag-mtu 0` disables
 fragmentation, which strands every payload larger than MTU−140 as an
 undeliverable oversize datagram. Deployments size the value to the smallest
-MTU on the egress path: on a tunnelled fabric that is the tunnel inner MTU
+MTU on the egress path: on a tunneled fabric that is the tunnel inner MTU
 (commonly ~1448), never the local NIC. Values below the IPv6 minimum MTU of
 1280 are not meaningful.
 

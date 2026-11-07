@@ -98,7 +98,7 @@ A publisher submits the pair *(topic list, BEEF object)* as one record:
 
 ```text
 Offset  Size  Field
-  0       2   Tag         (uint16 BE = 0xBEEF — record discriminator on shared ports)
+  0       2   Tag         (uint16 BE = 0xBEEF, record discriminator on shared ports)
   2       1   RecordVer   (0x01)
   3       1   TopicCount  (1..15)
   4       …   Topics      (TopicCount × { uint8 NameLen (1..64) ∥ NameLen bytes UTF-8 topic name })

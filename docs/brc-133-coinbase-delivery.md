@@ -105,7 +105,7 @@ BRC-124 shard frames:
 - Listeners gap-track coinbase frames under the virtual `0xFFF8`
   (`GroupCoinbaseFlow`) index, matching the proxy's HashKey ingredient. The
   index is process-local and never appears on the NACK wire: it affects
-  metric labelling only; recovery routing is unchanged, and listeners
+  metric labeling only; recovery routing is unchanged, and listeners
   dispatch BRC-126 NACKs to retry endpoints on gap.
 - Retry endpoints join `FF0E::B:FFFE` and cache BRC-131 `BlockMsgCoinbase`
   frames by `HashKey ∥ SeqNum`. On NACK, the frame is retransmitted to
@@ -173,7 +173,7 @@ independently by listeners, even though both egress to the same
    (`GroupCoinbaseFlow`) index for coinbase frames and `0xFFFE`
    (`GroupBlockBroadcast`) for other V4 frames, matching the proxy's HashKey
    ingredient. The index is process-local and never appears on the NACK wire;
-   it affects metric labelling only, and recovery routing is unchanged (a
+   it affects metric labeling only, and recovery routing is unchanged (a
    NACK still targets the group the frame actually lives on).
 6. **Filtering**: Coinbase frames bypass all shard/subtree filters; every
    subscriber receives every coinbase frame.

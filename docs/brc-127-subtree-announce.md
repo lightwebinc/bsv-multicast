@@ -22,10 +22,10 @@ Offset  Size  Field
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x30 (SubtreeGroupAnnounce)
      7     1  Flags (reserved 0x00)
-     8    32  SubtreeID  — 32-byte SHA-256 subtree root hash (from BRC-124 frame header)
-    40    16  GroupID    — 128-bit group identifier (big-endian)
-    56     4  Epoch      — Unix timestamp (seconds) when this announcement was created
-    60     2  TTL        — Validity in seconds; 0 = use listener's configured default
+     8    32  SubtreeID  - 32-byte SHA-256 subtree root hash (from BRC-124 frame header)
+    40    16  GroupID    - 128-bit group identifier (big-endian)
+    56     4  Epoch      - Unix timestamp (seconds) when this announcement was created
+    60     2  TTL        - Validity in seconds; 0 = use listener's configured default
     62     2  Reserved
 ```
 

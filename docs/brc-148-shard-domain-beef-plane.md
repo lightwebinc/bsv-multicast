@@ -9,6 +9,9 @@ Jeff Harris (jeff@lightweb.net)
 > (addressing) and forward-extends
 > [BRC-139](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md)
 > (shard manifest).
+>
+> The plane this specification calls the *transaction plane* (domain `0x0`)
+> is the **settlement plane** elsewhere in this project.
 
 ## Abstract
 
@@ -359,7 +362,7 @@ delivers the first topic only, an authenticated ingress up to the
 operator's cap; the remaining names are **labels** the recipient sees and
 no edge matches on (BRC-149 §Deliverable topics and labels). This is what
 keeps the open door free of amplification without refusing anyone's
-labelling. An operator MAY further restrict the class as local policy.
+labeling. An operator MAY further restrict the class as local policy.
 Publishers submit to operator ingress; the plane's multicast sources remain
 the operator's proxies, as on the transaction plane.
 
@@ -547,7 +550,7 @@ Groups, Sources, and (top-level) Successor payloads, in this order. It begins wi
 a one-byte `DomainCount` followed by `DomainCount` fixed-layout descriptors:
 
 ```text
-DomainCount (1 byte)  — number of descriptors, 1..15 (domains 0x00–0x0E)
+DomainCount (1 byte)  - number of descriptors, 1..15 (domains 0x00–0x0E)
 followed by DomainCount × Domain Descriptor
 ```
 

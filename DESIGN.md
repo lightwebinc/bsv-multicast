@@ -1014,9 +1014,10 @@ for the full processing pipeline and rate-limit configuration.
 **Best-effort delivery with deterministic escalation:**
 
 - Multicast delivery is inherently unreliable
-- NACK + ACK/MISS provides deterministic gap recovery signalling
+- NACK + ACK/MISS provides deterministic gap recovery signaling
 - MISS triggers immediate escalation (no wasted backoff time)
-- Multicast repair path and NACK path are independent; either can fill a gap
+- A re-multicast answering another listener's NACK and this listener's own
+  NACK are independent; either can fill a gap
 - No guarantee of recovery (network partition, cache expiration, all endpoints
   MISS)
 
@@ -1548,8 +1549,9 @@ is the public integration suite: a **Go Docker harness** (`harness/`) of 60+
 scenario tests driven by `go test`. Each scenario spawns ephemeral Docker
 containers on an isolated IPv6 multicast bridge (`fd10::/64`) and covers
 functional filters, NACK retransmission, fragmentation, BRC-127 group
-announcements, BRC-131/132/134 control-plane delivery, SSM rollout, unified
-logging, TxID dedup with Redis, and rate-limit defenses. See the repo's
+announcements, BRC-131/132/134 control-plane delivery, BRC-142 coalescing,
+the BRC-148/149 BEEF plane, SSM rollout, unified logging, TxID dedup with
+Redis, and rate-limit defenses. See the repo's
 [`SCENARIOS.md`](https://github.com/lightwebinc/multicast-test/blob/main/SCENARIOS.md)
 for the full index.
 
@@ -1561,7 +1563,7 @@ this public suite.
 
 ```bash
 cd multicast-test
-make test          # all scenarios (~30 min, requires Docker + sudo)
+make test          # all scenarios (over an hour, requires Docker + sudo)
 make test-quick    # tier-1 filter scenarios (~60s)
 make help          # show all targets (tiered: test-retransmit, test-frag,
                    #   test-bgp, test-ssm, test-manifest, test-coalesce,

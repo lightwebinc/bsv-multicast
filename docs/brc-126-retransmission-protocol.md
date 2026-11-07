@@ -30,15 +30,15 @@ Offset  Size  Field
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x20 (ADVERT)
      7     1  Scope  (0x05=site, 0x08=org, 0x0E=global, 0xFF=all three)
-     8    16  NACKAddr      — IPv6 unicast address for NACK requests
-    24     2  NACKPort      — UDP NACK listen port (default 9300)
-    26     1  Tier          — operator-assigned; 0 = same AS as proxy (max 254; 0xFF reserved for static seeds and rejected at config load)
-    27     1  Preference    — weighting within a tier; higher = more preferred (default 128)
-    28     2  BeaconInterval — seconds; listeners compute TTL = 3 × this value
-    30     2  Flags         — see below
-    32     4  InstanceID    — CRC32c of hostname; stable across restarts
+     8    16  NACKAddr      - IPv6 unicast address for NACK requests
+    24     2  NACKPort      - UDP NACK listen port (default 9300)
+    26     1  Tier          - operator-assigned; 0 = same AS as proxy (max 254; 0xFF reserved for static seeds and rejected at config load)
+    27     1  Preference    - weighting within a tier; higher = more preferred (default 128)
+    28     2  BeaconInterval - seconds; listeners compute TTL = 3 × this value
+    30     2  Flags         - see below
+    32     4  InstanceID    - CRC32c of hostname; stable across restarts
     36     4  Reserved
-    40    16  Reserved      — future use (BGP community, capability bitmap)
+    40    16  Reserved      - future use (BGP community, capability bitmap)
 ```
 
 ### Flags Bitmask
@@ -78,11 +78,11 @@ Offset  Size  Field
      0     4  Magic (0xE3E1F3E8)
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x10 (NACK)
-     7     1  Flags — bit 0 (0x01) = Proxied; bits 1–7 reserved 0x00
-     8     8  HashKey   — stable per-flow XXH64 identifier from the BRC-124 frame
-    16     8  StartSeq  — first missing SeqNum (inclusive)
-    24     8  EndSeq    — last missing SeqNum (inclusive); equals StartSeq for single-frame
-    32    32  SubtreeID — 32-byte batch identifier; zeros = unset
+     7     1  Flags - bit 0 (0x01) = Proxied; bits 1–7 reserved 0x00
+     8     8  HashKey   - stable per-flow XXH64 identifier from the BRC-124 frame
+    16     8  StartSeq  - first missing SeqNum (inclusive)
+    24     8  EndSeq    - last missing SeqNum (inclusive); equals StartSeq for single-frame
+    32    32  SubtreeID - 32-byte batch identifier; zeros = unset
 ```
 
 > **HashKey** (offset 8) is the `HashKey` field from the BRC-124 frame, computed as `XXH64(senderIPv6 ∥ groupIdx ∥ subtreeID)`. It uniquely identifies the flow. The retry endpoint uses `HashKey` as a per-flow rate-limiting key (NACK storm cap). A value of `0` bypasses the per-flow check.
@@ -106,7 +106,7 @@ Offset  Size  Field
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x11 (MISS)
      7     1  Flags (reserved 0x00)
-     8     8  SeqNum — always 0 on MISS
+     8     8  SeqNum - always 0 on MISS
 ```
 
 ---
@@ -122,7 +122,7 @@ Offset  Size  Field
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x12 (ACK)
      7     1  Flags (0x01=multicast_sent, 0x02=unicast_sent)
-     8     8  SeqNum — SeqNum of the retransmitted frame
+     8     8  SeqNum - SeqNum of the retransmitted frame
 ```
 
 ---
@@ -137,8 +137,8 @@ Offset  Size  Field
      0     4  Magic (0xE3E1F3E8)
      4     2  ProtoVer (0x02BF)
      6     1  MsgType = 0x13 (THROTTLED)
-     7     1  Flags — bits 0–3 = backoff bucket; 4–7 reserved
-     8     8  SeqNum — echo of the throttled request's StartSeq
+     7     1  Flags - bits 0–3 = backoff bucket; 4–7 reserved
+     8     8  SeqNum - echo of the throttled request's StartSeq
 ```
 
 **Backoff hint.** The suggested hold is `ThrottleHintBase << bucket`, where `ThrottleHintBase = 125 ms` and `bucket` is the Flags low nibble. Endpoints SHOULD use bucket `2` (~500 ms) for a per-gap throttle, bucket `3` (~1 s) for a per-flow throttle, and bucket `4` (~2 s) for a per-group throttle. Listeners SHOULD apply jitter and MAY clamp to a local maximum; the gap's absolute TTL remains the upper bound, and a multicast repair cancels the gap regardless.
@@ -164,7 +164,7 @@ Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER`; 255 is the static-s
                     ┌───────────────────────────────────────────────┐
                     │                                               │
   ┌─────────┐  dispatch ┌───────────────┐ ACK (bare/mcast) ┌────────▼───────┐
-  │ PENDING ├──────────►│ NACKED(Tier-K)├─────────────────►│  GAP CANCELLED │
+  │ PENDING ├──────────►│ NACKED(Tier-K)├─────────────────►│  GAP CANCELED  │
   └─────────┘           └──────┬───▲──┬─┘                  └────────────────┘
                                │   │  │ unicast-ACK: keep pending   ▲
                                │   └──┘ (80 ms drain), escalate     │
