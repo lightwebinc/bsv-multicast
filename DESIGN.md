@@ -171,7 +171,7 @@ speaks whatever the receiving node already speaks.
 | [listener-infra](https://github.com/lightwebinc/listener-infra)             | Ansible/Terraform for listener deployment       | shard-listener      |
 | [retransmission-infra](https://github.com/lightwebinc/retransmission-infra) | Ansible/Terraform for retry endpoint deployment | retry-endpoint      |
 | [manifest-infra](https://github.com/lightwebinc/manifest-infra)             | Ansible/Terraform for manifest deployment       | shard-manifest      |
-| [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes deployment (k0s reference, EKS stub) | full stack via Helm |
+| [multicast-kube-infra](https://github.com/lightwebinc/multicast-kube-infra) | Kubernetes deployment (k0s reference) | full stack via Helm |
 
 ### Helm Charts
 
@@ -1555,9 +1555,7 @@ Redis, and rate-limit defenses. See the repo's
 [`SCENARIOS.md`](https://github.com/lightwebinc/multicast-test/blob/main/SCENARIOS.md)
 for the full index.
 
-Deployment / applied-infrastructure testing (the LXD VM lab, privileged netns
-mesh repros, and real-host deployment tooling) is maintained separately from
-this public suite.
+Host-level deployment testing is outside this suite.
 
 **Getting Started:**
 
