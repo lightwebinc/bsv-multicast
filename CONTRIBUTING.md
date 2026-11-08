@@ -10,6 +10,9 @@ multicast project.
 - Wire formats and protocol behavior are specified in the BRCs and
   [DESIGN.md](DESIGN.md). A change to either starts with the specification.
 - Documentation travels with the change, in the same pull request.
+- Every change reaches `main` through a pull request, maintainers' changes
+  included. Pull requests are squash-merged, so the title becomes the commit
+  message.
 - By contributing you agree that your contribution is licensed under the
   Apache License 2.0, as section 5 of the license states.
 
