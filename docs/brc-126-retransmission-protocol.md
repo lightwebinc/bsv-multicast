@@ -183,7 +183,7 @@ As the reference listener (`shard-listener`) implements it:
 
 - **Frame returned on the NACK socket** (a unicast repair) → re-inject it into the listener pipeline; the gap closes.
 - **Bare / multicast-flagged ACK received** → the protocol lets a listener cancel the gap entry on trust; the reference listener keeps it pending for the data-plane copy and counts a failed round with backoff, like a timeout.
-- **Unicast-flagged ACK (`0x02`) received** → do NOT cancel; keep draining for the data frame, and escalate to the next endpoint on timeout.
+- **Unicast-flagged ACK (`0x02`) received** → do NOT cancel; keep draining for the data frame, and escalate to the next endpoint on timeout. Without a recovery callback, an ACK flagged both unicast and multicast waits for the multicast copy instead.
 - **MISS received** → advance to next endpoint at same tier (by Preference); if tier exhausted, escalate to next tier; retry immediately (no backoff); a MISS at the deepest endpoint books a failed round and backs off.
 - **THROTTLED received** → hold the same endpoint for the hinted backoff; do not escalate and do not consume the retry budget (no failed round).
 - **Timeout** → apply exponential backoff; next sweep retries.
