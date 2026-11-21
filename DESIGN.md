@@ -295,7 +295,8 @@ UDP delivery to consumers is legacy. Ports 9143,
                                            │ • Track sequence gaps per flow           │
                                            │   (HashKey/SeqNum monotonic counter)     │
                                            │ • Forward matching frames to egress_addr │
-                                           │ (TCP; UDP legacy; optional strip-header) │
+                                           │   (TCP, header stripped by default;      │
+                                           │   UDP legacy)                            │
                                            └──────────────────────────────────────────┘
                                                             │
                                                             ▼
@@ -309,7 +310,8 @@ shard-listener detects gap:
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ • SeqNum > lastSeqNum + 1 (gap detected for this HashKey)               │
 │ • Register missing frame(s) in pending map (key = HashKey + SeqNum)     │
-│ • Background sweeper dispatches NACK after nack-gap-ttl                 │
+│ • Background sweeper dispatches the NACK after a random hold-off        │
+│   (up to nack-jitter-max; the gap lives at most nack-gap-ttl)           │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -615,7 +617,7 @@ UDP Workers (N goroutines, SO_REUSEPORT)
   │ Worker N│──┘
   └─────────┘
 
-TCP Listener (1 goroutine)
+TCP Listeners (one accept loop per enabled lane: tx, subtree, block, BEEF)
   ┌──────────────┐
   │ Accept loop  │──▶ per-connection goroutines ──▶ shared Forwarder
   └──────────────┘
@@ -623,8 +625,9 @@ TCP Listener (1 goroutine)
 
 **Hot path:** Decode frame → stamp HashKey/SeqNum in-place (BRC-124 only) →
 derive multicast group from TxID → `WriteTo` verbatim to all egress interfaces.
-TCP connections carry the same frame stream plus BRC-127 SubtreeAnnounce control
-datagrams (forwarded verbatim to the announce multicast group).
+A framed TCP connection carries the same frame stream plus BRC-127
+SubtreeGroupAnnounce control datagrams (forwarded verbatim to the announce
+multicast group).
 
 **→
 [shard-proxy Architecture](https://github.com/lightwebinc/shard-proxy/blob/main/docs/architecture.md)**:
@@ -647,8 +650,13 @@ and/or multicast consumers, performs NACK-based gap recovery.
 - Dual-level filtering: MLD group join + userspace shard/subtree filter
 - NORM-inspired gap tracking per flow via HashKey/SeqNum monotonic counter
 - NACK dispatch to configurable retry endpoints
-- Egress via TCP (optional strip-header mode); UDP egress is legacy: lossy
+- Egress via TCP (header stripped by default); UDP egress is legacy: lossy
   toward the consumer, retained for lab use
+- Reference lane (`-lane-tx`, `-lane-subtree`, `-lane-block`, `-lane-header`,
+  `-lane-beef`): each object class to one bridge on its own TCP connection, in
+  the consumer-side lane forms of [lane numbering](docs/lane-numbering.md)
+  (BRC-134 anchors have no lane); at most once, with no retransmission past
+  the listener
 - Multicast egress for domain bridging (re-emit filtered frames to a separate
   multicast address space)
 - BRC-130 fragment reassembly (`reassembly` package) with optional
@@ -671,7 +679,7 @@ Receive Workers (NUM_WORKERS goroutines, SO_REUSEPORT)
                │     • reassembly.Buffer (BRC-130 fragments)
                │
 
-SubtreeAnnounceListener (1 goroutine, BRC-127)
+SubtreeGroupAnnounceListener (1 goroutine, BRC-127)
   ┌──────────────────────────────────────────┐
   │ Join FF05::B:FFFC (SO_REUSEPORT socket)  │──▶ subtreegroup.Registry
   │ Evict loop (1 s tick)                    │       ▲
@@ -683,7 +691,7 @@ NACK Queue (background goroutines)
   │ NACK dispatcher  │──▶ UDP send to retry-endpoint:9300
   └──────────────────┘
 
-Gap Tracker Sweeper (100ms interval)
+Gap Tracker Sweeper (every 100 ms, up to 1 s while sweeps are slow)
   ┌──────────────────┐
   │ Evict expired    │
   │ Dispatch pending │
@@ -699,9 +707,12 @@ via `subtreegroup.Registry`). See [Subtree Filtering](#subtree-filtering) and
 [BRC-127](#subtree-group-announcement-brc-127) below.
 
 **Gap tracking:** Per-flow `SeqNum` monotonic counter verification (keyed by
-`HashKey`). Gaps (`SeqNum` advances by >1) register gap entries; a background
-sweeper dispatches NACKs with exponential backoff. Gaps are auto-closed when the
-missing frame arrives via multicast or explicit NACK ACK.
+`HashKey`). A gap (`SeqNum` advances by >1) registers an entry for every
+missing `SeqNum` when at most `-nack-max-forward-jump` frames are missing
+(default 4096); a larger jump re-baselines the flow as an emitter change. A
+background sweeper dispatches NACKs with exponential backoff. A gap closes only
+when its frame arrives, on the multicast data plane or as a unicast copy on the
+NACK socket; an ACK alone never closes it.
 
 **→
 [shard-listener Architecture](https://github.com/lightwebinc/shard-listener/blob/main/docs/architecture.md)**:
@@ -750,7 +761,9 @@ Retransmit Egress
 
 **Cache:** Single 16-byte key (`HashKey ∥ SeqNum`) → raw frame. Pluggable
 `shard-common/cache` backend (`-cache-backend`): in-process striped map
-(default), Redis, or Aerospike for cross-instance shared cache (per-class
+(default; a positive `-cache-arena-bytes` keeps the values in one block
+allocated at start instead, for a cache that turns over fast), Redis, or
+Aerospike for cross-instance shared cache (per-class
 TTLs: tx/BEEF 60 s, block 10 m, subtree 5 m, anchor 2 m). See
 [shard-common cache backend](https://github.com/lightwebinc/shard-common/blob/main/docs/cache-backend.md).
 
@@ -771,7 +784,7 @@ encode/decode, `EncodeFragment`/`DecodeFragment`/`IsFragment`,
 `BlockMsgCoinbase`, `DecodeBlock`, `FrameVerV6`,
 `DecodeAnchor`/`IsAnchorFrame`), `shard` (txid → multicast group derivation),
 `bundle` (BRC-142 bundle encode/decode + re-bucketing), `seqhash` (XXH64 flow
-hash for HashKey), `sequence` (per-flow monotonic counters), `txidset` (TxID
+hash for HashKey), `sequence` (per-shard monotonic counters), `txidset` (TxID
 dedup), `cache` (pluggable memory/Redis/Aerospike backend), `pow` (stateless
 block-header PoW check), `manifest` (BRC-139 registry + adoption gates), and
 `netjoin` (SSM join/leave management). Full list in the repo README.
@@ -953,16 +966,20 @@ are defined in:
 
 ```text
 1. Gap detected (seq > lastSeqNum + 1)
-   → Register in pending map with jitter hold-off
+   → Register every missing SeqNum in the pending map with jitter hold-off
+     (a jump beyond nack-max-forward-jump re-baselines the flow instead)
 
-2. Background sweeper (100ms interval)
+2. Background sweeper (every 100 ms, up to 1 s while sweeps are slow)
    → If past nextAttempt and failed rounds < nack-max-retries
      (tier hops and THROTTLED holds don't consume the budget):
      → Select endpoint from registry snapshot (Tier ASC, Preference DESC)
      → Open ephemeral UDP socket; send 64-byte NACK; wait ≤300ms
-     → ACK (bare/multicast) received: cancel gap entry; a unicast-flagged
-       ACK keeps the gap pending through an 80 ms drain, escalating on
-       timeout
+     → Data frame returned on the socket: re-injected into the pipeline,
+       which closes the gap
+     → ACK received: the gap stays pending until its frame arrives. A
+       unicast-flagged ACK keeps draining 80 ms for the copy and escalates
+       on timeout; a bare or multicast ACK counts a failed round (backoff),
+       so a copy lost on the same path is asked for again
      → MISS received: advance endpoint; retry immediately (a MISS at the
        deepest endpoint books a failed round and backs off)
      → Timeout: exponential backoff; retry next sweep
@@ -971,7 +988,8 @@ are defined in:
    → Evict as bsl_gaps_unrecovered_total
 
 4. Multicast repair arrives independently
-   → Tracker.Fill() cancels pending gap regardless of NACK state
+   → The tracker's auto-fill (Observe) closes the pending gap regardless
+     of NACK state
 ```
 
 ### Endpoint Discovery
@@ -1032,7 +1050,8 @@ for the full processing pipeline and rate-limit configuration.
 
 - Cache TTL bounds the retransmit window (60 s for tx; longer for
   control-plane classes); expired frames drop naturally
-- `Tracker.Fill()` suppresses pending NACKs on multicast repair arrival
+- The gap tracker's auto-fill suppresses pending NACKs when a multicast
+  repair arrives
 - Jitter hold-off and exponential backoff reduce NACK storm risk
 - All drops are counted in metrics
 
@@ -1119,7 +1138,9 @@ with no changes to the retry endpoint.
    → All bits set → canonical-TxID verify (if -verify-payload-hash) → deliver synthetic BRC-124 frame
    → filter → egress → gap-tracking (unchanged)
 
- TTL expiry (10 s): drop slot; bsl_reassembly_abandoned_total++
+ TTL expiry (10 s): NACK the missing fragments; hold the slot while that
+                    repair is pending (at most 2 m from its opening), else
+                    drop it; bsl_reassembly_abandoned_total++
  Hash mismatch:     drop slot; bsl_reassembly_hash_mismatch_total++
 ```
 
@@ -1175,7 +1196,7 @@ re-bucketing rules, deployment decisions
 
 BRC-127 defines the dynamic subtree group announcement protocol. Producers
 advertise which SubtreeIDs belong to which logical group by sending 64-byte
-`SubtreeAnnounce` datagrams (`MsgType 0x30`) to the proxy TCP ingress. The proxy
+`SubtreeGroupAnnounce` datagrams (`MsgType 0x30`) to the proxy TCP ingress. The proxy
 forwards these verbatim to the control-plane multicast group
 (`GroupSubtreeGroupAnnounce = 0xFFFC`). Listeners join this group and populate a
 `subtreegroup.Registry`, automatically accepting frames from announced subtrees
@@ -1529,6 +1550,8 @@ loopback multicast reliability issues on CI.
 1. Basic delivery (all frames, metric verification)
 2. Shard filter (single shard acceptance)
 3. Strip-header (payload-only forwarding)
+4. BRC-130 fragmentation (reassembly and delivery)
+5. Reference lane (per-class TCP lanes, `bsl_lane_*` metrics)
 
 **Execution:**
 
@@ -1550,8 +1573,8 @@ scenario tests driven by `go test`. Each scenario spawns ephemeral Docker
 containers on an isolated IPv6 multicast bridge (`fd10::/64`) and covers
 functional filters, NACK retransmission, fragmentation, BRC-127 group
 announcements, BRC-131/132/134 control-plane delivery, BRC-142 coalescing,
-the BRC-148/149 BEEF plane, SSM rollout, unified logging, TxID dedup with
-Redis, and rate-limit defenses. See the repo's
+the BRC-148/149 BEEF plane, SSM join and ASM-fallback checks, unified
+logging, TxID dedup with Redis, and rate-limit defenses. See the repo's
 [`SCENARIOS.md`](https://github.com/lightwebinc/multicast-test/blob/main/SCENARIOS.md)
 for the full index.
 
@@ -1562,10 +1585,10 @@ Host-level deployment testing is outside this suite.
 ```bash
 cd multicast-test
 make test          # all scenarios (over an hour, requires Docker + sudo)
-make test-quick    # tier-1 filter scenarios (~60s)
+make test-quick    # tier-1 filter scenarios
 make help          # show all targets (tiered: test-retransmit, test-frag,
                    #   test-bgp, test-ssm, test-manifest, test-coalesce,
-                   #   test-beef, test-one T=ScenarioNN, …)
+                   #   test-beef, test-one T=TestScenarioNN_Name, …)
 ```
 
 ---
@@ -1631,10 +1654,13 @@ or any SSH host.
 
 **Listener (listener-infra):**
 
-- **Multicast-fabric perimeter:** Built-in firewall enforces:
-  - Ingress: Only multicast data on ingress interface
-  - Egress: Only NACK datagrams outbound
-  - All other traffic dropped
+- **Multicast-fabric perimeter:** Built-in firewall enforces, on the fabric
+  interface:
+  - Ingress: only multicast data and beacons, plus unicast NACK replies from
+    the configured retry endpoints
+  - Egress: only NACK datagrams to those endpoints (and multicast egress when
+    enabled)
+  - All other traffic dropped; no forwarding to other interfaces
 - See
   [listener-infra security docs](https://github.com/lightwebinc/listener-infra/blob/main/docs/security.md)
 
@@ -1723,7 +1749,7 @@ processing, flush OTLP exporter.
 - [BRC-126 Retransmission Protocol](docs/brc-126-retransmission-protocol.md):
   NACK/ACK/MISS wire formats, ADVERT beacon, tier/preference model
 - [BRC-127 Subtree Group Announcement](docs/brc-127-subtree-announce.md):
-  SubtreeAnnounce wire format, proxy forwarding, listener integration
+  SubtreeGroupAnnounce wire format, proxy forwarding, listener integration
 - [BRC-128 Extended Format](docs/brc-128-ef-frame-format.md): EF payload
   format, detection, infrastructure impact
 - [BRC-129 Multicast Group Address Assignments](docs/brc-129-multicast-addressing.md):
