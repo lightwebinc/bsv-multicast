@@ -113,7 +113,7 @@ Offset  Size  Field
 
 ## ACK Response (`MsgType 0x12`): 16 bytes
 
-Sent unicast to the NACK source when the frame is found and retransmit dispatched. Whether the listener may stop there depends on the Flags: a **unicast-flagged** ACK (`0x02`) is only a PROMISE; the listener keeps the gap pending, drains for the data frame, and escalates to the next cache on timeout. This applies when the listener has unicast recovery wired (`SetRecoverFunc`); without it, a unicast-only ACK is booked unrecovered (`no_recover`) because the returned frame reaches no consumer, while an ACK flagged both unicast and multicast still closes on trust of the multicast repair. The post-ACK drain window is 80 ms. A bare or multicast-only ACK closes the gap on TRUST, so a repair lost on the same degraded link is never retried and the loss is never reported.
+Sent unicast to the NACK source when the frame is found and retransmit dispatched. An ACK reports a dispatch, not a delivery, and the Flags decide what a listener may conclude from it. A **unicast-flagged** ACK (`0x02`) is only a PROMISE: the listener keeps the gap pending, drains its NACK socket for the data frame, and escalates to the next cache on timeout. That needs unicast recovery wired (a re-injection callback, `RegisterRecover` or `SetRecoverFunc`); without it, a unicast-only ACK is booked unrecovered (`no_recover`) because the returned frame reaches no consumer, and an ACK flagged both unicast and multicast waits for the multicast copy. The post-ACK drain window is 80 ms. A bare or multicast-only ACK lets a listener close the gap on TRUST, accepting that a repair lost on the same degraded link is never retried and the loss is never reported. The reference listener does not take that option: after any ACK it keeps the gap pending until the frame arrives, and an ACK whose copy travels on the data plane counts as a failed round with backoff, so a lost copy is asked for again and, once the retry budget is spent, booked unrecovered.
 
 ```text
 Offset  Size  Field
@@ -160,34 +160,35 @@ Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER`; 255 is the static-s
 
 ### Escalation State Machine
 
+As the reference listener (`shard-listener`) implements it:
+
 ```text
-                    ┌───────────────────────────────────────────────┐
-                    │                                               │
-  ┌─────────┐  dispatch ┌───────────────┐ ACK (bare/mcast) ┌────────▼───────┐
-  │ PENDING ├──────────►│ NACKED(Tier-K)├─────────────────►│  GAP CANCELED  │
-  └─────────┘           └──────┬───▲──┬─┘                  └────────────────┘
-                               │   │  │ unicast-ACK: keep pending   ▲
-                               │   └──┘ (80 ms drain), escalate     │
-                               │        on timeout                  │
-                    MISS       │  Timeout                           │
-                    ┌──────────┘  ┌──────┘                          │
-                    ▼             ▼                                 │
-              ┌───────────┐  ┌──────────┐   multicast fill          │
-              │ advance   │  │ backoff  │───────────────────────────┘
-              │ endpoint  │  │ & retry  │
-              └─────┬─────┘  └──────────┘
-                    │
-                    ▼
-              next endpoint at same tier,
-              or escalate to next tier
+          MISS, timeout, ACK without its frame, THROTTLED
+       ┌───────────────────────────────────────────┐
+       ▼                                           │
+  ┌─────────┐   dispatch   ┌────────────────┐      │
+  │ PENDING ├─────────────►│ NACKED(Tier-K) ├──────┘
+  └─┬─────┬─┘              └───────┬────────┘
+    │     │                        │ frame returned on the NACK socket
+    │     │ multicast fill         ▼
+    │     └───────────────►┌──────────────┐
+    │                      │  GAP CLOSED  │
+    │                      └──────────────┘
+    │ retry budget spent, or gap TTL passed
+    ▼
+  ┌─────────────┐
+  │ UNRECOVERED │
+  └─────────────┘
 ```
 
-- **Bare / multicast-flagged ACK received** → cancel gap entry immediately (on trust).
-- **Unicast-flagged ACK (`0x02`) received** → do NOT cancel; keep draining for the data frame, and escalate to the next endpoint on timeout.
+- **Frame returned on the NACK socket** (a unicast repair) → re-inject it into the listener pipeline; the gap closes.
+- **Bare / multicast-flagged ACK received** → the protocol lets a listener cancel the gap entry on trust; the reference listener keeps it pending for the data-plane copy and counts a failed round with backoff, like a timeout.
+- **Unicast-flagged ACK (`0x02`) received** → do NOT cancel; keep draining for the data frame, and escalate to the next endpoint on timeout. Without a recovery callback, an ACK flagged both unicast and multicast waits for the multicast copy instead.
 - **MISS received** → advance to next endpoint at same tier (by Preference); if tier exhausted, escalate to next tier; retry immediately (no backoff); a MISS at the deepest endpoint books a failed round and backs off.
 - **THROTTLED received** → hold the same endpoint for the hinted backoff; do not escalate and do not consume the retry budget (no failed round).
 - **Timeout** → apply exponential backoff; next sweep retries.
-- **Multicast fill** (independent receive goroutine) → cancel gap regardless of NACK state.
+- **Multicast fill** (independent receive goroutine) → close the gap regardless of NACK state.
+- **Retry budget spent** (`-nack-max-retries` failed rounds) **or gap TTL passed** → evict the gap, booked unrecovered.
 
 ---
 
@@ -211,7 +212,7 @@ Operator assigns `-beacon-tier` (0–254; env `BEACON_TIER`; 255 is the static-s
 
 ## Flood Prevention
 
-- **Multicast fill suppression:** retransmits go to multicast; all listeners receive them; `Tracker.Fill()` cancels pending NACKs.
+- **Multicast fill suppression:** retransmits go to multicast; all listeners receive them; the gap tracker's auto-fill cancels pending NACKs.
 - **Cache TTL (60 s tx/BEEF; block 10 m, subtree 5 m, anchor 2 m):** retransmitted frames remain in cache for the TTL window; natural expiry bounds the retransmit window without coordination overhead.
 - **Rate-limit tiers:** per-source-IP (flood, silent drop), per-flow (HashKey), per-gap (SeqNum), and per-group (groupIdx). The honest-congestion tiers (per-flow, per-gap, per-group) MAY emit THROTTLED so the listener holds rather than escalates; the flood tier stays silent to avoid reflection.
 - **Inter-AS:** MP-BGP propagates retransmits; remote listeners fill before backoff fires.

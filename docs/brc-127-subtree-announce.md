@@ -101,8 +101,8 @@ The proxy TCP ingress (`worker/tcp.go`) commits each connection to one grammar f
 | `-subtree-groups` / `SUBTREE_GROUPS`                    | `""`    | Comma-separated 32-char hex GroupIDs to subscribe            |
 | `-subtree-group-default-ttl` / `SUBTREE_GROUP_DEFAULT_TTL` | `900s` | Fallback TTL applied when announcement TTL = 0             |
 | `-announce-scope` / `ANNOUNCE_SCOPE`                    | `site`  | Comma-separated scope(s) for announcement group joins        |
-| `-sender-include` / `SENDER_INCLUDE`                    | `""`    | IPv6 CIDRs of trusted announcement senders (empty = all)     |
-| `-sender-exclude` / `SENDER_EXCLUDE`                    | `""`    | IPv6 CIDRs to reject (checked before include)                |
+| `-sender-include` / `SENDER_INCLUDE`                    | `""`    | Addresses/CIDRs of trusted senders, for announcements and data-plane frames alike (empty = all) |
+| `-sender-exclude` / `SENDER_EXCLUDE`                    | `""`    | Addresses/CIDRs to reject, for both (checked before include) |
 
 ### SubtreeGroupAnnounceListener
 

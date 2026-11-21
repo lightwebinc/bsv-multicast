@@ -205,7 +205,8 @@ A stream-form consumer reads exactly 80 bytes, checks `PrevBlockHash` (bytes
 consumer connecting mid-chain receives headers from connect time forward and
 cannot bootstrap a chain from it alone. An emitter MAY serve both forms; a
 consumer MUST NOT expect frame fields on the stream form. This is the form the
-consumer-side header lane (port 9172) carries, e.g. into overlay-bridge.
+consumer-side header lane (port 9172) carries, e.g. into overlay-bridge; the
+listener writes it on its reference lane (`-lane-header`).
 
 ---
 

@@ -63,7 +63,7 @@ Each fragment is stamped with an **independent** HashKey and SeqNum by the proxy
    - `OrigFrameVer == 0x05` → Deliver as synthetic BRC-132 subtree data frame; SHA256d does **not** apply (SubtreeID is a Merkle root, not a payload hash); route through `DeliverReassembledSubtreeData`.
    - `OrigFrameVer == 0x09` → ContentID verification when `-verify-payload-hash` is set (the offset-8 field is the ContentID = `SHA256(SHA256(buffer))`); deliver as synthetic BRC-149 BEEF object frame; route through `DeliverReassembledBeef`.
 5. **Delivery**: Route the reassembled frame through the normal egress and gap-tracking path for its frame version.
-6. **TTL eviction**: Slots not completed within 10 s are discarded; increment `bsl_reassembly_abandoned_total`. If any fragment arrived, the missing fragments' SeqNums are dispatched as BRC-126 NACKs (`SetIncompleteHook`); capacity eviction does not trigger recovery.
+6. **TTL eviction**: A slot not completed within `-reassembly-ttl` (default 10 s) dispatches its missing fragments' SeqNums as BRC-126 NACKs (`SetIncompleteHook`) and is then held while that repair is pending, one TTL at a time, up to `-reassembly-max-age` (default 2 min) from its opening. It is discarded, incrementing `bsl_reassembly_abandoned_total`, once no repair is pending or the maximum age is reached; without NACK recovery it is discarded at its first TTL. Capacity eviction does not trigger recovery.
 7. **Slot cap**: Default maximum 4096 concurrent slots; oldest incomplete slot evicted on overflow.
 8. **Duplicates**: Same slot key (offset-8 field; `(ContentID, TopicID)` pair for `0x09`) + FragIndex silently ignored.
 

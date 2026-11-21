@@ -89,7 +89,7 @@ flowchart LR
     end
 
     subgraph consumers["Consumers"]
-        TCPOUT["TCP egress<br/>(optional strip-header;<br/>UDP legacy)"]
+        TCPOUT["TCP egress: one downstream,<br/>or one lane per class (-lane-*)<br/>(header stripped by default;<br/>UDP legacy)"]
         MCOUT["Multicast egress<br/>(domain bridging)"]
         HDROUT["Header egress (optional)<br/>BRC-135 emitter, 0xFFFA flow"]
     end
@@ -129,16 +129,17 @@ sequenceDiagram
     participant R as retry-endpoint tier 0
     participant U as upstream retry-endpoint
 
-    R--)F: ADVERT beacon (FF0E::B:FFFD, global scope)<br/>groups, tier, preference, HasParent
+    R--)F: ADVERT beacon (FF0E::B:FFFD, global scope)<br/>NACK address, tier, preference, flags (HasParent)
     P->>F: frame (HashKey, SeqNum=n)
     F->>L: deliver
     F->>R: deliver (cache, per-class TTL)
-    P--)F: frame (SeqNum=n+2); n+1 lost
-    F->>L: deliver; gap detected
+    P--)F: frame (SeqNum=n+2), n+1 lost
+    F->>L: deliver, gap detected
     L->>R: NACK (unicast, 64 B): HashKey, missing range
     alt cached
         R->>F: re-multicast missing frame(s) into original group
         R->>L: ACK (16 B)
+        F->>L: repair copy (the frame, not the ACK, closes the gap)
     else not cached
         R->>L: MISS (16 B)
         opt proxying enabled (one hop max)
@@ -148,6 +149,6 @@ sequenceDiagram
         end
         L->>R: escalate to next tier on MISS/timeout
     else overloaded
-        R->>L: THROTTLED (16 B); back off
+        R->>L: THROTTLED (16 B), back off
     end
 ```
