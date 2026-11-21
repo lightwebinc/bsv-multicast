@@ -205,7 +205,7 @@ dictates where decoalescing happens:
   per-tx `SeqNum`** on its own flow (the bundle `SeqNum` is frame-bound and does
   not survive the split).
 - **Consumer-decoalesce (OPTIONAL).** A consumer that advertises bundle capability
-  receives bundles and unpacks them itself, maximising the end-to-end pps win. It
+  receives bundles and unpacks them itself, maximizing the end-to-end pps win. It
   changes the consumer-side parser and per-tx delivery semantics; member order
   within a bundle is the array order.
 
