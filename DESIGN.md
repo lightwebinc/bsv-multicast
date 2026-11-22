@@ -1499,7 +1499,8 @@ shard-manifest is the sole authority; data-plane components are consumers only.
   per field, plus a warning when a field starts diverging). It never restarts
   itself: a restart re-reads the same flags, so it would come back unchanged.
   To move a proxy to a new value, change the flag and restart it. The listener
-  logs adoption transitions only.
+  behaves the same way: it keeps its configured `ShardBits` and source mode and
+  reports divergence (one warning per field, and a line when it clears).
 - **Live re-sharding (opt-in, `liveResharding=true`).** A re-shard is a
   generation transition signaled by a BRC-139 `Successor` block carrying the
   incoming `ShardBits` (constrained to ±1) and a `TransitionEpoch`. While the

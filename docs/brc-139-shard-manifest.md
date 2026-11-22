@@ -398,9 +398,9 @@ configured drain window before reloading, so the orchestrator can roll the
 pod predictably. Incremental changes, adding or removing entries from
 `Flags.GroupsValid` payloads (when consumed as join hints) or from the
 source set, MAY be applied in place without restart. (The reference
-components never change a running value: `shard-proxy` keeps its configured
-values and reports a disagreeing manifest as divergence, and an operator
-changes the flag and restarts it; `shard-listener` logs the transition.)
+components never change a running value: `shard-proxy` and `shard-listener`
+keep their configured values and report a disagreeing manifest as divergence,
+and an operator changes the flag and restarts them.)
 
 ---
 
