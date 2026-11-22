@@ -1505,10 +1505,14 @@ shard-manifest is the sole authority; data-plane components are consumers only.
   incoming `ShardBits` (constrained to ±1) and a `TransitionEpoch`. While the
   Successor block holds quorum, the proxy dual-emits each frame to both the
   current and successor layouts (`forwarder.BridgingEngine`); downstream TxID
-  dedup absorbs the duplicates. Fragmented (BRC-130) transactions are not
-  dual-emitted. There is no automatic cutover: restart each proxy with the
-  successor's `-shard-bits` inside that window, and keep receivers joined to
-  the running layout until every proxy runs the successor. Listener-side
+  dedup absorbs the duplicates. Fragmented (BRC-130) transactions and relayed
+  (BRC-142) bundles are emitted once, to the running layout, and every bridge
+  destination uses the running prefix, so a successor that changes the source
+  mode gets no dual emit under its own prefix. There is no automatic cutover:
+  restart each proxy with the successor's `-shard-bits` (and, when the
+  successor changes it, `-source-mode`, plus `-bind-source` for SSM) inside
+  that window, and keep receivers joined to both layouts until every proxy
+  runs the successor. Listener-side
   successor union-join is not yet implemented. Requires egress dedup sized to
   ≥ 2× the bridging window.
 
