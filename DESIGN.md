@@ -1493,20 +1493,24 @@ shard-manifest is the sole authority; data-plane components are consumers only.
 
 ### Adoption modes
 
-- **Restart (default, `liveResharding=false`).** On the proxy, a `ShardBits` /
-  `SourceModeSSM` change flips `/readyz`, drains, and exits cleanly for the
-  orchestrator to roll the pod, which restarts with the adopted value warm in
-  the registry. Listener-side restart-on-adopt is not yet implemented
-  (log-only).
+- **Observe (default, `liveResharding=false`).** The proxy keeps its configured
+  `ShardBits` and `SourceModeSSM` (manual values always win) and reports
+  announcers that disagree as divergence (`multicast_manifest_divergence_total`
+  per field, plus a warning when a field starts diverging). It never restarts
+  itself: a restart re-reads the same flags, so it would come back unchanged.
+  To move a proxy to a new value, change the flag and restart it. The listener
+  logs adoption transitions only.
 - **Live re-sharding (opt-in, `liveResharding=true`).** A re-shard is a
   generation transition signaled by a BRC-139 `Successor` block carrying the
-  incoming `ShardBits` (constrained to ±1) and a `TransitionEpoch`. During the
-  bridging window the proxy dual-emits each frame to both the current and
-  successor layouts (`forwarder.BridgingEngine`); downstream TxID dedup
-  absorbs the duplicates. The cutover to the successor engine happens via
-  process restart at `TransitionEpoch`; listener-side successor union-join is
-  not yet implemented. Requires egress dedup sized to ≥ 2× the bridging
-  window.
+  incoming `ShardBits` (constrained to ±1) and a `TransitionEpoch`. While the
+  Successor block holds quorum, the proxy dual-emits each frame to both the
+  current and successor layouts (`forwarder.BridgingEngine`); downstream TxID
+  dedup absorbs the duplicates. Fragmented (BRC-130) transactions are not
+  dual-emitted. There is no automatic cutover: restart each proxy with the
+  successor's `-shard-bits` inside that window, and keep receivers joined to
+  the running layout until every proxy runs the successor. Listener-side
+  successor union-join is not yet implemented. Requires egress dedup sized to
+  ≥ 2× the bridging window.
 
 ### Listener auto-join
 
