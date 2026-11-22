@@ -392,15 +392,15 @@ cardinality MUST be bounded by role, group-role, or fleet bucket.
 ### State transitions
 
 A consumer MUST NOT silently drop traffic when an adopted value changes.
-Components SHOULD signal `ShardBits` or `SourceModeSSM` changes by
-flipping their readiness probe and draining in-flight datagrams within the
-configured drain window before reloading, so the orchestrator can roll the
-pod predictably. Incremental changes, adding or removing entries from
-`Flags.GroupsValid` payloads (when consumed as join hints) or from the
-source set, MAY be applied in place without restart. (The reference
-components never change a running value: `shard-proxy` and `shard-listener`
-keep their configured values and report a disagreeing manifest as divergence,
-and an operator changes the flag and restarts them.)
+A component that reloads to adopt a `ShardBits` or `SourceModeSSM` change
+SHOULD signal it by flipping its readiness probe and draining in-flight
+datagrams within the configured drain window before reloading, so the
+orchestrator can roll the pod predictably. Incremental changes, adding or
+removing entries from `Flags.GroupsValid` payloads (when consumed as join
+hints) or from the source set, MAY be applied in place without restart.
+The reference components do not reload to adopt: `shard-proxy` and
+`shard-listener` keep their configured values and report a disagreeing
+manifest as divergence, and an operator changes the flag and restarts them.
 
 ---
 
