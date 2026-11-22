@@ -274,8 +274,8 @@ A standalone daemon emits ShardManifest datagrams. It does not subscribe to or i
 | `-generation-id` / `GENERATION_ID`         | zero UUID      | 16-byte hex (with or without dashes)                               |
 | `-authoritative` / `AUTHORITATIVE`         | `false`        | sets Flags.Authoritative                                           |
 | `-manifest-scope` / `MANIFEST_SCOPE`       | `site`         | comma list of `link,site,org,global`                               |
-| `-announce-interval` / `ANNOUNCE_INTERVAL` | `300s`         | re-announce period                                                 |
-| `-ttl` / `TTL`                             | `0s`           | Go duration (e.g. `900s`), sent as whole seconds in the two-byte field, so at most `65535s`: a longer value is not refused and does not survive the conversion; 0 = consumer default |
+| `-announce-interval` / `ANNOUNCE_INTERVAL` | `300s`         | re-announce period; whole seconds from `1s` to `65535s` (the two-byte field): a longer, fractional or sub-second value is a startup error |
+| `-ttl` / `TTL`                             | `0s`           | Go duration (e.g. `900s`), sent as whole seconds in the two-byte field: `0s` to `65535s`, and a longer, fractional or sub-second value is a startup error; 0 = consumer default |
 | `-iface` / `IFACE`                         | first non-lo   | egress interface for multicast send                                |
 | `-port` / `PORT`                           | `9001`         | UDP destination port; both `shard-proxy` and `shard-listener` consume manifests on their own `-manifest-beacon-port` (default `9001`), a port distinct from the BRC-126 ADVERT port (`-beacon-port`, default `9300`); align per deployment |
 | `-source-mode` / `SOURCE_MODE`             | `asm`          | data-plane addressing model `asm`\|`ssm`; sets `Flags.SourceModeSSM` only; the beacon prefix derives from `-manifest-scope` alone (ASM `FF0X` prefixes) |
