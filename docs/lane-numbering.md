@@ -21,6 +21,11 @@ submit arrives over (direct, tunnel, or a bridge's reverse path).
 The open port `8725` also admits BRC-149 submission records, detected by their
 `0xBEEF` tag; `8728` is an optional dedicated lane for flow separation.
 
+`8729` is not a lane: it is the delivery edge's topic interest port
+([BRC-TBD Topic Interest](brc-tbd-topic-interest.md), draft; UDP control
+datagrams). It sits in this block for the same reason the lanes do: a consumer
+sends it up its tunnel, toward the fabric's edge.
+
 `8725` is the transaction class number and is reused in the delivery
 direction for a consumer's transaction lane, because a transaction is the same
 bare object either way.
