@@ -22,7 +22,7 @@ The open port `8725` also admits BRC-149 submission records, detected by their
 `0xBEEF` tag; `8728` is an optional dedicated lane for flow separation.
 
 `8729` is not a lane: it is the delivery edge's topic interest port
-([BRC-TBD Topic Interest](brc-tbd-topic-interest.md), draft; UDP control
+([BRC-223 Topic Interest](brc-223-topic-interest.md); UDP control
 datagrams). It sits in this block for the same reason the lanes do: a consumer
 sends it up its tunnel, toward the fabric's edge.
 
