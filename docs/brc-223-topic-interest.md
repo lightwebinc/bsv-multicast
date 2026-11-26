@@ -1,26 +1,50 @@
-# BRC-TBD: Topic Interest
+# BRC-223: Multicast Topic Interest Protocol
 
-BRC-TBD defines topic interest: the signal by which a consumer of overlay topics
-tells the network which topics it wants now. A host announces a soft-state
-interest upward, hop by hop through optional relays, to the multicast delivery
-edge that serves the consumer, and the edge applies it to that consumer's
-delivery filter. Interest never crosses the edge into the fabric.
+Jeff Harris (jeff@lightweb.net)
 
-> **Draft.** This document is a draft, not yet a BRC. Its number is to be
-> assigned. It specifies wire version 0 (the Version byte at offset 8 of every
-> message), and version 0 is not frozen: it may change until this document is
-> published as a BRC.
+> **Canonical spec:** BRC-223, proposed in
+> [bsv-blockchain/BRCs pull request 391](https://github.com/bsv-blockchain/BRCs/pull/391)
+> as `transactions/0223.md` and under review there. This copy carries the
+> same text with links to the sibling documents in this directory.
 
----
+## Abstract
 
-## Purpose
+This BRC defines topic interest: the signal by which a consumer of overlay
+topics tells the network which topics it wants now. A host announces
+soft-state interest in whole topics, named by the [BRC-149](brc-149-beef-object-frame.md)
+TopicID, upward and hop by hop through optional relays to the multicast
+delivery edge that serves the consumer, and the edge applies it to that
+consumer's delivery filter on the BEEF object plane of
+[BRC-148](brc-148-shard-domain-beef-plane.md). Four UDP control messages carry it, the same at every
+hop: ANNOUNCE, DIGEST, ACK and RESYNC. Every request is acknowledged, and a
+digest of the held set lets the two ends of a hop detect and repair drift.
+Interest ends at the delivery edge: no multicast group, proxy, retry endpoint
+or frame format carries it, and nothing upstream of an edge grows with the
+number of topics. This BRC specifies wire version 0.
+
+## Copyright
+
+This BRC is licensed under the Apache License 2.0.
+
+## Motivation
 
 A delivery edge delivers to each consumer the topics it has elected, its
-standing election (BRC-149). An election is account state and changes through
-the account. Software at the consumer, an overlay host for example,
-needs topics as its work comes and goes. Topic interest lets it ask for a topic
-when it needs it and let it go when it stops, within limits the edge enforces,
-without changing the account.
+standing election ([BRC-149](brc-149-beef-object-frame.md)). An election is account state and
+changes through the account. Software at the consumer, an overlay host for
+example, needs topics as its work comes and goes. Topic interest lets it ask
+for a topic when it needs it and let it go when it stops, within limits the
+edge enforces, without changing the account.
+
+Topics are unbounded in number, while a plane has at most 2^15 groups
+([BRC-148](brc-148-shard-domain-beef-plane.md)). Interest therefore stops at the delivery edge, where
+topics become joins of the groups they map to: state per topic is kept where
+the consumer is served and never in the fabric. This is the aggregation and
+summarization layer that [BRC-82](https://github.com/bsv-blockchain/BRCs/blob/master/peer-to-peer/0082.md) places between
+MLDv2 at the edges and mBGP in the core, applied at the service edge.
+
+## Specification
+
+### Overview
 
 | Property | Value |
 |---|---|
@@ -39,12 +63,12 @@ Out of scope:
 - **Payment.** An interest carries no payment and changes nothing about how
   delivery is paid for. An extension type for terms is reserved.
 - **Parts of topics.** Interest names whole topics; overlays have no sub-topics.
-- **Delivery guarantees.** A lane stays at-most-once
-  ([Lane Numbering](lane-numbering.md)); interest adds no repair or replay.
+- **Delivery guarantees.** A delivery lane ([BRC-149](brc-149-beef-object-frame.md)) stays
+  at-most-once ([Lane Numbering][lanes]); interest adds no repair or replay.
 - **Discovery of supply.** Which hosts serve a topic is the concern of
   [BRC-88](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0088.md) (SHIP).
 
-## Conventions and Terminology
+### Conventions and Terminology
 
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be interpreted
 as described in RFC 2119 and RFC 8174 when, and only when, they appear in
@@ -66,7 +90,7 @@ the structure described. Examples use `2001:db8::/32` and `192.0.2.0/24`.
 | SenderID | the sender identity: a nonzero 64-bit value naming one sender at its source address |
 | Delivered scope | the groups one path delivers on one plane ([BRC-148](brc-148-shard-domain-beef-plane.md)) |
 
-## Roles and Topology
+### Roles and Topology
 
 ```text
  announcers          relays (optional)                  termini
@@ -92,7 +116,7 @@ the structure described. Examples use `2001:db8::/32` and `192.0.2.0/24`.
    objects go is the terminus's provisioning, or a delivery address that a
    distributing hop honors (see Delivery Addresses).
 
-## Transport
+### Transport
 
 | Property | Value |
 |---|---|
@@ -105,15 +129,18 @@ A sender MUST NOT send a message longer than 1,232 bytes, and a receiver MUST
 treat a longer datagram as not an interest message. On the socket it sends
 from, a sender MUST ignore a datagram whose source address and port are not
 those of an upstream it sends to, so a receiver MUST send every answer, and
-every RESYNC, from the address and port its sender sends to. On a host with several addresses, a receiver
-bound to a wildcard address needs each datagram's destination address
-(`IP_PKTINFO`, `IPV6_PKTINFO`) to keep this rule.
+every RESYNC to a sender it knows, from the address and port that sender sends
+to. A RESYNC to an address no sender has announced from yet (see Terminus
+Policy) is sent from the receiver's interest port. On a host with
+several addresses, a receiver bound to a wildcard address needs each
+datagram's destination address (`IP_PKTINFO`, `IPV6_PKTINFO`) to keep this
+rule.
 
 Port 8729 lies in a range IANA lists as unassigned, and continues the
-fabric-side 872x block of [Lane Numbering](lane-numbering.md), since interest
-travels toward the edge of the fabric. A deployment MAY use another port.
+fabric-side 872x block of [Lane Numbering][lanes], since interest travels
+toward the edge of the fabric. A deployment MAY use another port.
 
-## Header
+### Header
 
 Every message starts with the same 40-byte header.
 
@@ -162,9 +189,9 @@ exceeds its limit (16 by default) with result 6.
 sender restarts, and MUST differ from that of any other sender at the same
 source address. A receiver MUST discard an ANNOUNCE or DIGEST with SenderID 0.
 
-## Messages
+### Messages
 
-### ANNOUNCE (0x50)
+#### ANNOUNCE (0x50)
 
 Sent upward. It carries deltas: each record adds or refreshes a topic for the
 sender with the lifetime it asks for, or withdraws the topic. The bytes after
@@ -183,7 +210,7 @@ a record's ExtLen runs past the end of the datagram. A record for a topic the
 sender holds refreshes it, with the lifetime and delivery address the new
 record gives. An ANNOUNCE with no records is valid.
 
-### DIGEST (0x51)
+#### DIGEST (0x51)
 
 Sent upward. A DIGEST shorter than 88 bytes is malformed.
 
@@ -207,13 +234,13 @@ adversary.
 
 | Use | Since | SetCount, SetDigest | Flags | Effect at the receiver |
 |---|---|---|---|---|
-| First contact | 0 | 0, zero | ScopeWanted | none: it carries no token, so the answer is a token |
+| First contact | 0 | 0, zero | | none: it carries no token, so the answer is a token |
 | Refresh | 0 | the set the sender believes held | | on a match, every held topic is refreshed |
 | End of replay | the replay's first Seq | the topics the replay confirmed | | on a match, topics set before Since are removed, the rest refreshed |
-| Probe | 0 | 0, zero | Probe, ScopeWanted | none; answered with result 0 |
+| Probe | 0 | 0, zero | Probe, ScopeWanted | none on the set; answered with result 0 |
 | Farewell | its own Seq | 0, zero | | everything held for the sender is removed |
 
-### ACK (0x52)
+#### ACK (0x52)
 
 Sent downward: the interest acknowledgment. It answers one ANNOUNCE or DIGEST
 and echoes its SenderID and Seq. It is not the ACK of
@@ -224,7 +251,7 @@ Offset  Size  Field
      0    40  Header           Result; Count = statuses; Token issued
     40     8  LastSeq          the last Seq applied from this sender
     48     4  SetCount         topics held for this sender
-    52     4  ScopeGen         changes when the delivered scope does; 0: none advertised
+    52     4  ScopeGen         changes when the delivered scope does; 0: no scope
     56    32  SetDigest        set digest of the topics held for this sender
     88     4  LifetimeMin      seconds
     92     4  LifetimeDefault  seconds
@@ -261,16 +288,18 @@ Offset  Size  Field
 | 5 | version | no | not applied: the Version here is the one the receiver implements | waits long, then tries again |
 | 6 | hop limit | yes | not applied: Hops exceeds the receiver's limit | waits as for busy |
 
-Only result 0 means the message was applied.
+Only result 0 means the message was applied. A sender treats a Result it does
+not know as not applied and as carrying the body. It does not check the Version
+of an ACK or a RESYNC: a version mismatch is told by result 5 alone.
 
-### RESYNC (0x53)
+#### RESYNC (0x53)
 
 Sent downward: a poke, "check in now". It is the header alone, with Token, Seq
 and Count 0. SenderID names the sender poked; 0 pokes every sender at the
 address. It carries no authority: the answer to the DIGEST it prompts decides
 what happens.
 
-## Extensions
+### Extensions
 
 ```text
 Offset  Size  Field
@@ -290,8 +319,10 @@ critical bit set that it does not implement, MUST refuse every record the area
 applies to with status 0x05 (unsupported); a delivery address that does not
 parse refuses them with 0x06. It MUST skip any other unknown type. A refusal
 caused by the message area applies to every record except withdrawals, which
-are always applied. A sender MUST skip ACK extension types it does not
-implement. Version 0 defines no critical type.
+are always applied. An area is read in order and
+the first failure decides the status. A sender MUST skip ACK extension types
+it does not implement, ignores an ACK extension area that does not parse, and
+uses the first extension of a type. Version 0 defines no critical type.
 
 | Type | Name | Carried in | Value |
 |---|---|---|---|
@@ -324,7 +355,8 @@ Offset  Size     Field
 The value is 10 or 22 bytes for kinds 1 and 2, 14 or 38 bytes for kind 3, and
 MUST end where its fields do. A kind 1 Address MUST be unicast and not the
 unspecified address; a kind 2 or 3 Address MUST be a multicast group; a kind 3
-Source MUST be a unicast address of the group's family. An IPv4 address MUST be
+Source MUST be of the group's family and MUST NOT be a multicast address, and
+a sender MUST NOT send the unspecified address as a Source. An IPv4 address MUST be
 sent with Family 4; a receiver treats an IPv4-mapped IPv6 address as the IPv4
 address. A value that breaks these rules, or names another kind or family, does
 not parse. Encoding is not checked when the value is parsed: whether a hop
@@ -332,7 +364,7 @@ delivers in it is the hop's decision. In the message area the address is the
 default for every record, and a record's own address overrides it. An area
 SHOULD carry at most one delivery address; a receiver uses the last.
 
-## Statuses
+### Statuses
 
 A status is the outcome of one record. A value below 0x80 other than 0 is a
 refusal: the receiver does not hold the topic. A value from 0x80 is a note: the
@@ -356,7 +388,7 @@ to 0xFF are reserved; a sender treats an unknown value below 0x80 as a refusal
 and one from 0x80 as held. 0x7F is never sent; implementations use it locally
 for an outcome not yet known. A refusal of a topic the sender held removes it.
 
-## Receiver Processing
+### Receiver Processing
 
 A receiver checks each datagram in this order and stops at the first failure.
 
@@ -423,7 +455,10 @@ receiver has a scope to advertise, and the extension fits the room the statuses
 leave. A receiver that notes topics (0x81, 0x82) MUST list, in its answer to a
 matching DIGEST that is not a probe, every topic held for the sender that
 carries a note, with the note, as far as the datagram has room, and MUST set
-NoticesTruncated when some do not fit. No other answer carries notices.
+NoticesTruncated when some do not fit. No other answer carries notices. A
+sender that receives such an answer without NoticesTruncated clears the note
+of every held topic the answer does not list, and ignores a notice for a topic
+it does not hold or whose status is a refusal.
 
 **Changes.** When the scope or bound of a principal changes, a receiver MUST
 drop the held topics no longer allowed; when a quota shrinks, the topics that
@@ -433,10 +468,10 @@ every sender of the principal when its bound widens (a larger quota, a topic
 newly allowed), so the senders learn of it at once, and ask again for what was
 refused, instead of at their next refresh.
 
-## Sender Behavior
+### Sender Behavior
 
 **Tokens.** A sender with no token for an upstream sends a first-contact DIGEST
-(Token 0, Since 0, the empty set, ScopeWanted). The receiver answers with
+(Token 0, Since 0, the empty set). The receiver answers with
 result 1 and the token, and applies nothing. The sender adopts the token and
 replays its set. A sender MUST echo the token its upstream last issued, and
 adopts the token of every ACK that carries a nonzero one. A later result 1 (the
@@ -482,8 +517,9 @@ one minute, and it asks again for a rate-limited topic after 1 s.
 **Refresh.** A sender reckons its granted lifetime as its upstream does, from
 the bounds the upstream reported (the defaults until it has), and every third
 of it, but not more often than once a second, sends a DIGEST with Since 0 and
-the count and digest of the set it believes held. Three refreshes may be lost
-before an interest lapses. A sender MUST NOT send a refresh or end-of-replay
+the count and digest of the set it believes held. A refresh that goes
+unanswered is sent again as its timeout allows (see Timeouts), so an interest
+lapses only when no DIGEST is answered for two thirds of its lifetime. A sender MUST NOT send a refresh or end-of-replay
 DIGEST while datagrams to that upstream are in flight or anything is ready to be
 said, so that the digest is exact. Changes made while a refresh is due wait
 behind it, so a stream of changes cannot hold it off. After a matching refresh
@@ -505,7 +541,8 @@ after the previous one began.
 
 **Pokes.** A sender acts on a RESYNC that names its SenderID or 0, from the
 address and port of an upstream it sends to. A relay also acts on a RESYNC that
-reaches its listening socket from the address of one of its upstreams. A RESYNC
+reaches its listening socket from the address of one of its upstreams, from
+any port and whatever SenderID it names. A RESYNC
 is not authenticated, so a sender MUST act on at most one per upstream per
 second, and MUST let it cause nothing but datagrams to that upstream. In step,
 the sender sends a DIGEST at once. If the upstream had stopped answering, the
@@ -528,7 +565,7 @@ digest, without waiting for an answer: it removes everything the sender holds
 there, so delivery stops at once instead of when the lifetime runs out. A sender
 about to start again SHOULD NOT, so that what it wants keeps arriving.
 
-## Relay Behavior
+### Relay Behavior
 
 A relay is a receiver whose live set feeds a sender.
 
@@ -562,7 +599,7 @@ A relay is a receiver whose live set feeds a sender.
   replay began, so what the replay said is refreshed before it lapses. During
   the hold it asks for the scope with a probe.
 
-## Delivered Scope
+### Delivered Scope
 
 A path may deliver only some groups of a plane. An interest in a topic whose
 group the path does not deliver has no stream behind it, so it is not processed
@@ -591,7 +628,8 @@ Offset  Size  Field
 
 Domain and ShardBits MUST satisfy BRC-148: domain at most 0x0E, ShardBits at
 most 15 (12 on domain 0x0), and planeBase + 2^ShardBits at most 0xF800. With
-All, N is 0 and nothing follows. A bitmap is exactly ceil(2^ShardBits / 8)
+All, N is 0 and nothing follows, whether or not Bitmap is also set; other flag
+bits are ignored. A bitmap is exactly ceil(2^ShardBits / 8)
 bytes, with every bit past the plane's width clear. A list is exactly 2N bytes
 of indexes inside the plane, strictly ascending. A value that breaks these
 rules is malformed, and a sender ignores it. An empty list is a path that
@@ -602,8 +640,8 @@ ACK; a scope too large for that is not advertised, and its senders learn what
 is not served from record statuses alone.
 
 **Generation.** Every ACK with a body carries ScopeGen: 0 when the receiver
-advertises no scope, otherwise a value that changes whenever the scope does and
-is never 0. It is the CRC-32C (Castagnoli, as in BRC-139) of the encoded scope
+has no scope for the principal, otherwise (also for a scope too large to
+advertise) a value that changes whenever the scope does and is never 0. It is the CRC-32C (Castagnoli, as in BRC-139) of the encoded scope
 value, over the whole encoding even when the value is too large to advertise,
 with 0 replaced by 1. A sender treats it as opaque. It sets ScopeWanted on every
 ANNOUNCE and DIGEST while it knows no ScopeGen other than 0 for an upstream;
@@ -611,7 +649,7 @@ when ScopeGen changes, it sets ScopeWanted on its next DIGEST and sends that
 DIGEST at once. The GenerationID inside lets a sender tell a re-shard of the
 plane from a change of membership. Routing by scope is under Sender Behavior.
 
-## Delivery Addresses
+### Delivery Addresses
 
 **The address is hop-local.** A delivery address means something only to the
 next hop up, as "next hop self" does in routing. A hop that distributes
@@ -620,8 +658,10 @@ addresses below it. A hop that does not distribute drops it. Without this rule
 the terminus would learn every host behind a relay and hold delivery state per
 host instead of per consumer.
 
-**Not honored.** A receiver that does not distribute MUST answer 0x80 for a
-record that carries a well-formed address and hold the topic without it. A
+**Not honored.** For a record that carries a well-formed address, a receiver
+that does not distribute MUST hold the topic without the address and answer
+0x80, unless a note on the topic (0x81, 0x82) replaces that status (Receiver
+Processing, record step 8). A
 terminus does not honor delivery addresses in this version: it delivers as
 provisioned for the consumer. Honoring an address at the edge needs proof of
 control of the address, for which the signature type is reserved.
@@ -646,7 +686,7 @@ Payload) at most once to each address that holds its topic, like the lane it
 comes from, and SHOULD shed a host that falls behind rather than delay the lane
 or the other hosts.
 
-## Terminus Policy (informative)
+### Terminus Policy (informative)
 
 What a terminus allows is local policy. A typical policy:
 
@@ -679,7 +719,7 @@ What a terminus allows is local policy. A typical policy:
   in within a round trip; any other sender is heard at its next attempt, at
   most the longest wait (8 s) later.
 
-## Security Considerations
+### Security Considerations
 
 - **Off-path spoofing.** A message is applied only with the token issued for
   its source address, port and SenderID, which a party that cannot receive at
@@ -714,19 +754,21 @@ What a terminus allows is local policy. A typical policy:
 
 ## Interactions With Other BRCs
 
-- **BRC-124, BRC-126, BRC-139 (control messages).** Interest shares the first
-  eight bytes of the BRC-126 and BRC-139 control messages: magic, ProtoVer,
-  type at offset 6, flags at offset 7, big-endian integers. Offset 6 already
+- **BRC-124, BRC-126, BRC-139 (control messages).** Interest shares the
+  preamble of the BRC-126 and BRC-139 control messages: magic, ProtoVer, the
+  type at offset 6 and a byte per type at offset 7 (flags in all but the
+  BRC-126 ADVERT), with big-endian integers. Offset 6 already
   carries frame versions 0x01 to 0x09 (BRC-124 and its successors) and control
   types 0x10 to 0x13 (BRC-126 NACK, MISS, ACK, THROTTLED), 0x20 (BRC-126
   ADVERT), 0x30 (BRC-127) and 0x40 (BRC-139). Interest takes 0x50 to 0x53,
   which nothing else uses, on its own port. BRC-126's ACK is 0x12; the interest
   acknowledgment is 0x52.
-- **BRC-129 and BRC-139 (groups, generations).** A scope lists the same 16-bit
-  group indexes as a shard manifest, in the manifest's two forms (an ascending
-  list, or a bitmap least significant bit first), and carries the plane's
-  128-bit GenerationID. Its bitmap counts from the plane's base, which is index
-  0 on the transaction plane.
+- **BRC-129 and BRC-139 (groups, generations).** A scope lists 16-bit
+  group indexes in a shard manifest's two forms (an ascending list, or a bitmap
+  least significant bit first), and carries the plane's 128-bit GenerationID.
+  Its indexes include the plane's base (planeBase + shard index) and its bitmap
+  counts from that base, so they equal a manifest's shard indexes only on the
+  transaction plane, whose base is 0.
 - **BRC-148 (planes).** A scope names its plane by domain and width, and a
   topic's group is the BRC-148 derivation with the TopicID as the shard key, at
   every width from 0 to 15.
@@ -742,7 +784,7 @@ What a terminus allows is local policy. A typical policy:
 - **BRC-88 (SHIP).** SHIP is the supply side: hosts advertise the topics they
   host, and BRC-88 calls the hosts a lookup finds "interested hosts". Topic
   interest is the delivery side: what a consumer wants delivered. They share
-  nothing on the wire, and this document never says "interested host" in
+  nothing on the wire, and this BRC never says "interested host" in
   BRC-88's sense.
 - **MLDv2 (RFC 9777).** The model, in shape and not in format: a report with a
   lifetime (ANNOUNCE and the refresh DIGEST), a query from the router (RESYNC),
@@ -750,11 +792,11 @@ What a terminus allows is local policy. A typical policy:
   group, every report is acknowledged, and the querier is reached by unicast
   because upstreams are configured.
 
-## Implementation
+## Implementations
 
 The reference implementation is the Go package
-`github.com/lightwebinc/shard-common/interest`, at v0.29.0 of
-`github.com/lightwebinc/shard-common`, which marks its wire as a draft.
+[`github.com/lightwebinc/shard-common/interest`](https://github.com/lightwebinc/shard-common/tree/v0.29.0/interest),
+at v0.29.0 of `github.com/lightwebinc/shard-common`.
 
 | Part | File |
 |---|---|
@@ -842,13 +884,14 @@ scope: a receiver with it answers that record 0x01.
 
 - [BRC-82: Defining a Scalable IPv6 Multicast Protocol for Blockchain Transaction Broadcast and Update Delivery](https://github.com/bsv-blockchain/BRCs/blob/master/peer-to-peer/0082.md)
 - [BRC-88: Overlay Services Synchronization Architecture](https://github.com/bsv-blockchain/BRCs/blob/master/overlays/0088.md)
-- [BRC-124: Frame Format](brc-124-frame-format.md) ([canonical](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0124.md))
-- [BRC-126: Retransmission Protocol](brc-126-retransmission-protocol.md) ([canonical](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0126.md))
-- [BRC-129: Multicast Group Address Assignments](brc-129-multicast-addressing.md) ([canonical](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0129.md))
-- [BRC-139: Shard Manifest Announcement](brc-139-shard-manifest.md) ([canonical](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0139.md))
-- [BRC-148: Shard Domain Partitioning and the BEEF Object Plane](brc-148-shard-domain-beef-plane.md) ([canonical](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0148.md))
-- [BRC-149: Multicast BEEF Object Frame Format](brc-149-beef-object-frame.md) ([canonical](https://github.com/bsv-blockchain/BRCs/blob/master/transactions/0149.md))
-- [Lane Numbering](lane-numbering.md)
+- [BRC-124: Multicast Transaction Frame Format](brc-124-frame-format.md)
+- [BRC-126: Multicast Transaction NACK Retransmission Protocol](brc-126-retransmission-protocol.md)
+- [BRC-127: Multicast Subtree Group Announcement Frame Format](brc-127-subtree-announce.md)
+- [BRC-129: IPv6 Multicast Group Address Assignments](brc-129-multicast-addressing.md)
+- [BRC-139: Multicast Shard Manifest Announcement Protocol](brc-139-shard-manifest.md)
+- [BRC-148: Multicast Shard Domain Partitioning and the BEEF Object Plane](brc-148-shard-domain-beef-plane.md)
+- [BRC-149: Multicast BEEF Object Frame Format](brc-149-beef-object-frame.md)
+- [Lane Numbering][lanes]: the port blocks of the reference deployment
 - [RFC 768: User Datagram Protocol](https://www.rfc-editor.org/rfc/rfc768)
 - [RFC 1982: Serial Number Arithmetic](https://www.rfc-editor.org/rfc/rfc1982)
 - [RFC 2104: HMAC](https://www.rfc-editor.org/rfc/rfc2104)
@@ -856,3 +899,5 @@ scope: a receiver with it answers that record 0x01.
 - [RFC 6298: Computing TCP's Retransmission Timer](https://www.rfc-editor.org/rfc/rfc6298)
 - [RFC 8200: IPv6 Specification](https://www.rfc-editor.org/rfc/rfc8200): the 1,280-byte minimum MTU
 - [RFC 9777: Multicast Listener Discovery Version 2 (MLDv2) for IPv6](https://www.rfc-editor.org/rfc/rfc9777)
+
+[lanes]: lane-numbering.md

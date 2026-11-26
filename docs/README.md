@@ -90,8 +90,8 @@
   Companion to BRC-148: assigns FrameVer `0x09` and fixes the object frame
   plus the submission/delivery record grammars (open-port `0xBEEF` tag
   detection)
-- [BRC-TBD Topic Interest](brc-tbd-topic-interest.md) (**draft**; number to be
-  assigned, wire version 0 not frozen): soft-state interest in whole overlay
+- [BRC-223 Topic Interest](brc-223-topic-interest.md) (proposed upstream,
+  under review; wire version 0): soft-state interest in whole overlay
   topics, sent hop by hop over UDP 8729 from hosts through optional relays to
   the delivery edge, which applies it to the consumer's delivery filter
 - [Lane Numbering](lane-numbering.md): the port names the side of the fabric
