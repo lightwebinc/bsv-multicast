@@ -4,8 +4,10 @@ Jeff Harris (jeff@lightweb.net)
 
 > **Canonical spec:** BRC-223, proposed in
 > [bsv-blockchain/BRCs pull request 391](https://github.com/bsv-blockchain/BRCs/pull/391)
-> as `transactions/0223.md` and under review there. This copy carries the
-> same text with links to the sibling documents in this directory.
+> as `transactions/0223.md` and under review there. This document is the
+> detailed design: it adds the reference implementation's timers and token
+> derivation, the policy of a delivery edge, the bookkeeping of delivery
+> addresses and the map of the implementation's files.
 
 ## Abstract
 
